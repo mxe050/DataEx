@@ -1238,6 +1238,12 @@ function ProviderCard({ name, provider, config, onUpdate, onVerify, verifyState 
   );
 }
 
+function renderBold(text) {
+  if (!text) return null;
+  const parts = String(text).split(/\*\*(.+?)\*\*/g);
+  return parts.map((p, i) => i % 2 === 1 ? React.createElement('b', { key: i }, p) : p);
+}
+
 function ApiKeyGuide() {
   const [open, setOpen] = useState(null);
 
@@ -1247,10 +1253,10 @@ function ApiKeyGuide() {
       color: "from-orange-500 to-red-500",
       tagline: "最高精度。論文解析の本命。ただし無料枠なし。",
       steps: [
-        { t: "アカウント作成", d: <>https://console.anthropic.com/ にアクセスし、メールアドレスと電話番号でサインアップ（電話番号認証が必須）</> },
-        { t: "支払い情報の登録", d: <>Settings → <b>Billing</b> で「Add Credit」。クレジットカード登録後、<b>最低 $5</b> の前払いクレジットを購入します（無料枠なし）</> },
-        { t: "APIキーの作成", d: <>Settings → <b>API Keys</b> → 「Create Key」。ワークスペースとキー名を選んで生成。<b>sk-ant-</b> で始まる文字列が発行されます</> },
-        { t: "本アプリへ貼り付け", d: <>上の Claude カードで有効化 → キーを貼付 → 接続テスト</> }
+        { t: "アカウント作成", d: "console.anthropic.com にアクセスし、メールアドレスと電話番号でサインアップ（電話番号認証が必須）" },
+        { t: "支払い情報の登録", d: "Settings → **Billing** で「Add Credit」。クレジットカード登録後、**最低 $5** の前払いクレジットを購入します（無料枠なし）" },
+        { t: "APIキーの作成", d: "Settings → **API Keys** → 「Create Key」。ワークスペースとキー名を選んで生成。**sk-ant-** で始まる文字列が発行されます" },
+        { t: "本アプリへ貼り付け", d: "上の Claude カードで有効化 → キーを貼付 → 接続テスト" }
       ],
       pricing: [
         "Opus 4.7: 論文1本あたり 約$0.5〜$2（思考16K時）",
@@ -1275,10 +1281,10 @@ function ApiKeyGuide() {
       color: "from-blue-500 to-cyan-500",
       tagline: "無料枠あり！Gemini 2.5 Pro も利用可能（ただしレート制限厳しい）",
       steps: [
-        { t: "Google AI Studio を開く", d: <>https://aistudio.google.com/apikey にアクセス（Googleアカウントでログイン）</> },
-        { t: "APIキーの作成", d: <>「Create API Key」ボタンをクリック。既存のGCPプロジェクトが無い場合は自動作成されます。<b>AIza</b> で始まる文字列が発行されます</> },
-        { t: "有料化(任意)", d: <>無料枠では Gemini 2.5 Pro は <b>5 req/分・25 req/日</b> と厳しい制限。本格利用には GCP コンソールで Billing を有効化して Pay-as-you-go に切り替え（制限が大幅緩和）</> },
-        { t: "本アプリへ貼り付け", d: <>上の Gemini カードで有効化 → キーを貼付 → 接続テスト</> }
+        { t: "Google AI Studio を開く", d: "aistudio.google.com/apikey にアクセス（Googleアカウントでログイン）" },
+        { t: "APIキーの作成", d: "「Create API Key」ボタンをクリック。既存のGCPプロジェクトが無い場合は自動作成されます。**AIza** で始まる文字列が発行されます" },
+        { t: "有料化(任意)", d: "無料枠では Gemini 2.5 Pro は **5 req/分・25 req/日** と厳しい制限。本格利用には GCP コンソールで Billing を有効化して Pay-as-you-go に切り替え（制限が大幅緩和）" },
+        { t: "本アプリへ貼り付け", d: "上の Gemini カードで有効化 → キーを貼付 → 接続テスト" }
       ],
       pricing: [
         "Gemini 2.5 Flash: 無料枠で処理可能（1日250リクエストまで）",
@@ -1304,11 +1310,11 @@ function ApiKeyGuide() {
       color: "from-emerald-500 to-teal-500",
       tagline: "最も広く使われる標準。GPT-5 は累積$5以上の支払い後に利用可",
       steps: [
-        { t: "アカウント作成", d: <>https://platform.openai.com/ にアクセス。ChatGPT とは別アカウント（同じメールで紐付け可）。電話番号認証必須</> },
-        { t: "支払い情報の登録", d: <>Settings → <b>Billing</b> → Add payment method → 最低 $5 のクレジット購入</> },
-        { t: "Tier 確認", d: <><b>GPT-5 は Tier 1 以上（累積$5以上の支払い）が必要</b>。Tier 0 でも GPT-4.1 / GPT-4o は利用可能</> },
-        { t: "APIキーの作成", d: <>Settings → <b>API Keys</b> → 「Create new secret key」。<b>sk-proj-</b> 又は <b>sk-</b> で始まる文字列が発行（一度しか表示されないので要保存）</> },
-        { t: "本アプリへ貼り付け", d: <>上の OpenAI カードで有効化 → キーを貼付 → 接続テスト</> }
+        { t: "アカウント作成", d: "platform.openai.com にアクセス。ChatGPT とは別アカウント（同じメールで紐付け可）。電話番号認証必須" },
+        { t: "支払い情報の登録", d: "Settings → **Billing** → Add payment method → 最低 $5 のクレジット購入" },
+        { t: "Tier 確認", d: "**GPT-5 は Tier 1 以上（累積$5以上の支払い）が必要**。Tier 0 でも GPT-4.1 や GPT-4o は利用可能" },
+        { t: "APIキーの作成", d: "Settings → **API Keys** → 「Create new secret key」。**sk-proj-** または **sk-** で始まる文字列が発行（一度しか表示されないので要保存）" },
+        { t: "本アプリへ貼り付け", d: "上の OpenAI カードで有効化 → キーを貼付 → 接続テスト" }
       ],
       pricing: [
         "GPT-5: 論文1本 約$0.3〜$1.5（Tier 1必須）",
@@ -1350,7 +1356,7 @@ function ApiKeyGuide() {
               <h4 className="font-bold text-slate-800 mb-1.5 flex items-center gap-1"><ArrowRight size={12}/>取得手順</h4>
               <ol className="space-y-1.5 list-decimal pl-5">
                 {g.steps.map((s, i) => (
-                  <li key={i} className="text-slate-700"><b>{s.t}</b>: {s.d}</li>
+                  <li key={i} className="text-slate-700"><b>{s.t}</b>: {renderBold(s.d)}</li>
                 ))}
               </ol>
             </div>
