@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DataEx — Meta-Analysis Data Extractor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans JP', sans-serif; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeInUp 0.6s ease-out forwards; opacity: 0; }
+    .fade-d1 { animation-delay: 0.1s; }
+    .fade-d2 { animation-delay: 0.2s; }
+    .fade-d3 { animation-delay: 0.3s; }
+    .fade-d4 { animation-delay: 0.4s; }
+    .gradient-bg { background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%); }
+    .gradient-text { background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .card-hover { transition: all 0.3s ease; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(124,58,237,0.15); }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/20 min-h-screen">
+
+<header class="bg-white/80 backdrop-blur-sm border-b border-slate-200 py-6 px-6 sticky top-0 z-10">
+  <div class="max-w-5xl mx-auto flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="gradient-bg text-white p-3 rounded-xl shadow-lg">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/></svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-extrabold text-slate-800">DataEx</h1>
+        <p class="text-xs text-slate-500">Meta-Analysis Data Extractor</p>
+      </div>
+    </div>
+    <a href="https://github.com/mxe050/DataEx" target="_blank" rel="noopener" class="text-xs bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.374 0 12c0 5.302 3.438 9.8 8.207 11.387.6.11.793-.26.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.626-5.374-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-6 py-12">
+  <section class="text-center mb-12 fade-in">
+    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3 Multi-AI Brain</div>
+    <h2 class="text-4xl sm:text-5xl font-extrabold text-slate-800 mb-4">
+      RCT論文から<br class="sm:hidden"/><span class="gradient-text">メタ分析データを自動抽出</span>
+    </h2>
+    <p class="text-slate-600 max-w-2xl mx-auto">
+      PDFをアップロード → APIキー入力 → 数値データを構造化抽出。
+      Claude / Gemini / OpenAI のマルチAI対応、4段階抽出パイプラインで高精度化。
+      ブラウザのみで動作、サーバ不要。
+    </p>
+  </section>
+
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+    <a href="meta-analysis-extractor%20v3-opus47.html" class="card-hover block bg-white rounded-2xl shadow-lg border-2 border-purple-200 overflow-hidden fade-in fade-d1">
+      <div class="gradient-bg text-white px-6 py-4 flex items-center justify-between">
+        <div>
+          <div class="text-[10px] font-bold opacity-80">LATEST / RECOMMENDED</div>
+          <div class="text-lg font-bold">v3 Multi-AI Brain</div>
+        </div>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+      </div>
+      <div class="p-6">
+        <ul class="text-sm text-slate-700 space-y-2 mb-4">
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>Claude Opus 4.7 / Gemini 2.5 Pro / GPT-5 対応</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>4段階抽出パイプライン（Critic + 個別検証）</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>Extended Thinking 最大16K・ネイティブPDF</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>信頼度スコア、APIキー取得ガイド内蔵</li>
+        </ul>
+        <div class="gradient-bg text-white font-bold py-3 rounded-xl text-center">起動する →</div>
+      </div>
+    </a>
+
+    <a href="meta-analysis-extractor%20v2%E3%83%BC1.html" class="card-hover block bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden fade-in fade-d2">
+      <div class="bg-slate-700 text-white px-6 py-4 flex items-center justify-between">
+        <div>
+          <div class="text-[10px] font-bold opacity-80">LEGACY</div>
+          <div class="text-lg font-bold">v2-1 (Gemini単独)</div>
+        </div>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+      </div>
+      <div class="p-6">
+        <ul class="text-sm text-slate-700 space-y-2 mb-4">
+          <li class="flex items-start gap-2"><span class="text-slate-400 font-bold">•</span>Gemini API 単独（シンプル）</li>
+          <li class="flex items-start gap-2"><span class="text-slate-400 font-bold">•</span>Canvas環境内蔵API対応</li>
+          <li class="flex items-start gap-2"><span class="text-slate-400 font-bold">•</span>動作実績のある安定版</li>
+          <li class="flex items-start gap-2"><span class="text-slate-400 font-bold">•</span>Gemini APIキーだけで利用可</li>
+        </ul>
+        <div class="bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 rounded-xl text-center">起動する →</div>
+      </div>
+    </a>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-8 fade-in fade-d3">
+    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-600"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+      主な機能
+    </h3>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+      <div class="bg-slate-50 p-4 rounded-lg">
+        <div class="font-bold text-slate-800 mb-1">📊 全アウトカム網羅</div>
+        <div class="text-xs text-slate-600">指定外アウトカムも自動抽出。ITT/PP/mITT集団を分離して保持</div>
+      </div>
+      <div class="bg-slate-50 p-4 rounded-lg">
+        <div class="font-bold text-slate-800 mb-1">🧬 揺らぎの保持</div>
+        <div class="text-xs text-slate-600">Abstract と本文の数値差、術前・術後・変化量を独立レコードで</div>
+      </div>
+      <div class="bg-slate-50 p-4 rounded-lg">
+        <div class="font-bold text-slate-800 mb-1">📑 根拠原文付き</div>
+        <div class="text-xs text-slate-600">各項目に evidence text。PDFビュアーで即座にハイライト</div>
+      </div>
+      <div class="bg-slate-50 p-4 rounded-lg">
+        <div class="font-bold text-slate-800 mb-1">🛡️ SD/SE判定</div>
+        <div class="text-xs text-slate-600">厳密区別、ゼロイベント保持、3群比較対応</div>
+      </div>
+      <div class="bg-slate-50 p-4 rounded-lg">
+        <div class="font-bold text-slate-800 mb-1">📋 CONSORT抽出</div>
+        <div class="text-xs text-slate-600">Flow diagram から自動でN数を抽出</div>
+      </div>
+      <div class="bg-slate-50 p-4 rounded-lg">
+        <div class="font-bold text-slate-800 mb-1">💾 TSV/CSV出力</div>
+        <div class="text-xs text-slate-600">RevMan・R等へのコピペ対応形式で出力</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-rose-50 border border-rose-200 rounded-xl p-5 mb-8 fade-in fade-d4">
+    <h3 class="font-bold text-rose-800 mb-2 flex items-center gap-2">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      免責事項
+    </h3>
+    <ul class="list-disc pl-5 text-xs text-rose-900 space-y-1">
+      <li>本ツールは強力なアシスタントですが、抽出結果は<b>必ず原論文と照合してください</b></li>
+      <li>特に SD と SE の混同、図表からの読み取り誤差に注意</li>
+      <li>APIキーはお使いのブラウザの localStorage にのみ保存されます（任意）。第三者と共有しないでください</li>
+    </ul>
+  </section>
+
+  <footer class="text-center text-xs text-slate-400 py-6 border-t border-slate-200">
+    <p>© 2026 DataEx · <a href="https://github.com/mxe050/DataEx" target="_blank" rel="noopener" class="hover:text-purple-600 underline">github.com/mxe050/DataEx</a></p>
+  </footer>
+</main>
+
+</body>
+</html>
