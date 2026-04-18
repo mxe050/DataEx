@@ -1,0 +1,2061 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meta-Analysis Data Extractor Pro v3 — Multi-AI Brain</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    html,body{height:100%;margin:0;overflow:hidden}
+    #root{height:100%;display:flex;flex-direction:column}
+    *{font-family:'Noto Sans JP',sans-serif;box-sizing:border-box}
+    code,.font-mono{font-family:'JetBrains Mono',monospace!important}
+    @keyframes spin{to{transform:rotate(360deg)}}.animate-spin{animation:spin 1s linear infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.animate-pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .fade-in-up{animation:fadeInUp .4s ease-out forwards;opacity:0}
+    .fade-d1{animation-delay:.08s}.fade-d2{animation-delay:.16s}.fade-d3{animation-delay:.24s}.fade-d4{animation-delay:.32s}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+    .btn-shimmer{background:linear-gradient(90deg,#7c3aed 0%,#8b5cf6 40%,#a78bfa 50%,#8b5cf6 60%,#7c3aed 100%);background-size:200% 100%; transition: all 0.3s ease;}
+    .btn-shimmer:hover:not(:disabled){animation:shimmer 1.8s ease-in-out infinite; transform: translateY(-2px);}
+    ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+    .textLayer{position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;line-height:1;opacity:.3}
+    .textLayer>span{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
+    .textLayer>span::selection{background:rgba(0,100,200,.3)}
+    .highlight-hook{background-color:rgba(250,204,21,.55)!important;color:transparent!important;box-shadow:0 0 0 3px rgba(250,204,21,.55);border-radius:2px;animation:pulseHL 1.5s ease-in-out infinite;z-index:10}
+    @keyframes pulseHL{0%,100%{background-color:rgba(250,204,21,.55);box-shadow:0 0 0 3px rgba(250,204,21,.55)}50%{background-color:rgba(250,204,21,.85);box-shadow:0 0 0 5px rgba(250,204,21,.85)}}
+    .editable-input{width:100%;min-width:35px;text-align:center;background:transparent;border:1px dashed transparent;border-radius:3px;transition:all .2s;padding:2px 3px;font-size:inherit;font-weight:inherit;color:inherit}
+    .editable-input:hover{background:rgba(255,255,255,.7);border-color:#cbd5e1}
+    .editable-input:focus{background:#fff;border-color:#7c3aed;border-style:solid;outline:none;box-shadow:0 0 0 2px rgba(124,58,237,.15)}
+    .api-input-glow:focus{box-shadow:0 0 0 3px rgba(124,58,237,.15),0 0 20px rgba(124,58,237,.08)}
+    .gradient-purple{background:linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%)}
+    .gradient-text{background:linear-gradient(135deg,#7c3aed 0%,#ec4899 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .stage-pulse{animation:stagePulse 1.5s ease-in-out infinite}
+    @keyframes stagePulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.4)}50%{box-shadow:0 0 0 8px rgba(124,58,237,0)}}
+    .confidence-high{background:#10b981}
+    .confidence-med{background:#f59e0b}
+    .confidence-low{background:#ef4444}
+    @media(max-width:1024px){.split-h{flex-direction:column!important}.split-pane{width:100%!important;height:50%!important}}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-hidden">
+<div id="root" class="h-full flex flex-col overflow-hidden"></div>
+
+<script type="text/babel">
+const {useState,useRef,useEffect,useCallback,useMemo} = React;
+
+/* ============================================================
+   SECTION 1: ICON COMPONENTS
+   ============================================================ */
+const I=({children,size=18,className=""})=><svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>;
+const UploadCloud=({size,className})=><I size={size} className={className}><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></I>;
+const FileText=({size,className})=><I size={size} className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></I>;
+const SettingsIcon=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></I>;
+const PlusIcon=({size,className})=><I size={size} className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></I>;
+const Trash2=({size,className})=><I size={size} className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></I>;
+const CopyIcon=({size,className})=><I size={size} className={className}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></I>;
+const AlertCircle=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></I>;
+const CheckCircle2=({size,className})=><I size={size} className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></I>;
+const ChevronLeft=({size,className})=><I size={size} className={className}><polyline points="15 18 9 12 15 6"/></I>;
+const Activity=({size,className})=><I size={size} className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></I>;
+const FileSearch=({size,className})=><I size={size} className={className}><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v3"/><polyline points="14 2 14 8 20 8"/><circle cx="5" cy="14" r="3"/><line x1="2" y1="17" x2="4" y2="15"/></I>;
+const Database=({size,className})=><I size={size} className={className}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></I>;
+const InfoIcon=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></I>;
+const KeyIcon=({size,className})=><I size={size} className={className}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></I>;
+const ShieldIcon=({size,className})=><I size={size} className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></I>;
+const EyeIcon=({size,className})=><I size={size} className={className}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></I>;
+const EyeOffIcon=({size,className})=><I size={size} className={className}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></I>;
+const ArrowRight=({size,className})=><I size={size} className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></I>;
+const XCircle=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></I>;
+const Sparkles=({size,className})=><I size={size} className={className}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></I>;
+const TargetIcon=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></I>;
+const ZoomInIcon=({size,className})=><I size={size} className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></I>;
+const ZoomOutIcon=({size,className})=><I size={size} className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></I>;
+const SaveIcon=({size,className})=><I size={size} className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></I>;
+const SearchIcon=({size,className})=><I size={size} className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></I>;
+const TypeIcon=({size,className})=><I size={size} className={className}><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></I>;
+const ZapIcon=({size,className})=><I size={size} className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></I>;
+const BrainIcon=({size,className})=><I size={size} className={className}><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></I>;
+const CpuIcon=({size,className})=><I size={size} className={className}><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="2" x2="9" y2="4"/><line x1="15" y1="2" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="22"/><line x1="15" y1="20" x2="15" y2="22"/><line x1="20" y1="9" x2="22" y2="9"/><line x1="20" y1="15" x2="22" y2="15"/><line x1="2" y1="9" x2="4" y2="9"/><line x1="2" y1="15" x2="4" y2="15"/></I>;
+const LinkIcon=({size,className})=><I size={size} className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></I>;
+const LayersIcon=({size,className})=><I size={size} className={className}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></I>;
+const RefreshIcon=({size,className})=><I size={size} className={className}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></I>;
+const ShieldCheckIcon=({size,className})=><I size={size} className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></I>;
+
+/* ============================================================
+   SECTION 2: SYSTEM PROMPTS (精度最大化のための強化版)
+   ============================================================ */
+const SYSTEM_PROMPT_EXTRACT = `あなたは世界最高水準の医学システマティックレビュー/メタ分析の熟練専門家です。20年以上の臨床研究経験を持ち、Cochrane Handbookの隅々まで精通しています。
+
+【使命】提供されたRCT論文から、メタ分析に必要な数値データを「完全無欠の精度」で抽出する。
+
+【思考プロセス（必須）】
+以下の順序で体系的に情報を収集してください：
+1. まず論文の全体構造を把握（Abstract, Methods, Results, Tables, Figures, Supplementaryの有無）
+2. PICOを特定し、群構成（2群/3群以上）を確認
+3. CONSORT flow diagram / Participants セクションから ITT/PP/mITT 等の集団数を確認
+4. Results本文を段落ごとに精読し、全ての数値を拾う
+5. 全Tableを項目ごとに精査（Table 1 = baseline, Table 2+ = outcomes が典型）
+6. Figure（Kaplan-Meier, Forest plot等）の読み取り
+7. Abstractとの整合性チェック（不一致は両方保持）
+
+【最重要原則：揺らぎの完全保持】
+1. 指定外のアウトカムも全て抽出（requestedOutcomeName="未指定（論文から自動抽出）"）
+2. Abstract と本文に数値の違いがある場合 → 両方を別レコードとして抽出、variationReasonに記載
+3. 連続変数の「術前 / 術後 / 変化量 (change from baseline)」→ 3つ全て独立アウトカム
+4. ITT vs PP vs mITT vs Safety population → 統合せず独立して抽出、populationTypeに明記
+5. 時点が複数（e.g., 4週・12週・24週）→ 時点ごとに別レコード
+6. 同じアウトカムが異なるサブグループで報告 → 独立抽出
+7. 異なる計算方法（例: last-observation-carried-forward vs multiple imputation）→ 別レコード
+
+【群のペアリング（超重要）】
+同じアウトカム・同じ時点・同じ集団タイプの介入群と対照群データは必ずペアで格納。
+片方だけの抽出は厳禁。3群以上ある場合は thirdGroup にも格納。
+
+【出処の厳密な分離】
+sourceLocationには単一の出処のみ記載（例: "Table 2", "Abstract Results", "Figure 2", "本文p.5段落3"）。
+記載場所が違えば必ず別レコード。「Table 2 / Figure 2」のような複合記載は禁止。
+
+【データ抽出の厳密ルール】
+1. 文献番号（例: "Smith et al [15]"）は除外
+2. カンマ/ピリオド/スペースを数値区切りとして誤解釈しない（例: "1,234" = 1234, "1.234" = 小数, 言語圏に注意）
+3. SD (Standard Deviation) と SE (Standard Error) の厳格区別:
+   - 明示表記を最優先 (e.g., "mean ± SD", "mean (SE)")
+   - "±"記号の後の値は通常SD（但し必ず文脈確認）
+   - "(95% CI: a, b)" → 95%信頼区間、SD/SEとは別
+   - SEの場合は notes に必ず "SE記載（SD変換要：SD = SE × √n）" と記載
+4. 二値変数（Binary）:
+   - 実数 n (events/total) を絶対優先抽出
+   - percent のみの場合は実数を逆算し notes に記載
+   - ゼロイベントは必ず "0" として記録（空欄禁止）
+   - 効果指標: RR, OR, HR, RD, ARR, NNT, 95%CI, P値すべて抽出
+5. 連続変数（Continuous）:
+   - N, mean, SD (or SE), median, IQR, range を全て抽出
+   - 中央値のみの場合 notes に "中央値のみ（平均変換要検討）"
+   - Mean difference, 95%CI, P値を抽出
+6. Time-to-event: HR, 95%CI, log-rank P値、群別 N、events、median follow-up
+7. 生存曲線から読み取った場合は notes に "KMカーブ目視推定" を明記
+8. 記載がない項目は "不明" と出力。推測・補間は厳禁
+9. pageNumber に PDFページ番号（1始まり）を整数で必ず記載
+10. evidenceText には**元文献の原文をそのまま**引用（改変禁止、数値を含む完全な文）
+
+【CONSORT Flow Diagramからの抽出（重要）】
+Figure 1 (CONSORT) から以下を抽出:
+- Randomized N
+- Allocated to each arm N
+- Received intervention N
+- Lost to follow-up N (理由別)
+- Analyzed (ITT) N / Analyzed (PP) N
+これらは populationType ごとの n_total として使用。
+
+【Table 1 (Baseline) の完全抽出】
+全行を baselineCharacteristics に抽出。年齢・性別は必須。
+category は "人口統計"/"病歴"/"検査値"/"介入前スコア"等で分類。
+
+【評価の確信度（confidence）】
+各抽出項目に confidence を付与:
+- "high": 明示的数値が単一箇所から抽出（例: Table セル値）
+- "medium": 計算/換算が含まれる、または複数箇所で微妙に異なる
+- "low": 図表から目視推定、または間接的記載から推論
+
+【expertCommentary（日本語で必須）】
+以下を含めること:
+- 主要アウトカムの揺らぎポイントとその原因
+- SD/SE変換が必要な項目
+- ITT/PP集団の差異
+- メタ分析実装時の注意点（例: "中央値のみ報告、Wan et al 2014法でSD推定推奨"）
+- 論文の質的リスク（報告バイアス、選択バイアス等の兆候）
+
+【絶対厳禁】
+❌ 推測による数値補完
+❌ 類似アウトカムの統合
+❌ Abstract と本文の数値統一
+❌ SD と SE の混同
+❌ ゼロイベントを空欄として省略
+❌ evidenceText の改変・要約`;
+
+const SYSTEM_PROMPT_CRITIC = `あなたは医学メタ分析データ抽出の監査役（Critic）です。Cochrane EPOCの Risk-of-bias 評価者として活動してきた世界有数の専門家です。
+
+【使命】
+別のAIが抽出したデータを論文原文と照合し、誤り・欠落・曖昧さを徹底的に指摘して訂正する。
+あなたの仕事はメタ分析の数値の1桁の誤りも見逃さないことです。
+
+【レビュー手順】
+1. 抽出された各アウトカムの evidenceText を論文原文と照合
+2. 数値が evidenceText から確実に読み取れるか検証
+3. SD と SE の識別が正しいか確認（± 記号の解釈を特に注意）
+4. ITT/PP集団の分離が正しいか確認
+5. 3群目の見落としがないか確認
+6. Abstract と本文の数値差異が別レコードとして保持されているか確認
+7. baseline の年齢・性別は抽出されているか確認
+8. CONSORT flow diagramからのN数が extractedOutcomes に反映されているか
+9. 時点違い・サブグループ違いが統合されていないか
+10. 変化量（change from baseline）が術前・術後と別レコードになっているか
+
+【出力】
+correctionsにオブジェクトの配列として出力:
+- targetType: "outcome" | "baseline" | "global"
+- targetIndex: 対象のインデックス（globalの場合-1）
+- field: 問題のあるフィールド名
+- severity: "critical" | "warning" | "info"
+- issue: 問題の詳細説明
+- proposedFix: 修正案（可能なら具体的な値）
+- evidenceForFix: 修正の根拠となる原文引用
+
+missingOutcomes配列に見落とされた可能性のあるアウトカムを列挙。
+overallAssessmentに総合評価と信頼度スコア(0-100)を記載。`;
+
+const SYSTEM_PROMPT_VERIFY = `あなたは単一のアウトカム抽出レコードを原論文と照合する検証エキスパートです。
+
+与えられた1つの抽出済みアウトカムに対して：
+1. evidenceText（根拠原文）に n_total, events_or_mean, sd_or_se の数値が実際に含まれているか確認
+2. 数値がevidenceText内のどの位置に出現するか特定
+3. SD/SEの判定が evidenceText の表記と矛盾していないか確認
+4. 論文のその周辺情報から判断して、populationType や timePoint が正しいか確認
+
+出力は単一JSONオブジェクト:
+{
+  "verified": true/false,
+  "issues": ["問題点のリスト"],
+  "confidence": 0-100,
+  "correctedValues": { /* 必要な場合のみ */ },
+  "notes": "検証コメント"
+}`;
+
+/* ============================================================
+   SECTION 3: RESPONSE SCHEMAS
+   ============================================================ */
+const EXTRACT_SCHEMA_JSON = {
+  type: "object",
+  properties: {
+    paperPICO: {
+      type: "object",
+      properties: {
+        P: { type: "string" }, I: { type: "string" }, C: { type: "string" },
+        thirdGroup: { type: "string" }, studyDesign: { type: "string" },
+        sampleSize: { type: "string" }, followUpDuration: { type: "string" }
+      }
+    },
+    consortFlow: {
+      type: "object",
+      description: "CONSORT flow diagram からの抽出",
+      properties: {
+        randomized: { type: "string" },
+        allocatedIntervention: { type: "string" },
+        allocatedComparison: { type: "string" },
+        allocatedThird: { type: "string" },
+        analyzedITT_intervention: { type: "string" },
+        analyzedITT_comparison: { type: "string" },
+        analyzedPP_intervention: { type: "string" },
+        analyzedPP_comparison: { type: "string" },
+        lostToFollowUp_intervention: { type: "string" },
+        lostToFollowUp_comparison: { type: "string" },
+        sourceLocation: { type: "string" }, pageNumber: { type: "integer" }
+      }
+    },
+    statisticalMethods: { type: "array", items: { type: "string" } },
+    baselineCharacteristics: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          category: { type: "string" }, variable: { type: "string" },
+          interventionGroup: { type: "object", properties: { n:{type:"string"}, value:{type:"string"}, sd:{type:"string"}, percent:{type:"string"}, iqr:{type:"string"}, range:{type:"string"} }},
+          comparisonGroup: { type: "object", properties: { n:{type:"string"}, value:{type:"string"}, sd:{type:"string"}, percent:{type:"string"}, iqr:{type:"string"}, range:{type:"string"} }},
+          thirdGroup: { type: "object", properties: { n:{type:"string"}, value:{type:"string"}, sd:{type:"string"}, percent:{type:"string"}, iqr:{type:"string"}, range:{type:"string"} }},
+          pValue: { type: "string" }, unit: { type: "string" }, dataType: { type: "string" },
+          sourceLocation: { type: "string" }, pageNumber: { type: "integer" },
+          confidence: { type: "string" }
+        },
+        required: ["variable", "dataType"]
+      }
+    },
+    extractedOutcomes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          requestedOutcomeName: { type: "string" }, actualOutcomeName: { type: "string" },
+          timePoint: { type: "string" }, variationReason: { type: "string" },
+          calculationMethod: { type: "string" }, variableType: { type: "string" },
+          populationType: { type: "string" }, populationDescription: { type: "string" },
+          interventionGroup: { type: "object", properties: { n_total:{type:"string"}, events_or_mean:{type:"string"}, sd_or_se:{type:"string"} }},
+          comparisonGroup: { type: "object", properties: { n_total:{type:"string"}, events_or_mean:{type:"string"}, sd_or_se:{type:"string"} }},
+          thirdGroupName: { type: "string" },
+          thirdGroup: { type: "object", properties: { n_total:{type:"string"}, events_or_mean:{type:"string"}, sd_or_se:{type:"string"} }},
+          effectEstimate: { type: "object", properties: { measureType:{type:"string"}, value:{type:"string"}, ci95:{type:"string"}, pValue:{type:"string"} }},
+          evidenceText: { type: "string" }, sourceLocation: { type: "string" },
+          notes: { type: "string" }, pageNumber: { type: "integer" },
+          confidence: { type: "string" }, sdOrSe: { type: "string" }
+        },
+        required: ["actualOutcomeName", "variableType", "evidenceText", "sourceLocation"]
+      }
+    },
+    unclearItems: { type: "array", items: { type: "string" } },
+    expertCommentary: { type: "string" },
+    paperQualityAssessment: { type: "string" }
+  },
+  required: ["paperPICO", "statisticalMethods", "baselineCharacteristics", "extractedOutcomes", "unclearItems", "expertCommentary"]
+};
+
+// Gemini形式のスキーマ（OBJECT/STRINGを大文字に変換）
+function toGeminiSchema(s){
+  if(Array.isArray(s)) return s.map(toGeminiSchema);
+  if(s && typeof s === 'object'){
+    const r = {};
+    for(const k in s){
+      if(k === 'type') r[k] = String(s[k]).toUpperCase();
+      else if(k === 'description') continue; // Gemini schemaでは description は OK だが簡略化
+      else r[k] = toGeminiSchema(s[k]);
+    }
+    return r;
+  }
+  return s;
+}
+const EXTRACT_SCHEMA_GEMINI = toGeminiSchema(EXTRACT_SCHEMA_JSON);
+
+const CRITIC_SCHEMA = {
+  type: "object",
+  properties: {
+    corrections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          targetType: { type: "string" }, targetIndex: { type: "integer" },
+          field: { type: "string" }, severity: { type: "string" },
+          issue: { type: "string" }, proposedFix: { type: "string" },
+          evidenceForFix: { type: "string" }
+        }
+      }
+    },
+    missingOutcomes: { type: "array", items: { type: "string" } },
+    overallAssessment: { type: "string" },
+    confidenceScore: { type: "integer" }
+  },
+  required: ["corrections", "missingOutcomes", "overallAssessment", "confidenceScore"]
+};
+
+/* ============================================================
+   SECTION 4: AI PROVIDER ABSTRACTION
+   ============================================================ */
+const PROVIDERS = {
+  claude: {
+    name: "Claude (Anthropic)",
+    icon: "brain",
+    color: "from-orange-500 to-red-500",
+    models: [
+      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (最高精度/推奨)", thinking: true, priority: 1, cost: "論文1本 約$0.5〜$2", requires: "要支払い" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (コスパ良)", thinking: true, priority: 3, cost: "論文1本 約$0.1〜$0.4", requires: "要支払い" },
+      { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5 (高速/安価)", thinking: true, priority: 7, cost: "論文1本 約$0.02〜$0.08", requires: "要支払い" }
+    ],
+    defaultModel: "claude-opus-4-7",
+    keyFormat: "sk-ant-...",
+    docsUrl: "https://console.anthropic.com/settings/keys",
+    signup: "https://console.anthropic.com/",
+    billing: "前払いクレジット（最低$5〜）",
+    freeTier: "なし（無料枠なし）",
+    rateLimit: "Tier 1: 50 req/min、Tier 2+ で緩和",
+    strengths: "ネイティブPDF対応 / 16K思考トークン / 最高の推論精度 / Tool Use構造化出力"
+  },
+  gemini: {
+    name: "Google Gemini",
+    icon: "sparkles",
+    color: "from-blue-500 to-cyan-500",
+    models: [
+      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro (高精度)", thinking: true, priority: 2, cost: "無料枠 or 約$0.1〜$0.5", requires: "無料枠: 5req/分・25req/日" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (バランス/推奨)", thinking: true, priority: 4, cost: "ほぼ無料", requires: "無料枠: 10req/分・250req/日" },
+      { id: "gemini-2.5-flash-preview-09-2025", name: "Gemini 2.5 Flash Preview", thinking: true, priority: 6, cost: "ほぼ無料", requires: "無料枠: 10req/分" }
+    ],
+    defaultModel: "gemini-2.5-pro",
+    keyFormat: "AIza...",
+    docsUrl: "https://aistudio.google.com/apikey",
+    signup: "https://aistudio.google.com/",
+    billing: "無料枠あり / 有料は従量課金（Pay-as-you-go）",
+    freeTier: "あり（Gemini 2.5 Flash/Pro ともに利用可、ただしレート制限厳しい）",
+    rateLimit: "無料: Pro=5req/分, Flash=10req/分 / 有料化で大幅緩和",
+    strengths: "無料で高性能モデル利用可 / 思考モード搭載 / マルチモーダル強い"
+  },
+  openai: {
+    name: "OpenAI (GPT)",
+    icon: "cpu",
+    color: "from-emerald-500 to-teal-500",
+    models: [
+      { id: "gpt-5", name: "GPT-5 (最高精度)", thinking: true, priority: 2, cost: "論文1本 約$0.3〜$1.5", requires: "Tier 1以上 (累積$5支払い後)" },
+      { id: "gpt-4.1", name: "GPT-4.1 (推奨)", thinking: false, priority: 5, cost: "論文1本 約$0.1〜$0.4", requires: "通常利用可" },
+      { id: "gpt-4o", name: "GPT-4o (コスパ良)", thinking: false, priority: 6, cost: "論文1本 約$0.05〜$0.2", requires: "通常利用可" }
+    ],
+    defaultModel: "gpt-4.1",
+    keyFormat: "sk-...",
+    docsUrl: "https://platform.openai.com/api-keys",
+    signup: "https://platform.openai.com/",
+    billing: "前払いクレジット（最低$5〜）",
+    freeTier: "なし（無料枠なし）",
+    rateLimit: "Tierに応じて段階的（Tier 1→5）",
+    strengths: "安定した精度 / 広く使われる標準 / JSON Schema対応"
+  }
+};
+
+// Pick best provider for critic/verify based on priority
+function pickBestProvider(providers, excludeProvider = null) {
+  const candidates = [];
+  Object.entries(providers).forEach(([name, cfg]) => {
+    if (!cfg.enabled || !cfg.apiKey) return;
+    if (name === excludeProvider) return;
+    const modelInfo = PROVIDERS[name].models.find(m => m.id === cfg.model);
+    candidates.push({ providerName: name, apiKey: cfg.apiKey, model: cfg.model, priority: modelInfo?.priority || 99 });
+  });
+  candidates.sort((a, b) => a.priority - b.priority);
+  return candidates[0] || null;
+}
+
+// Unified critic/verify call that works with any provider
+async function callCriticAnyProvider(provider, systemPrompt, userText, pdfBase64, images, thinkingBudget, criticSchema) {
+  if (provider.providerName === 'claude') {
+    return await callClaude({
+      apiKey: provider.apiKey, model: provider.model,
+      systemPrompt, userText, pdfBase64,
+      thinkingBudget, useTools: false
+    });
+  } else if (provider.providerName === 'gemini') {
+    return await callGemini({
+      apiKey: provider.apiKey, model: provider.model,
+      systemPrompt, userText, images,
+      schema: criticSchema ? toGeminiSchema(criticSchema) : null,
+      thinkingBudget: Math.min(thinkingBudget, 12000)
+    });
+  } else if (provider.providerName === 'openai') {
+    return await callOpenAI({
+      apiKey: provider.apiKey, model: provider.model,
+      systemPrompt, userText, images,
+      schema: null
+    });
+  }
+  throw new Error(`未対応プロバイダー: ${provider.providerName}`);
+}
+
+// Exponential backoff retry
+const fetchWithRetry = async (url, options, retries = 5) => {
+  const delays = [1000, 2000, 4000, 8000, 16000];
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const r = await fetch(url, options);
+      if (!r.ok) {
+        let d = {}; try { d = await r.json(); } catch (e) {}
+        const msg = d.error?.message || d.error?.type || r.statusText;
+        // 4xx clients errors (except 429) should not be retried
+        if (r.status >= 400 && r.status < 500 && r.status !== 429) {
+          throw new Error(`API Error ${r.status}: ${msg}`);
+        }
+        throw new Error(`API Error ${r.status}: ${msg}`);
+      }
+      return await r.json();
+    } catch (e) {
+      lastErr = e;
+      if (i === retries - 1) throw e;
+      // Don't retry auth errors
+      if (/401|403|invalid.*key|unauthorized/i.test(e.message)) throw e;
+      await new Promise(r => setTimeout(r, delays[i]));
+    }
+  }
+  throw lastErr;
+};
+
+// Claude API call (Anthropic)
+async function callClaude({ apiKey, model, systemPrompt, userText, pdfBase64, images, thinkingBudget = 16000, useTools = true }) {
+  const content = [];
+  if (pdfBase64) {
+    content.push({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: pdfBase64 },
+      cache_control: { type: "ephemeral" }
+    });
+  }
+  if (images && images.length) {
+    images.forEach(img => content.push({
+      type: "image",
+      source: { type: "base64", media_type: "image/jpeg", data: img.inlineData.data }
+    }));
+  }
+  content.push({ type: "text", text: userText });
+
+  const body = {
+    model: model,
+    max_tokens: 16000,
+    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: content }]
+  };
+
+  // Extended thinking
+  if (thinkingBudget > 0) {
+    body.thinking = { type: "enabled", budget_tokens: thinkingBudget };
+    body.max_tokens = Math.max(body.max_tokens, thinkingBudget + 8000);
+  }
+
+  // Tool use for structured output
+  if (useTools) {
+    body.tools = [{
+      name: "submit_extraction",
+      description: "論文から抽出したメタ分析データを構造化して提出する",
+      input_schema: EXTRACT_SCHEMA_JSON
+    }];
+    body.tool_choice = thinkingBudget > 0 ? { type: "any" } : { type: "tool", name: "submit_extraction" };
+  }
+
+  const resp = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  // Parse response - find tool_use block or text block
+  if (useTools) {
+    const toolBlock = resp.content?.find(c => c.type === "tool_use");
+    if (toolBlock?.input) return toolBlock.input;
+  }
+  const textBlock = resp.content?.find(c => c.type === "text");
+  if (textBlock?.text) {
+    try {
+      // Strip markdown code fences if present
+      const t = textBlock.text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      return JSON.parse(t);
+    } catch (e) {
+      throw new Error("Claude応答のJSONパース失敗: " + e.message);
+    }
+  }
+  throw new Error("Claude応答に有効なコンテンツなし");
+}
+
+// Gemini API call (Google)
+async function callGemini({ apiKey, model, systemPrompt, userText, pdfBase64, images, schema, thinkingBudget = 8000 }) {
+  const parts = [{ text: userText }];
+  if (pdfBase64) parts.push({ inlineData: { data: pdfBase64, mimeType: "application/pdf" } });
+  if (images) images.forEach(img => parts.push(img));
+
+  const genConfig = { temperature: 0.1 };
+  if (schema) {
+    genConfig.responseMimeType = "application/json";
+    genConfig.responseSchema = schema;
+  }
+  if (thinkingBudget > 0) {
+    genConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ role: "user", parts: parts }],
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    generationConfig: genConfig
+  };
+
+  const resp = await fetchWithRetry(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  const text = resp.candidates?.[0]?.content?.parts?.find(p => p.text)?.text;
+  if (!text) throw new Error("Gemini応答なし");
+  try {
+    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    return JSON.parse(cleaned);
+  } catch (e) {
+    throw new Error("Gemini応答のJSONパース失敗: " + e.message);
+  }
+}
+
+// OpenAI API call
+async function callOpenAI({ apiKey, model, systemPrompt, userText, images, schema }) {
+  const userContent = [{ type: "text", text: userText }];
+  if (images) {
+    images.forEach(img => userContent.push({
+      type: "image_url",
+      image_url: { url: `data:image/jpeg;base64,${img.inlineData.data}`, detail: "high" }
+    }));
+  }
+
+  const body = {
+    model: model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent }
+    ],
+    temperature: 0.1,
+    max_tokens: 16000
+  };
+  if (schema) {
+    body.response_format = {
+      type: "json_schema",
+      json_schema: { name: "extraction", schema: schema, strict: false }
+    };
+  } else {
+    body.response_format = { type: "json_object" };
+  }
+
+  const resp = await fetchWithRetry("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify(body)
+  });
+
+  const text = resp.choices?.[0]?.message?.content;
+  if (!text) throw new Error("OpenAI応答なし");
+  try { return JSON.parse(text); }
+  catch (e) { throw new Error("OpenAI応答のJSONパース失敗: " + e.message); }
+}
+
+// Unified AI caller
+async function callAI(providerName, config, params) {
+  const { apiKey, model } = config;
+  if (providerName === "claude") {
+    return await callClaude({ apiKey, model, ...params, useTools: params.useTools !== false });
+  } else if (providerName === "gemini") {
+    return await callGemini({ apiKey, model, schema: params.schema || EXTRACT_SCHEMA_GEMINI, ...params });
+  } else if (providerName === "openai") {
+    return await callOpenAI({ apiKey, model, schema: params.schema || EXTRACT_SCHEMA_JSON, ...params });
+  }
+  throw new Error(`未対応のプロバイダー: ${providerName}`);
+}
+
+/* ============================================================
+   SECTION 5: UTILITIES
+   ============================================================ */
+const clipCopy = (text) => {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text); return true;
+  }
+  const ta = document.createElement("textarea"); ta.value = text;
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta); return ok;
+};
+
+const toDelimited = (headers, rows, delimiter) =>
+  headers.join(delimiter) + "\n" +
+  rows.map(r => r.map(v => String(v).replace(/[\t\n\r]/g, ' ')).join(delimiter)).join("\n");
+
+// localStorage helpers
+const LS_KEY = "meta-extractor-v3-config";
+const loadConfig = () => {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch (e) { return {}; }
+};
+const saveConfig = (cfg) => {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(cfg)); } catch (e) {}
+};
+
+/* ============================================================
+   SECTION 6: PDF VIEWER
+   ============================================================ */
+function PdfPage({ pdf, pageNum, scale }) {
+  const canvasRef = useRef(null); const textRef = useRef(null); const [w, setW] = useState('auto');
+  useEffect(() => {
+    let task;
+    const render = async () => {
+      try {
+        const page = await pdf.getPage(pageNum);
+        const vp = page.getViewport({ scale });
+        const canvas = canvasRef.current; if (!canvas) return;
+        const ctx = canvas.getContext('2d'); canvas.height = vp.height; canvas.width = vp.width; setW(`${vp.width}px`);
+        task = page.render({ canvasContext: ctx, viewport: vp });
+        await task.promise;
+        const tc = await page.getTextContent();
+        const tl = textRef.current; if (!tl) return;
+        tl.innerHTML = ''; tl.style.width = `${vp.width}px`; tl.style.height = `${vp.height}px`; tl.style.setProperty('--scale-factor', scale);
+        pdfjsLib.renderTextLayer({ textContentSource: tc, container: tl, viewport: vp, textDivs: [] });
+      } catch (e) { if (e.name !== 'RenderingCancelledException') console.warn(e); }
+    }; render(); return () => { if (task) try { task.cancel(); } catch (e) {} };
+  }, [pdf, pageNum, scale]);
+  return (<div id={`pdf-page-${pageNum}`} className="bg-white shadow-lg relative rounded overflow-hidden flex-shrink-0 mx-auto mb-4" style={{width:w}}><canvas ref={canvasRef} className="block"/><div ref={textRef} className="textLayer"/><div className="absolute top-1.5 left-1.5 bg-black/60 text-white text-[9px] font-mono px-1.5 py-0.5 rounded-full z-20">P.{pageNum}</div></div>);
+}
+
+function PdfViewer({ file, searchQuery, targetPage, onToast, scale }) {
+  const [pdf, setPdf] = useState(null); const [numPages, setNumPages] = useState(0);
+  useEffect(() => {
+    if (!file) return; let d = false;
+    file.arrayBuffer().then(buf => {
+      if (d) return;
+      pdfjsLib.getDocument({ data: buf }).promise.then(doc => {
+        if (d) return; setPdf(doc); setNumPages(doc.numPages);
+      }).catch(() => onToast("PDF読込失敗", "error"));
+    });
+    return () => { d = true; };
+  }, [file]);
+  useEffect(() => {
+    if (!targetPage) return;
+    const el = document.getElementById(`pdf-page-${targetPage}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [targetPage]);
+  useEffect(() => {
+    if (!searchQuery) return;
+    const timer = setTimeout(() => {
+      document.querySelectorAll('.highlight-hook').forEach(el => el.classList.remove('highlight-hook'));
+      const clean = searchQuery.replace(/[\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!clean) return;
+      const normQ = clean.toLowerCase().replace(/\s+/g, '');
+      if (!normQ) return;
+      let first = null; let matchCount = 0;
+      document.querySelectorAll('.textLayer span').forEach(span => {
+        const t = span.textContent; if (!t.trim()) return;
+        const normS = t.toLowerCase().replace(/\s+/g, '');
+        if (!normS) return;
+        if (normS.includes(normQ) || (normS.length >= 3 && normQ.includes(normS))) {
+          span.classList.add('highlight-hook'); matchCount++;
+          if (!first) first = span;
+        }
+      });
+      if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); onToast(`該当箇所（${matchCount}部分）をハイライト`); }
+      else onToast("テキスト未発見。別のキーワードをお試しください", "error");
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [searchQuery, scale]);
+
+  if (!pdf) return <div className="flex h-full items-center justify-center text-slate-400"><span className="animate-spin h-5 w-5 border-2 border-slate-300 border-t-blue-500 rounded-full mr-2"/>PDF読込中...</div>;
+  return (<div className="absolute top-0 left-0 min-w-full p-3 flex flex-col items-center pb-20">{Array.from({ length: numPages }, (_, i) => <PdfPage key={i+1} pdf={pdf} pageNum={i+1} scale={scale}/>)}</div>);
+}
+
+/* ============================================================
+   SECTION 7: TOAST
+   ============================================================ */
+function Toast({ toast }) {
+  if (!toast) return null;
+  return (<div className={`fixed top-3 right-3 px-3 py-2 rounded-lg shadow-lg z-[100] flex items-center gap-2 text-white text-xs font-medium ${toast.type==='error'?'bg-red-500':toast.type==='info'?'bg-blue-500':'bg-emerald-500'}`}>{toast.type==='error'?<AlertCircle size={15}/>:<CheckCircle2 size={15}/>}{toast.message}</div>);
+}
+
+/* ============================================================
+   SECTION 8: DATA PREPARATION
+   ============================================================ */
+async function extractPdfText(file) {
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let t = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const p = await pdf.getPage(i);
+    const c = await p.getTextContent();
+    t += `\n--- Page ${i} ---\n` + c.items.map(x => x.str).join(' ');
+  }
+  return t;
+}
+
+async function extractPdfImages(file, onProgress, scale = 3.0) {
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const parts = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    if (onProgress) onProgress(`高解像度レンダリング (${i}/${pdf.numPages})`);
+    const p = await pdf.getPage(i);
+    const vp = p.getViewport({ scale });
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d');
+    c.height = vp.height; c.width = vp.width;
+    await p.render({ canvasContext: ctx, viewport: vp }).promise;
+    parts.push({ inlineData: { data: c.toDataURL('image/jpeg', 0.95).split(',')[1], mimeType: "image/jpeg" } });
+    c.width = 0; c.height = 0;
+  }
+  return parts;
+}
+
+async function getPdfBase64(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 8192;
+  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.slice(i, i + chunk));
+  return btoa(binary);
+}
+
+/* ============================================================
+   SECTION 9: EXPORT HELPERS
+   ============================================================ */
+const OC_HDRS = ["要求アウトカム", "実際のアウトカム", "評価時点", "揺らぎ説明", "計算方法", "変数型", "対象集団", "集団説明",
+  "介入群_N", "介入群_イベント/平均", "介入群_SD/SE", "対照群_N", "対照群_イベント/平均", "対照群_SD/SE",
+  "第3群名", "第3群_N", "第3群_イベント/平均", "第3群_SD/SE", "指標", "推定値", "95%CI", "P値", "SD/SE判定", "信頼度",
+  "出処", "根拠原文", "注記", "ページ"];
+
+function outcomeRow(o) {
+  return [o.requestedOutcomeName||"-", o.actualOutcomeName||"-", o.timePoint||"-", o.variationReason||"-",
+    o.calculationMethod||"-", o.variableType||"-", o.populationType||"-", o.populationDescription||"-",
+    o.interventionGroup?.n_total||"-", o.interventionGroup?.events_or_mean||"-", o.interventionGroup?.sd_or_se||"-",
+    o.comparisonGroup?.n_total||"-", o.comparisonGroup?.events_or_mean||"-", o.comparisonGroup?.sd_or_se||"-",
+    o.thirdGroupName||"-", o.thirdGroup?.n_total||"-", o.thirdGroup?.events_or_mean||"-", o.thirdGroup?.sd_or_se||"-",
+    o.effectEstimate?.measureType||"-", o.effectEstimate?.value||"-", o.effectEstimate?.ci95||"-", o.effectEstimate?.pValue||"-",
+    o.sdOrSe||"-", o.confidence||"-",
+    o.sourceLocation||"-", (o.evidenceText||"-").replace(/[\n\t]/g, " "), o.notes||"-", o.pageNumber||"-"];
+}
+
+const BL_HDRS = ["カテゴリ", "変数", "型", "単位", "介入_N", "介入_値", "介入_SD", "介入_%", "介入_IQR", "介入_範囲",
+  "対照_N", "対照_値", "対照_SD", "対照_%", "対照_IQR", "対照_範囲",
+  "第3群_N", "第3群_値", "第3群_SD", "第3群_%", "第3群_IQR", "第3群_範囲", "P値", "出処", "ページ"];
+
+function baselineRow(b) {
+  return [b.category||"-", b.variable||"-", b.dataType||"-", b.unit||"-",
+    b.interventionGroup?.n||"-", b.interventionGroup?.value||"-", b.interventionGroup?.sd||"-", b.interventionGroup?.percent||"-", b.interventionGroup?.iqr||"-", b.interventionGroup?.range||"-",
+    b.comparisonGroup?.n||"-", b.comparisonGroup?.value||"-", b.comparisonGroup?.sd||"-", b.comparisonGroup?.percent||"-", b.comparisonGroup?.iqr||"-", b.comparisonGroup?.range||"-",
+    b.thirdGroup?.n||"-", b.thirdGroup?.value||"-", b.thirdGroup?.sd||"-", b.thirdGroup?.percent||"-", b.thirdGroup?.iqr||"-", b.thirdGroup?.range||"-",
+    b.pValue||"-", b.sourceLocation||"-", b.pageNumber||"-"];
+}
+
+/* ============================================================
+   SECTION 10: EXTRACTION PIPELINE (多層パイプライン)
+   ============================================================ */
+// Merge two extraction results intelligently
+function mergeResults(primary, secondary) {
+  if (!secondary) return primary;
+  if (!primary) return secondary;
+  const result = JSON.parse(JSON.stringify(primary));
+
+  // Merge outcomes
+  if (secondary.extractedOutcomes) {
+    if (!result.extractedOutcomes) result.extractedOutcomes = [];
+    const pk = new Set(result.extractedOutcomes.map(o => `${o.actualOutcomeName}|${o.timePoint}|${o.variableType}|${o.populationType}|${o.sourceLocation}`));
+    secondary.extractedOutcomes.forEach(o => {
+      const key = `${o.actualOutcomeName}|${o.timePoint}|${o.variableType}|${o.populationType}|${o.sourceLocation}`;
+      if (!pk.has(key)) {
+        o.notes = (o.notes || '') + ' [補完抽出]';
+        result.extractedOutcomes.push(o);
+        pk.add(key);
+      }
+    });
+  }
+
+  // Merge baseline
+  if (secondary.baselineCharacteristics) {
+    if (!result.baselineCharacteristics) result.baselineCharacteristics = secondary.baselineCharacteristics;
+    else {
+      const bk = new Set(result.baselineCharacteristics.map(b => b.variable));
+      secondary.baselineCharacteristics.forEach(b => {
+        if (!bk.has(b.variable)) { result.baselineCharacteristics.push(b); bk.add(b.variable); }
+      });
+    }
+  }
+
+  // Merge arrays
+  ['unclearItems', 'statisticalMethods'].forEach(k => {
+    if (secondary[k]) {
+      const s = new Set(result[k] || []);
+      secondary[k].forEach(v => { if (!s.has(v)) (result[k] || (result[k] = [])).push(v); });
+    }
+  });
+
+  // Prefer longer/more detailed commentary
+  if (secondary.expertCommentary && (!result.expertCommentary || secondary.expertCommentary.length > result.expertCommentary.length * 1.5)) {
+    result.expertCommentary = (result.expertCommentary ? result.expertCommentary + '\n\n【補足】\n' : '') + secondary.expertCommentary;
+  }
+
+  // CONSORT flow
+  if (secondary.consortFlow && !result.consortFlow) result.consortFlow = secondary.consortFlow;
+
+  // Paper quality
+  if (secondary.paperQualityAssessment && !result.paperQualityAssessment) result.paperQualityAssessment = secondary.paperQualityAssessment;
+
+  return result;
+}
+
+// Apply critic corrections to extracted data
+function applyCorrections(extracted, criticReview) {
+  if (!criticReview?.corrections) return extracted;
+  const result = JSON.parse(JSON.stringify(extracted));
+
+  criticReview.corrections.forEach(c => {
+    const target = c.targetType === 'outcome' ? result.extractedOutcomes?.[c.targetIndex]
+                 : c.targetType === 'baseline' ? result.baselineCharacteristics?.[c.targetIndex]
+                 : null;
+    if (!target) return;
+
+    // Append critic note
+    if (c.severity === 'critical' || c.severity === 'warning') {
+      target.notes = (target.notes || '') + ` [Critic修正/${c.severity}: ${c.issue}]`;
+      if (c.proposedFix && c.severity === 'critical') {
+        // Try to apply proposed fix if clearly scoped
+        const parts = c.field?.split('.');
+        if (parts?.length === 2 && target[parts[0]] && typeof target[parts[0]] === 'object') {
+          target[parts[0]][parts[1]] = c.proposedFix;
+        } else if (c.field && target[c.field] !== undefined && typeof target[c.field] !== 'object') {
+          target[c.field] = c.proposedFix;
+        }
+      }
+    }
+    target.confidence = target.confidence === 'high' ? 'medium' : target.confidence || 'medium';
+  });
+
+  if (criticReview.missingOutcomes?.length) {
+    result.unclearItems = (result.unclearItems || []).concat(
+      criticReview.missingOutcomes.map(m => `[Criticが欠落指摘] ${m}`)
+    );
+  }
+
+  result._criticAssessment = criticReview.overallAssessment;
+  result._criticConfidence = criticReview.confidenceScore;
+
+  return result;
+}
+
+// Main extraction pipeline
+async function runExtractionPipeline({ providers, accuracyMode, pdfFile, pico, outcomes, onProgress }) {
+  const picoBlock = `【PICO設定】\nP: ${pico.p}\nI: ${pico.i}\nC: ${pico.c}\n\n【優先抽出アウトカム】\n${
+    outcomes.filter(o => o.name.trim()).length
+      ? outcomes.filter(o => o.name.trim()).map(o => `- ${o.name}${o.definition ? `: ${o.definition}` : ''}`).join('\n')
+      : '全自動抽出モード（論文から全アウトカムを網羅）'
+  }\n`;
+
+  // Stage 1: Prepare PDF
+  onProgress("stage1", "PDF準備中...", 5);
+  const [pdfBase64, pdfText, pdfImages] = await Promise.all([
+    getPdfBase64(pdfFile),
+    extractPdfText(pdfFile),
+    extractPdfImages(pdfFile, m => onProgress("stage1", m, 10), accuracyMode === 'ultra' ? 4.0 : 3.0)
+  ]);
+  onProgress("stage1", "PDF準備完了", 20);
+
+  const userPrompt = `${picoBlock}
+\n【タスク】
+論文を徹底的に精読し、上記PICO/アウトカム設定に従ってメタ分析用データを抽出してください。
+不明項目は「不明」とし、推測は厳禁です。全アウトカム（指定外含む）を網羅してください。
+各項目に confidence (high/medium/low) を付与してください。
+\n【参照テキスト（OCR済みPDF本文）】
+${pdfText.substring(0, 40000)}`;
+
+  // Stage 2: Run extractions in parallel based on providers
+  const activeProviders = Object.entries(providers).filter(([_, cfg]) => cfg.enabled && cfg.apiKey);
+  if (activeProviders.length === 0) throw new Error("有効なAIプロバイダーがありません。APIキーを設定してください。");
+
+  onProgress("stage2", `並列抽出 (${activeProviders.length}モデル)...`, 25);
+
+  const extractionPromises = [];
+  const extractionLabels = [];
+
+  activeProviders.forEach(([name, cfg], idx) => {
+    extractionLabels.push(`${PROVIDERS[name].name} (${cfg.model})`);
+    if (name === "claude") {
+      // Claude gets both PDF native and text
+      extractionPromises.push(
+        callAI(name, cfg, {
+          systemPrompt: SYSTEM_PROMPT_EXTRACT,
+          userText: userPrompt,
+          pdfBase64: pdfBase64,
+          thinkingBudget: accuracyMode === 'ultra' ? 16000 : accuracyMode === 'high' ? 8000 : 2000
+        }).catch(e => ({ _error: e.message, _provider: name }))
+      );
+    } else if (name === "gemini") {
+      // Gemini gets text + images for best results
+      extractionPromises.push(
+        callAI(name, cfg, {
+          systemPrompt: SYSTEM_PROMPT_EXTRACT,
+          userText: userPrompt,
+          images: pdfImages,
+          thinkingBudget: accuracyMode === 'ultra' ? 12000 : accuracyMode === 'high' ? 6000 : 0
+        }).catch(e => ({ _error: e.message, _provider: name }))
+      );
+    } else if (name === "openai") {
+      // OpenAI with images
+      extractionPromises.push(
+        callAI(name, cfg, {
+          systemPrompt: SYSTEM_PROMPT_EXTRACT,
+          userText: userPrompt,
+          images: pdfImages
+        }).catch(e => ({ _error: e.message, _provider: name }))
+      );
+    }
+  });
+
+  const results = await Promise.all(extractionPromises);
+  const validResults = results.filter(r => r && !r._error);
+  const errors = results.filter(r => r?._error);
+
+  if (validResults.length === 0) {
+    throw new Error("すべての抽出が失敗しました:\n" + errors.map(e => `- ${e._provider}: ${e._error}`).join('\n'));
+  }
+
+  // Stage 3: Merge (if multiple)
+  onProgress("stage3", "結果統合中...", 50);
+  let merged = validResults[0];
+  for (let i = 1; i < validResults.length; i++) {
+    merged = mergeResults(merged, validResults[i]);
+  }
+  merged._sources = extractionLabels.slice(0, validResults.length);
+  merged._errors = errors.map(e => `${e._provider}: ${e._error}`);
+
+  // Stage 4: Critic review (uses best available provider)
+  const criticProvider = pickBestProvider(providers);
+  merged._criticProviderUsed = criticProvider ? `${PROVIDERS[criticProvider.providerName].name} (${criticProvider.model})` : null;
+  if ((accuracyMode === 'high' || accuracyMode === 'ultra') && criticProvider) {
+    const criticLabel = `${PROVIDERS[criticProvider.providerName].name} ${criticProvider.model}`;
+    onProgress("stage4", `${criticLabel} Critic レビュー中...`, 65);
+    try {
+      const criticPrompt = `【抽出されたデータ】
+${JSON.stringify(merged, null, 2).substring(0, 40000)}
+\n【PICO設定】
+${picoBlock}
+\n【参照テキスト】
+${pdfText.substring(0, 30000)}
+\n【タスク】
+上記抽出データに対して徹底的に監査を実施し、corrections / missingOutcomes / overallAssessment / confidenceScore を含むJSONを返してください。`;
+
+      const criticReview = await callCriticAnyProvider(
+        criticProvider,
+        SYSTEM_PROMPT_CRITIC,
+        criticPrompt,
+        pdfBase64,
+        pdfImages,
+        accuracyMode === 'ultra' ? 16000 : 8000,
+        CRITIC_SCHEMA
+      );
+
+      merged = applyCorrections(merged, criticReview);
+      merged._criticReview = criticReview;
+      onProgress("stage4", `Critic完了 (信頼度: ${criticReview.confidenceScore}/100)`, 80);
+    } catch (e) {
+      console.warn("Critic段階失敗:", e);
+      merged._criticError = e.message;
+    }
+  }
+
+  // Stage 5: Per-outcome verification (ultra mode, uses best provider)
+  if (accuracyMode === 'ultra' && criticProvider && merged.extractedOutcomes?.length) {
+    const toVerify = merged.extractedOutcomes.filter(o => o.confidence === 'low' || (!o.confidence && o.notes?.includes('Critic')));
+    if (toVerify.length > 0 && toVerify.length <= 10) {
+      onProgress("stage5", `個別検証 (${toVerify.length}項目)...`, 85);
+      for (let i = 0; i < toVerify.length; i++) {
+        const o = toVerify[i];
+        try {
+          const verifyPrompt = `【検証対象アウトカム】
+${JSON.stringify(o, null, 2)}
+\n【参照テキスト抜粋】
+${pdfText.substring(0, 20000)}
+\n検証してJSONで返してください。`;
+          const verified = await callCriticAnyProvider(
+            criticProvider,
+            SYSTEM_PROMPT_VERIFY,
+            verifyPrompt,
+            null, null,
+            4000,
+            null
+          );
+          if (verified) {
+            o._verified = verified.verified;
+            o._verifyConfidence = verified.confidence;
+            o._verifyIssues = verified.issues;
+            if (verified.correctedValues) {
+              Object.entries(verified.correctedValues).forEach(([k, v]) => {
+                if (typeof v === 'object' && o[k]) Object.assign(o[k], v);
+                else o[k] = v;
+              });
+            }
+          }
+          onProgress("stage5", `検証 ${i+1}/${toVerify.length}`, 85 + (i / toVerify.length) * 10);
+        } catch (e) {
+          console.warn(`検証失敗 (outcome ${i}):`, e);
+        }
+      }
+    }
+  }
+
+  onProgress("complete", "完了", 100);
+  return merged;
+}
+
+/* ============================================================
+   SECTION 11: OUTCOME CARD
+   ============================================================ */
+function ConfidenceBadge({ confidence }) {
+  if (!confidence) return null;
+  const colors = { high: 'bg-emerald-100 text-emerald-700 border-emerald-200', medium: 'bg-amber-100 text-amber-700 border-amber-200', low: 'bg-red-100 text-red-700 border-red-200' };
+  const labels = { high: '高', medium: '中', low: '低' };
+  const cls = colors[confidence] || colors.medium;
+  return <span className={`text-[8px] font-bold px-1 py-0.5 rounded border ${cls}`} title={`信頼度: ${confidence}`}>信{labels[confidence] || '?'}</span>;
+}
+
+function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight, onSendToSearch, onReVerify, fontSize }) {
+  const isAuto = oc.requestedOutcomeName?.includes("未指定") || oc.requestedOutcomeName?.includes("自動");
+  const has3rd = !!(oc.thirdGroup || oc.thirdGroupName);
+  const EditCell = ({ group, field, cls = "" }) => (
+    <td className="border-r border-slate-100 px-0.5 py-0.5">
+      <input className={`editable-input ${cls}`} value={oc[group]?.[field]||""} onChange={e=>onEdit(idx,group,field,e.target.value)} placeholder="-"/>
+    </td>
+  );
+  const sz = fontSize;
+
+  return (
+    <div className={`border rounded-lg overflow-hidden shadow-sm ${isAuto?'border-amber-200':'border-slate-200'}`}>
+      <div className={`${isAuto?'bg-amber-50':'bg-slate-50'} px-3 py-2 border-b border-slate-200`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+              {isAuto && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5"><Sparkles size={8}/>自動</span>}
+              <span className="bg-blue-100 text-blue-800 text-[8px] font-bold px-1 py-0.5 rounded">{oc.variableType==='Binary'?'二値':oc.variableType==='Continuous'?'連続':'不明'}</span>
+              {oc.populationType && <span className="bg-purple-100 text-purple-800 text-[8px] font-bold px-1 py-0.5 rounded">{oc.populationType}</span>}
+              <ConfidenceBadge confidence={oc.confidence}/>
+              {oc._verified === true && <span className="bg-emerald-100 text-emerald-800 text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5"><ShieldCheckIcon size={8}/>検証済</span>}
+              {oc._verified === false && <span className="bg-red-100 text-red-800 text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5"><AlertCircle size={8}/>要確認</span>}
+              <span className="font-semibold text-slate-800 truncate">{oc.actualOutcomeName}</span>
+            </div>
+            <div className="text-slate-500" style={{fontSize:`${Math.max(8,sz*0.75)}px`}}>
+              時点:<span className="font-medium text-slate-700 mr-2">{oc.timePoint||"-"}</span>
+              出処:<span className="font-medium text-slate-700">{oc.sourceLocation||"-"}</span>
+              {oc.pageNumber && <span className="ml-1.5 bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-mono">P{oc.pageNumber}</span>}
+              {oc.sdOrSe && <span className="ml-1.5 bg-indigo-100 text-indigo-700 px-1 py-0.5 rounded">{oc.sdOrSe}</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={()=>onCopyTSV(oc)} className="text-[8px] text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded font-medium hover:bg-blue-50 transition-colors"><CopyIcon size={9} className="inline mr-0.5"/>TSV</button>
+            <button onClick={()=>onCopyCSV(oc)} className="text-[8px] text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded font-medium hover:bg-blue-50 transition-colors"><CopyIcon size={9} className="inline mr-0.5"/>CSV</button>
+            <button onClick={()=>onHighlight(oc)} className="text-[8px] bg-yellow-400 hover:bg-yellow-500 text-yellow-900 border border-yellow-500 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 transition-colors"><TargetIcon size={9}/>確認</button>
+            {onReVerify && <button onClick={()=>onReVerify(idx)} className="text-[8px] bg-purple-500 hover:bg-purple-600 text-white px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 transition-colors"><ShieldCheckIcon size={9}/>再検証</button>}
+          </div>
+        </div>
+      </div>
+      {oc.variationReason && <div className="bg-purple-50 text-purple-800 px-2.5 py-1.5 border-b border-purple-100" style={{fontSize:`${Math.max(8,sz*0.8)}px`}}><InfoIcon size={10} className="inline mr-0.5 text-purple-500"/><b>揺らぎ:</b> {oc.variationReason}</div>}
+      {oc._verifyIssues?.length > 0 && <div className="bg-red-50 text-red-800 px-2.5 py-1.5 border-b border-red-100" style={{fontSize:`${Math.max(8,sz*0.8)}px`}}><AlertCircle size={10} className="inline mr-0.5"/><b>検証指摘:</b> {oc._verifyIssues.join(' / ')}</div>}
+      <div className="overflow-x-auto">
+        <table className="w-full whitespace-nowrap" style={{fontSize:`${sz}px`}}>
+          <thead className="bg-white text-slate-500 border-b" style={{fontSize:`${Math.max(7,sz*0.75)}px`}}>
+            <tr>
+              <th className="px-1 py-0.5 text-center border-r" colSpan="3">介入群</th>
+              <th className="px-1 py-0.5 text-center border-r" colSpan="3">対照群</th>
+              {has3rd && <th className="px-1 py-0.5 text-center border-r bg-purple-50/50 text-purple-800" colSpan="3">{oc.thirdGroupName||'第3群'}</th>}
+              <th className="px-1 py-0.5 text-center" colSpan="4">効果推定値</th>
+            </tr>
+            <tr className="bg-slate-50 border-t">
+              {["N","イベント/平均","SD/SE","N","イベント/平均","SD/SE"].map((h,i)=><th key={i} className="px-1 py-0.5 text-center border-r">{h}</th>)}
+              {has3rd && ["N","イベント/平均","SD/SE"].map((h,i)=><th key={`t${i}`} className="px-1 py-0.5 text-center border-r bg-purple-50/20">{h}</th>)}
+              {["指標","値","95%CI","P値"].map((h,i)=><th key={`e${i}`} className={`px-1 py-0.5 text-center ${i<3?'border-r':''}`}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody className="bg-white">
+            <tr>
+              <EditCell group="interventionGroup" field="n_total"/>
+              <EditCell group="interventionGroup" field="events_or_mean" cls="font-bold text-blue-700"/>
+              <EditCell group="interventionGroup" field="sd_or_se" cls="text-slate-500"/>
+              <EditCell group="comparisonGroup" field="n_total"/>
+              <EditCell group="comparisonGroup" field="events_or_mean" cls="font-bold text-blue-700"/>
+              <EditCell group="comparisonGroup" field="sd_or_se" cls="text-slate-500"/>
+              {has3rd && <>
+                <EditCell group="thirdGroup" field="n_total"/>
+                <EditCell group="thirdGroup" field="events_or_mean" cls="font-bold text-purple-700"/>
+                <EditCell group="thirdGroup" field="sd_or_se" cls="text-slate-500"/>
+              </>}
+              <EditCell group="effectEstimate" field="measureType"/>
+              <EditCell group="effectEstimate" field="value" cls="font-bold text-emerald-700"/>
+              <EditCell group="effectEstimate" field="ci95"/>
+              <td className="px-0.5 py-0.5"><input className="editable-input" value={oc.effectEstimate?.pValue||""} onChange={e=>onEdit(idx,'effectEstimate','pValue',e.target.value)} placeholder="-"/></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="bg-amber-50/30 px-3 py-2 border-t border-slate-200 space-y-1.5" style={{fontSize:`${Math.max(8,sz*0.85)}px`}}>
+        <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">計算方法:</span><span className="text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono">{oc.calculationMethod||"論文に直接記載"}</span></div>
+        <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">出処:</span><span className="text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-semibold">{oc.sourceLocation}</span></div>
+        {oc.populationDescription && <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">集団詳細:</span><span className="text-slate-800">{oc.populationDescription}</span></div>}
+        <div className="flex items-start gap-1.5">
+          <span className="font-semibold text-slate-600 min-w-[50px] flex-shrink-0">根拠原文:</span>
+          <div className="flex-1">
+            <blockquote className="text-slate-700 italic border-l-2 border-amber-300 pl-1.5 py-0.5 break-words whitespace-pre-wrap">"{oc.evidenceText}"</blockquote>
+            <button onClick={()=>onSendToSearch(oc.evidenceText,oc.pageNumber)} className="mt-1 text-[9px] bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-2 py-0.5 rounded font-bold flex items-center gap-1 w-fit transition-colors"><SearchIcon size={10}/>この文をPDF検索に送る</button>
+          </div>
+        </div>
+        {oc.notes && <div className="bg-amber-50 border border-amber-200 px-2 py-1 rounded text-amber-700 flex items-start gap-1 mt-1"><AlertCircle size={12} className="flex-shrink-0 mt-0.5"/><span><b>注記:</b> {oc.notes}</span></div>}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 12: SETUP PAGE (Multi-Provider)
+   ============================================================ */
+function ProviderCard({ name, provider, config, onUpdate, onVerify, verifyState }) {
+  const [showKey, setShowKey] = useState(false);
+  const Icon = provider.icon === 'brain' ? BrainIcon : provider.icon === 'cpu' ? CpuIcon : Sparkles;
+
+  const handleKeyChange = (v) => onUpdate({ ...config, apiKey: v });
+  const handleModelChange = (v) => onUpdate({ ...config, model: v });
+  const handleToggle = () => onUpdate({ ...config, enabled: !config.enabled });
+
+  return (
+    <div className={`bg-white rounded-xl border-2 transition-all shadow-sm overflow-hidden ${config.enabled && config.apiKey ? 'border-purple-300 shadow-md' : 'border-slate-200'}`}>
+      <div className={`bg-gradient-to-r ${provider.color} text-white px-3 py-2 flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <Icon size={18}/>
+          <h3 className="font-bold text-sm">{provider.name}</h3>
+        </div>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" checked={config.enabled} onChange={handleToggle} className="w-4 h-4"/>
+          <span className="text-xs font-medium">有効化</span>
+        </label>
+      </div>
+      <div className={`p-3 space-y-2 transition-opacity ${!config.enabled ? 'opacity-50' : ''}`}>
+        <div>
+          <label className="block text-[10px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><KeyIcon size={10}/>APIキー</label>
+          <div className="relative">
+            <input
+              type={showKey ? "text" : "password"}
+              value={config.apiKey || ""}
+              onChange={e => handleKeyChange(e.target.value)}
+              placeholder={provider.keyFormat}
+              disabled={!config.enabled}
+              className="w-full px-3 py-2 pr-10 border-2 border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-purple-500 api-input-glow"
+            />
+            <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" disabled={!config.enabled}>
+              {showKey ? <EyeOffIcon size={14}/> : <EyeIcon size={14}/>}
+            </button>
+          </div>
+          <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-blue-600 hover:underline inline-flex items-center gap-0.5 mt-1">
+            キー取得 <LinkIcon size={9}/>
+          </a>
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-slate-600 mb-1">モデル</label>
+          <select value={config.model || provider.defaultModel} onChange={e => handleModelChange(e.target.value)} disabled={!config.enabled} className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono bg-white">
+            {provider.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          <button onClick={() => onVerify(name)} disabled={!config.enabled || !config.apiKey || verifyState?.verifying} className="flex-1 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white font-semibold text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1 justify-center">
+            {verifyState?.verifying ? <><span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"/>確認中</> : <><Sparkles size={11}/>接続テスト</>}
+          </button>
+          {verifyState?.result === 'ok' && <span className="text-emerald-600"><CheckCircle2 size={18}/></span>}
+          {verifyState?.result === 'error' && <span className="text-red-600"><XCircle size={18}/></span>}
+        </div>
+        {verifyState?.message && (
+          <div className={`text-[10px] px-2 py-1 rounded ${verifyState.result === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {verifyState.message}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ApiKeyGuide() {
+  const [open, setOpen] = useState(null);
+
+  const guides = {
+    claude: {
+      title: "Claude (Anthropic) APIキー取得手順",
+      color: "from-orange-500 to-red-500",
+      tagline: "最高精度。論文解析の本命。ただし無料枠なし。",
+      steps: [
+        { t: "アカウント作成", d: <>https://console.anthropic.com/ にアクセスし、メールアドレスと電話番号でサインアップ（電話番号認証が必須）</> },
+        { t: "支払い情報の登録", d: <>Settings → <b>Billing</b> で「Add Credit」。クレジットカード登録後、<b>最低 $5</b> の前払いクレジットを購入します（無料枠なし）</> },
+        { t: "APIキーの作成", d: <>Settings → <b>API Keys</b> → 「Create Key」。ワークスペースとキー名を選んで生成。<b>sk-ant-</b> で始まる文字列が発行されます</> },
+        { t: "本アプリへ貼り付け", d: <>上の Claude カードで有効化 → キーを貼付 → 接続テスト</> }
+      ],
+      pricing: [
+        "Opus 4.7: 論文1本あたり 約$0.5〜$2（思考16K時）",
+        "Sonnet 4.6: 論文1本あたり 約$0.1〜$0.4（コスパ最良）",
+        "Haiku 4.5: 論文1本あたり 約$0.02〜$0.08（大量処理向け）"
+      ],
+      limits: [
+        "Tier 1（開始時）: 50 req/min、入力5 req/min で制限あり",
+        "Tier 2 ($40以上の支払い後): 制限大幅緩和",
+        "Tier 3/4 で更に緩和"
+      ],
+      tips: [
+        "✓ 初めはまず $5 クレジット + Sonnet 4.6 で試すのが安全",
+        "✓ 本格運用は Opus 4.7 / 重要論文のみ（コスト考慮）",
+        "✓ 本アプリはネイティブPDF対応 → Claude の強みを最大活用",
+        "✓ 思考トークン16K は Opus 4.7 の本気モード"
+      ],
+      urls: { main: "https://console.anthropic.com/", keys: "https://console.anthropic.com/settings/keys", pricing: "https://www.anthropic.com/pricing" }
+    },
+    gemini: {
+      title: "Google Gemini APIキー取得手順",
+      color: "from-blue-500 to-cyan-500",
+      tagline: "無料枠あり！Gemini 2.5 Pro も利用可能（ただしレート制限厳しい）",
+      steps: [
+        { t: "Google AI Studio を開く", d: <>https://aistudio.google.com/apikey にアクセス（Googleアカウントでログイン）</> },
+        { t: "APIキーの作成", d: <>「Create API Key」ボタンをクリック。既存のGCPプロジェクトが無い場合は自動作成されます。<b>AIza</b> で始まる文字列が発行されます</> },
+        { t: "有料化(任意)", d: <>無料枠では Gemini 2.5 Pro は <b>5 req/分・25 req/日</b> と厳しい制限。本格利用には GCP コンソールで Billing を有効化して Pay-as-you-go に切り替え（制限が大幅緩和）</> },
+        { t: "本アプリへ貼り付け", d: <>上の Gemini カードで有効化 → キーを貼付 → 接続テスト</> }
+      ],
+      pricing: [
+        "Gemini 2.5 Flash: 無料枠で処理可能（1日250リクエストまで）",
+        "Gemini 2.5 Pro (無料枠): 1日25リクエストまで（論文1-2本/日）",
+        "Gemini 2.5 Pro (有料): 論文1本 約$0.1〜$0.5"
+      ],
+      limits: [
+        "【無料】Gemini 2.5 Flash: 10 req/分、250 req/日、250K tokens/分",
+        "【無料】Gemini 2.5 Pro: 5 req/分、25 req/日（非常に厳しい）",
+        "【有料】上限大幅緩和。コストは $0.075/1Mトークン（Flash）〜"
+      ],
+      tips: [
+        "✓ 無料で始められる唯一のプロバイダー",
+        "✓ 日数本程度の論文なら無料枠で Pro が使える",
+        "✓ 大量処理なら Flash 推奨（無料枠内で賄える可能性大）",
+        "✓ 思考モード (Thinking) は Pro/Flash 両方で利用可能",
+        "⚠ 無料枠 Pro は本アプリの並列抽出でレート制限に当たりやすい"
+      ],
+      urls: { main: "https://aistudio.google.com/", keys: "https://aistudio.google.com/apikey", pricing: "https://ai.google.dev/pricing" }
+    },
+    openai: {
+      title: "OpenAI (GPT) APIキー取得手順",
+      color: "from-emerald-500 to-teal-500",
+      tagline: "最も広く使われる標準。GPT-5 は累積$5以上の支払い後に利用可",
+      steps: [
+        { t: "アカウント作成", d: <>https://platform.openai.com/ にアクセス。ChatGPT とは別アカウント（同じメールで紐付け可）。電話番号認証必須</> },
+        { t: "支払い情報の登録", d: <>Settings → <b>Billing</b> → Add payment method → 最低 $5 のクレジット購入</> },
+        { t: "Tier 確認", d: <><b>GPT-5 は Tier 1 以上（累積$5以上の支払い）が必要</b>。Tier 0 でも GPT-4.1 / GPT-4o は利用可能</> },
+        { t: "APIキーの作成", d: <>Settings → <b>API Keys</b> → 「Create new secret key」。<b>sk-proj-</b> 又は <b>sk-</b> で始まる文字列が発行（一度しか表示されないので要保存）</> },
+        { t: "本アプリへ貼り付け", d: <>上の OpenAI カードで有効化 → キーを貼付 → 接続テスト</> }
+      ],
+      pricing: [
+        "GPT-5: 論文1本 約$0.3〜$1.5（Tier 1必須）",
+        "GPT-4.1: 論文1本 約$0.1〜$0.4（コスパ良好）",
+        "GPT-4o: 論文1本 約$0.05〜$0.2"
+      ],
+      limits: [
+        "Tier 0: 基本モデルのみ、レート制限あり",
+        "Tier 1 ($5支払い後): GPT-5 等の上位モデル利用可",
+        "Tier 2-5: 段階的に制限緩和"
+      ],
+      tips: [
+        "✓ GPT-4.1 は Claude Sonnet 4.6 と同等クラスの精度",
+        "✓ JSON Schema 厳密出力に対応（構造化データに強い）",
+        "✓ GPT-5 は Tier 1 到達まで使えない点に注意",
+        "⚠ 本アプリでは Claude ほどの PDF 直接処理精度は期待できない（画像経由）"
+      ],
+      urls: { main: "https://platform.openai.com/", keys: "https://platform.openai.com/api-keys", pricing: "https://openai.com/api/pricing/" }
+    }
+  };
+
+  const Section = ({ name }) => {
+    const g = guides[name];
+    const isOpen = open === name;
+    return (
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <button onClick={() => setOpen(isOpen ? null : name)} className={`w-full bg-gradient-to-r ${g.color} text-white px-3 py-2 flex items-center justify-between hover:opacity-95 transition-opacity`}>
+          <div className="flex items-center gap-2">
+            <KeyIcon size={16}/>
+            <span className="font-bold text-sm">{g.title}</span>
+          </div>
+          <span className="text-xs font-mono">{isOpen ? '▲ 閉じる' : '▼ 開く'}</span>
+        </button>
+        {isOpen && (
+          <div className="p-4 bg-white space-y-3 text-xs">
+            <div className="bg-slate-50 border-l-4 border-slate-400 px-3 py-2 text-slate-700 italic">{g.tagline}</div>
+
+            <div>
+              <h4 className="font-bold text-slate-800 mb-1.5 flex items-center gap-1"><ArrowRight size={12}/>取得手順</h4>
+              <ol className="space-y-1.5 list-decimal pl-5">
+                {g.steps.map((s, i) => (
+                  <li key={i} className="text-slate-700"><b>{s.t}</b>: {s.d}</li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-emerald-50 border border-emerald-200 rounded p-2">
+                <h4 className="font-bold text-emerald-800 mb-1 text-[11px]">💰 料金目安（論文1本）</h4>
+                <ul className="list-disc pl-4 text-[10px] text-emerald-900 space-y-0.5">
+                  {g.pricing.map((p, i) => <li key={i}>{p}</li>)}
+                </ul>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                <h4 className="font-bold text-amber-800 mb-1 text-[11px]">⚡ レート制限</h4>
+                <ul className="list-disc pl-4 text-[10px] text-amber-900 space-y-0.5">
+                  {g.limits.map((l, i) => <li key={i}>{l}</li>)}
+                </ul>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded p-2">
+              <h4 className="font-bold text-blue-800 mb-1 text-[11px]">💡 使い方のコツ</h4>
+              <ul className="text-[10px] text-blue-900 space-y-0.5">
+                {g.tips.map((t, i) => <li key={i}>{t}</li>)}
+              </ul>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-100">
+              <a href={g.urls.main} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded flex items-center gap-1"><ExternalLink size={10}/>公式サイト</a>
+              <a href={g.urls.keys} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded flex items-center gap-1 font-bold"><KeyIcon size={10}/>APIキー発行ページ</a>
+              <a href={g.urls.pricing} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-1 rounded flex items-center gap-1">💴 料金表</a>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6 fade-in-up fade-d2">
+      <h3 className="font-bold text-slate-800 text-sm mb-1 flex items-center gap-2"><KeyIcon size={16} className="text-purple-600"/>APIキーの取得方法</h3>
+      <p className="text-[11px] text-slate-500 mb-3">各サービスのバナーをクリックすると詳細な手順・料金・制限事項が表示されます</p>
+
+      <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 mb-3 text-[11px]">
+        <p className="font-bold text-purple-900 mb-1 flex items-center gap-1"><InfoIcon size={12}/>どれを選ぶべき？</p>
+        <ul className="text-purple-800 space-y-0.5 pl-4 list-disc">
+          <li><b>精度最優先</b>: Claude Opus 4.7（ネイティブPDF対応。本アプリの設計思想に最適）</li>
+          <li><b>コスト最小/まず試す</b>: Gemini 2.5 Flash（無料枠で実用可能）</li>
+          <li><b>バランス</b>: Claude Sonnet 4.6 or Gemini 2.5 Pro（有料化）or GPT-4.1</li>
+          <li><b>最強の組み合わせ</b>: Claude Opus 4.7 + Gemini 2.5 Pro を両方有効化 → アンサンブル抽出 + Claude Critic</li>
+        </ul>
+      </div>
+
+      <div className="space-y-2">
+        <Section name="claude"/>
+        <Section name="gemini"/>
+        <Section name="openai"/>
+      </div>
+
+      <div className="mt-3 bg-rose-50 border border-rose-200 rounded-lg p-2 text-[10px] text-rose-800">
+        <ShieldIcon size={11} className="inline mr-0.5"/><b>セキュリティ注意:</b> APIキーは第三者に共有しないでください。本アプリは入力されたキーをブラウザの localStorage にのみ保存し、外部送信は各公式APIへの正規リクエストのみです。
+      </div>
+    </div>
+  );
+}
+
+function SetupPage({ onComplete, initialConfig }) {
+  const [providers, setProviders] = useState(() => ({
+    claude: { enabled: true, apiKey: "", model: PROVIDERS.claude.defaultModel, ...initialConfig.claude },
+    gemini: { enabled: false, apiKey: "", model: PROVIDERS.gemini.defaultModel, ...initialConfig.gemini },
+    openai: { enabled: false, apiKey: "", model: PROVIDERS.openai.defaultModel, ...initialConfig.openai }
+  }));
+  const [accuracyMode, setAccuracyMode] = useState(initialConfig.accuracyMode || 'ultra');
+  const [verifyStates, setVerifyStates] = useState({});
+  const [saveKeys, setSaveKeys] = useState(initialConfig.saveKeys !== false);
+
+  const updateProvider = (name, cfg) => setProviders(p => ({ ...p, [name]: cfg }));
+
+  const verifyProvider = async (name) => {
+    const cfg = providers[name];
+    setVerifyStates(s => ({ ...s, [name]: { verifying: true } }));
+    try {
+      if (name === "claude") {
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": cfg.apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "content-type": "application/json"
+          },
+          body: JSON.stringify({
+            model: cfg.model || PROVIDERS.claude.defaultModel,
+            max_tokens: 10,
+            messages: [{ role: "user", content: "hi" }]
+          })
+        });
+        if (r.ok) setVerifyStates(s => ({ ...s, [name]: { result: 'ok', message: '接続成功' } }));
+        else { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || `エラー ${r.status}`); }
+      } else if (name === "gemini") {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cfg.apiKey}`);
+        if (r.ok) setVerifyStates(s => ({ ...s, [name]: { result: 'ok', message: '接続成功' } }));
+        else { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || `エラー ${r.status}`); }
+      } else if (name === "openai") {
+        const r = await fetch("https://api.openai.com/v1/models", {
+          headers: { "Authorization": `Bearer ${cfg.apiKey}` }
+        });
+        if (r.ok) setVerifyStates(s => ({ ...s, [name]: { result: 'ok', message: '接続成功' } }));
+        else { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || `エラー ${r.status}`); }
+      }
+    } catch (e) {
+      setVerifyStates(s => ({ ...s, [name]: { result: 'error', message: e.message } }));
+    }
+  };
+
+  const anyEnabled = Object.values(providers).some(p => p.enabled && p.apiKey);
+  const claudeEnabled = providers.claude.enabled && providers.claude.apiKey;
+
+  const handleStart = () => {
+    if (saveKeys) {
+      saveConfig({ providers, accuracyMode, saveKeys });
+    } else {
+      saveConfig({ providers: { claude: { ...providers.claude, apiKey: "" }, gemini: { ...providers.gemini, apiKey: "" }, openai: { ...providers.openai, apiKey: "" } }, accuracyMode, saveKeys });
+    }
+    onComplete(providers, accuracyMode);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/20 flex flex-col overflow-auto">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/80 py-4 px-6 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto flex items-center gap-3">
+          <div className="gradient-purple text-white p-2 rounded-lg"><BrainIcon size={22}/></div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3 Multi-AI Brain</span></h1>
+            <p className="text-xs text-slate-500">多層AI抽出パイプライン — マルチプロバイダー対応</p>
+          </div>
+        </div>
+      </header>
+      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
+        <div className="text-center mb-6 fade-in-up">
+          <h2 className="text-2xl font-extrabold text-slate-800 mb-2">AI設定</h2>
+          <p className="text-slate-500 text-sm">使用するAIプロバイダーを選択し、APIキーを入力してください</p>
+        </div>
+
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4 mb-6 fade-in-up fade-d1">
+          <h3 className="font-bold text-purple-900 mb-2 flex items-center gap-2 text-sm"><BrainIcon size={18}/>推奨構成: Claude Opus 4.7 を主脳に</h3>
+          <p className="text-xs text-purple-800 leading-relaxed">
+            Claude Opus 4.7 は <strong>Extended Thinking（16K思考トークン）+ ネイティブPDF処理 + Tool Use</strong> を組み合わせ、
+            RCT論文の数値抽出精度を従来比で大幅に向上させます。
+            複数プロバイダーを有効にすると <strong>アンサンブル抽出 → 最精度モデルによる Critic レビュー → 個別検証</strong> の4段階で抽出精度を最大化します（Critic 役は有効なプロバイダーから自動選択）。
+          </p>
+        </div>
+
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-6 fade-in-up fade-d1">
+          <h3 className="font-bold text-rose-800 mb-1 flex items-center gap-2 text-sm"><AlertCircle size={16}/>使用上の注意</h3>
+          <ul className="list-disc pl-5 text-[11px] text-rose-900 space-y-0.5">
+            <li><strong>数値の最終確認は必須</strong>: 本ツールは強力なアシスタントですが、研究者ご自身で原論文と照合してください</li>
+            <li><strong>SDとSEの混同リスク</strong>: 抽出後 sdOrSe フィールドを必ず確認</li>
+            <li><strong>APIキーの管理</strong>: キーはご自身のブラウザにのみ保存されます（localStorage）。他者と共有しないでください</li>
+          </ul>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 fade-in-up fade-d2">
+          <ProviderCard name="claude" provider={PROVIDERS.claude} config={providers.claude} onUpdate={cfg => updateProvider("claude", cfg)} onVerify={verifyProvider} verifyState={verifyStates.claude}/>
+          <ProviderCard name="gemini" provider={PROVIDERS.gemini} config={providers.gemini} onUpdate={cfg => updateProvider("gemini", cfg)} onVerify={verifyProvider} verifyState={verifyStates.gemini}/>
+          <ProviderCard name="openai" provider={PROVIDERS.openai} config={providers.openai} onUpdate={cfg => updateProvider("openai", cfg)} onVerify={verifyProvider} verifyState={verifyStates.openai}/>
+        </div>
+
+        <ApiKeyGuide/>
+
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6 fade-in-up fade-d3">
+          <h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2"><LayersIcon size={16} className="text-purple-600"/>抽出精度モード</h3>
+          <div className="bg-slate-50 border border-slate-200 rounded p-2 mb-3 text-[10px] text-slate-700">
+            <p className="font-semibold mb-1">📌 精度モードは APIキーの種類に依存しません</p>
+            <p>どのプロバイダーでも選択可能です。ただし実効精度は「選択したモデル × 精度モード」で決まります。例えば Gemini Flash で Ultra を選ぶより、Claude Opus 4.7 で High を選んだ方が高精度。Ultra モードでは利用可能な最高精度モデルが Critic 役を自動選択されます。</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {[
+              { id: 'standard', name: '標準', desc: '単一抽出・高速', detail: '思考なし or 軽量思考・コスト最小', color: 'from-slate-400 to-slate-500' },
+              { id: 'high', name: '高精度', desc: 'アンサンブル + Critic監査', detail: '思考8K + 並列抽出 + レビュー', color: 'from-blue-500 to-indigo-500' },
+              { id: 'ultra', name: 'Ultra (最高精度)', desc: '4段階パイプライン', detail: '思考16K + Critic + 個別検証', color: 'from-purple-600 to-pink-600' }
+            ].map(m => (
+              <label key={m.id} className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${accuracyMode === m.id ? 'border-purple-500 bg-purple-50 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
+                <input type="radio" name="mode" value={m.id} checked={accuracyMode === m.id} onChange={() => setAccuracyMode(m.id)} className="hidden"/>
+                <div className={`bg-gradient-to-r ${m.color} text-white text-[10px] font-bold px-2 py-0.5 rounded inline-block mb-1`}>{m.name}</div>
+                <div className="font-semibold text-slate-800 text-sm">{m.desc}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">{m.detail}</div>
+              </label>
+            ))}
+          </div>
+          {accuracyMode === 'ultra' && !anyEnabled && (
+            <div className="mt-2 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              <AlertCircle size={11} className="inline mr-0.5"/>少なくとも1つのプロバイダーを有効化してください。
+            </div>
+          )}
+          {accuracyMode === 'ultra' && anyEnabled && !claudeEnabled && (
+            <div className="mt-2 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+              <InfoIcon size={11} className="inline mr-0.5"/>Claude 未設定のため Critic 役は {providers.gemini.enabled && providers.gemini.apiKey ? 'Gemini 2.5 Pro' : providers.openai.enabled && providers.openai.apiKey ? 'GPT' : '代替モデル'} が担当します（Claude Opus 4.7 が最も精度が高いです）
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 mb-6 fade-in-up fade-d3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={saveKeys} onChange={e => setSaveKeys(e.target.checked)} className="w-4 h-4 accent-purple-600"/>
+            <span className="text-xs text-slate-700"><ShieldIcon size={12} className="inline mr-1"/>APIキーをブラウザに保存（localStorage）次回自動入力</span>
+          </label>
+        </div>
+
+        <div className="text-center fade-in-up fade-d4">
+          <button onClick={handleStart} disabled={!anyEnabled} className="btn-shimmer disabled:bg-slate-300 text-white font-bold px-8 py-3.5 rounded-xl text-base shadow-lg shadow-purple-200 disabled:shadow-none flex items-center gap-2 mx-auto min-w-[240px] justify-center">
+            <BrainIcon size={18}/>抽出ツールを開始 <ArrowRight size={18}/>
+          </button>
+          {!anyEnabled && <p className="text-[11px] text-slate-500 mt-2">少なくとも1つのプロバイダーを有効化してAPIキーを入力してください</p>}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 13: EXTRACTOR PAGE
+   ============================================================ */
+function StageIndicator({ currentStage, progress, message }) {
+  const stages = [
+    { id: 'stage1', label: 'PDF準備', icon: FileText },
+    { id: 'stage2', label: '並列AI抽出', icon: CpuIcon },
+    { id: 'stage3', label: '結果統合', icon: LayersIcon },
+    { id: 'stage4', label: 'Critic監査', icon: ShieldCheckIcon },
+    { id: 'stage5', label: '個別検証', icon: BrainIcon }
+  ];
+  const currentIdx = stages.findIndex(s => s.id === currentStage);
+  return (
+    <div className="bg-white rounded-xl border border-purple-200 shadow-md p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><BrainIcon size={16} className="text-purple-600"/>多層抽出パイプライン実行中</h3>
+        <span className="text-xs text-slate-500 font-mono">{progress}%</span>
+      </div>
+      <div className="w-full bg-slate-100 rounded-full h-2 mb-3 overflow-hidden">
+        <div className="gradient-purple h-full transition-all duration-500" style={{width: `${progress}%`}}/>
+      </div>
+      <div className="grid grid-cols-5 gap-1">
+        {stages.map((s, i) => {
+          const Icon = s.icon;
+          const active = i === currentIdx;
+          const done = i < currentIdx || currentStage === 'complete';
+          return (
+            <div key={s.id} className={`text-center ${active ? 'stage-pulse' : ''}`}>
+              <div className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center mb-1 transition-all ${done ? 'bg-emerald-500 text-white' : active ? 'gradient-purple text-white' : 'bg-slate-100 text-slate-400'}`}>
+                {done ? <CheckCircle2 size={16}/> : <Icon size={14}/>}
+              </div>
+              <div className={`text-[9px] font-medium ${active ? 'text-purple-700' : done ? 'text-emerald-700' : 'text-slate-400'}`}>{s.label}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 text-[11px] text-slate-600 text-center animate-pulse">{message}</div>
+    </div>
+  );
+}
+
+function ExtractorPage({ providers, accuracyMode, onBack }) {
+  const [pico, setPico] = useState({ p: "", i: "", c: "" });
+  const [outcomes, setOutcomes] = useState([{ id: 1, name: "", definition: "" }]);
+  const [pdfFile, setPdfFile] = useState(null);
+  const [status, setStatus] = useState("idle");
+  const [progress, setProgress] = useState(0);
+  const [currentStage, setCurrentStage] = useState(null);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [result, setResult] = useState(null);
+  const [errMsg, setErrMsg] = useState("");
+  const [toast, setToast] = useState(null);
+  const [hlQuery, setHlQuery] = useState("");
+  const [hlPage, setHlPage] = useState(null);
+  const [pdfScale, setPdfScale] = useState(1.0);
+  const [leftFontSize, setLeftFontSize] = useState(11);
+  const [pdfSearchText, setPdfSearchText] = useState("");
+  const fileRef = useRef(null);
+
+  const showToast = (m, t = 'success') => { setToast({ message: m, type: t }); setTimeout(() => setToast(null), 3500); };
+  const addOutcome = () => setOutcomes(p => [...p, { id: Date.now(), name: "", definition: "" }]);
+  const removeOutcome = (id) => setOutcomes(p => p.length > 1 ? p.filter(o => o.id !== id) : p);
+  const changeOutcome = (id, f, v) => setOutcomes(p => p.map(o => o.id === id ? { ...o, [f]: v } : o));
+  const handleDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f?.type === "application/pdf") setPdfFile(f); else showToast("PDFのみ対応", "error"); };
+  const handleFileSelect = (e) => { const f = e.target.files[0]; if (f) setPdfFile(f); };
+
+  const editOutcome = (idx, group, field, value) => {
+    setResult(prev => {
+      const nr = { ...prev };
+      nr.extractedOutcomes = [...nr.extractedOutcomes];
+      nr.extractedOutcomes[idx] = { ...nr.extractedOutcomes[idx] };
+      nr.extractedOutcomes[idx][group] = { ...nr.extractedOutcomes[idx][group], [field]: value };
+      return nr;
+    });
+  };
+
+  const sendToSearch = (text, page) => {
+    setPdfSearchText(text || "");
+    if (page) setHlPage(page);
+    setHlQuery(text || "");
+    showToast("検索ボックスに送信");
+  };
+  const executePdfSearch = () => { if (!pdfSearchText.trim()) return; setHlQuery(pdfSearchText); };
+
+  const startAnalysis = async () => {
+    if (!pdfFile) { showToast("PDFをアップロードしてください", "error"); return; }
+    if (!pico.p || !pico.i || !pico.c) { showToast("PICOを入力してください", "error"); return; }
+    setErrMsg(""); setResult(null); setHlQuery(""); setHlPage(null); setPdfSearchText("");
+    setStatus("running");
+
+    try {
+      const res = await runExtractionPipeline({
+        providers, accuracyMode, pdfFile, pico, outcomes,
+        onProgress: (stage, msg, pct) => {
+          setCurrentStage(stage);
+          setStatusMsg(msg);
+          setProgress(pct);
+        }
+      });
+      setResult(res);
+      setStatus("complete");
+      const sourceInfo = res._sources?.join(' + ') || '';
+      showToast(`抽出完了 (${sourceInfo})`, 'success');
+      if (res._criticConfidence) setTimeout(() => showToast(`Critic信頼度スコア: ${res._criticConfidence}/100`, 'info'), 1500);
+    } catch (err) {
+      console.error(err);
+      setStatus("error");
+      setErrMsg(err.message);
+      showToast("エラーが発生しました", "error");
+    }
+  };
+
+  const reVerifyOutcome = async (idx) => {
+    const verifier = pickBestProvider(providers);
+    if (!verifier) { showToast("再検証には有効なAPIキーが必要", "error"); return; }
+    const oc = result.extractedOutcomes[idx];
+    showToast(`${PROVIDERS[verifier.providerName].name.split(' ')[0]} で再検証中...`, "info");
+    try {
+      const pdfText = await extractPdfText(pdfFile);
+      const prompt = `【検証対象】\n${JSON.stringify(oc, null, 2)}\n\n【参照テキスト】\n${pdfText.substring(0, 20000)}\n\n検証してJSON返答。`;
+      const v = await callCriticAnyProvider(
+        verifier,
+        SYSTEM_PROMPT_VERIFY,
+        prompt,
+        null, null,
+        6000,
+        null
+      );
+      setResult(prev => {
+        const nr = { ...prev };
+        nr.extractedOutcomes = [...nr.extractedOutcomes];
+        nr.extractedOutcomes[idx] = {
+          ...nr.extractedOutcomes[idx],
+          _verified: v.verified,
+          _verifyConfidence: v.confidence,
+          _verifyIssues: v.issues,
+          ...(v.correctedValues || {})
+        };
+        return nr;
+      });
+      showToast(`検証完了 (${v.verified ? '確認OK' : '要確認'} / 信頼度${v.confidence})`);
+    } catch (e) {
+      showToast("検証失敗: " + e.message, "error");
+    }
+  };
+
+  const copyOneTSV = (o) => { clipCopy(toDelimited(OC_HDRS, [outcomeRow(o)], "\t")) && showToast("TSVコピー完了"); };
+  const copyOneCSV = (o) => { clipCopy(toDelimited(OC_HDRS, [outcomeRow(o)], ",")) && showToast("CSVコピー完了"); };
+  const copyAllTSV = () => {
+    if (!result) return;
+    let t = "";
+    if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t") + "\n\n";
+    if (result.extractedOutcomes?.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, result.extractedOutcomes.map(outcomeRow), "\t");
+    clipCopy(t) && showToast("全TSVコピー完了");
+  };
+  const copyAllCSV = () => {
+    if (!result) return;
+    let t = "";
+    if (result.baselineCharacteristics?.length) t += toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), ",") + "\n\n";
+    if (result.extractedOutcomes?.length) t += toDelimited(OC_HDRS, result.extractedOutcomes.map(outcomeRow), ",");
+    clipCopy(t) && showToast("全CSVコピー完了");
+  };
+  const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
+  const saveSession = () => {
+    const s = { pico, outcomes, result, providers: Object.fromEntries(Object.entries(providers).map(([k, v]) => [k, { ...v, apiKey: "***REDACTED***" }])), accuracyMode, timestamp: new Date().toISOString() };
+    const b = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `meta-extract-v3-${Date.now()}.json`;
+    a.click();
+    showToast("保存完了");
+  };
+
+  const activeProviderInfo = Object.entries(providers).filter(([_, c]) => c.enabled && c.apiKey).map(([n, c]) => `${PROVIDERS[n].name.split(' ')[0]}`).join('+');
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      <Toast toast={toast}/>
+      <header className="bg-white/90 backdrop-blur-sm border-b border-slate-200 py-2 px-3 z-20 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button onClick={onBack} className="text-slate-400 hover:text-purple-600 p-0.5 transition-colors"><ChevronLeft size={20}/></button>
+            <BrainIcon size={20} className="text-purple-700"/>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3 Opus 4.7</span></h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded font-mono hidden sm:flex items-center gap-1">
+              <LayersIcon size={10}/> {accuracyMode.toUpperCase()} | {activeProviderInfo}
+            </span>
+            {result && <button onClick={saveSession} className="text-[10px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-medium text-slate-600 transition-colors"><SaveIcon size={12}/>保存</button>}
+          </div>
+        </div>
+      </header>
+
+      <main className={`flex-1 flex flex-col min-h-0 w-full overflow-hidden ${status==='complete'?'p-1.5 sm:p-3':''}`}>
+        {status !== 'complete' && (
+          <div className="flex-1 overflow-y-auto p-3 sm:p-5 max-w-4xl mx-auto w-full space-y-4 pb-10">
+            <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden fade-in-up">
+              <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center gap-2"><SettingsIcon size={15} className="text-slate-500"/><h2 className="font-semibold text-slate-700 text-xs">PICO設定</h2></div>
+              <div className="p-3 space-y-2">
+                {[["P (患者)", "p", "例: 心不全患者"], ["I (介入)", "i", "例: SGLT2阻害薬"], ["C (比較)", "c", "例: プラセボ"]].map(([l, k, ph]) => (
+                  <div key={k}>
+                    <label className="block text-[10px] font-medium text-slate-500 mb-0.5">{l}</label>
+                    <input type="text" value={pico[k]} onChange={e => setPico({ ...pico, [k]: e.target.value })} className="w-full text-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" placeholder={ph}/>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden fade-in-up fade-d1">
+              <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-2"><Database size={15} className="text-slate-500"/><h2 className="font-semibold text-slate-700 text-xs">優先アウトカム</h2></div>
+                <button onClick={addOutcome} className="text-[10px] flex items-center gap-1 text-purple-600 hover:text-purple-800 font-medium transition-colors"><PlusIcon size={13}/>追加</button>
+              </div>
+              <div className="p-3 space-y-2 max-h-[35vh] overflow-y-auto">
+                <div className="bg-purple-50 border border-purple-200 rounded p-2 text-[10px] text-purple-800">全アウトカムが自動抽出されます。ここは優先探索用です。空欄でも全自動抽出が動作します。</div>
+                {outcomes.map((o, idx) => (
+                  <div key={o.id} className="p-2 border border-slate-200 rounded bg-slate-50">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-[10px] font-bold text-slate-500">#{idx+1}</span>
+                      {outcomes.length > 1 && <button onClick={() => removeOutcome(o.id)} className="text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={13}/></button>}
+                    </div>
+                    <input type="text" value={o.name} onChange={e => changeOutcome(o.id, 'name', e.target.value)} className="w-full text-xs p-1.5 border border-slate-300 rounded mb-1 focus:ring-2 focus:ring-purple-500 outline-none" placeholder="アウトカム名"/>
+                    <textarea value={o.definition} onChange={e => changeOutcome(o.id, 'definition', e.target.value)} className="w-full text-[10px] p-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-purple-500 outline-none resize-none h-12" placeholder="定義・条件"/>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden fade-in-up fade-d2">
+              <div className="p-4">
+                <div className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${pdfFile?'border-purple-400 bg-purple-50':'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`} onDragOver={e => e.preventDefault()} onDrop={handleDrop} onClick={() => fileRef.current?.click()}>
+                  <input type="file" ref={fileRef} onChange={handleFileSelect} accept="application/pdf" className="hidden"/>
+                  {pdfFile ? (
+                    <div className="flex flex-col items-center text-purple-700">
+                      <FileText size={28} className="mb-1"/>
+                      <span className="font-medium text-xs truncate w-full">{pdfFile.name}</span>
+                      <span className="text-[10px] text-purple-500">{(pdfFile.size/1024/1024).toFixed(2)} MB</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center text-slate-500">
+                      <UploadCloud size={28} className="mb-1 text-slate-400"/>
+                      <span className="font-medium text-xs">PDFをドロップまたはクリック</span>
+                    </div>
+                  )}
+                </div>
+                <button onClick={startAnalysis} disabled={status==='running'} className="w-full mt-3 btn-shimmer disabled:bg-slate-300 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md">
+                  {status === 'running' ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>解析中...</> : <><BrainIcon size={16}/>抽出実行 ({accuracyMode.toUpperCase()})</>}
+                </button>
+              </div>
+            </section>
+            {status === 'running' && (
+              <div className="fade-in-up">
+                <StageIndicator currentStage={currentStage} progress={progress} message={statusMsg}/>
+              </div>
+            )}
+            {status === 'idle' && !result && (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center p-8 text-slate-400 fade-in-up fade-d3">
+                <BrainIcon size={40} className="mb-3 opacity-20"/>
+                <p className="text-sm font-medium text-slate-500">結果はここに表示されます</p>
+              </div>
+            )}
+            {status === 'error' && errMsg && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-xs whitespace-pre-wrap">
+                <AlertCircle size={16} className="inline mr-1"/>{errMsg}
+              </div>
+            )}
+          </div>
+        )}
+
+        {status === 'complete' && result && (
+          <div className="flex flex-1 min-h-0 gap-2 split-h">
+            <div className="w-full xl:w-[55%] h-full flex flex-col bg-white rounded-lg shadow border border-slate-200 overflow-hidden split-pane">
+              <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5 border-b border-slate-200 flex-shrink-0">
+                <h2 className="font-bold text-xs text-slate-800 flex items-center gap-1.5"><Database size={14} className="text-purple-600"/>抽出データ
+                  {result._criticConfidence && <span className="ml-1 bg-purple-100 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded">Critic信頼度 {result._criticConfidence}/100</span>}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                    <TypeIcon size={11} className="text-slate-400"/>
+                    <button onClick={() => setLeftFontSize(s => Math.max(7, s-1))} className="text-slate-500 hover:text-purple-600 px-0.5 font-bold text-[10px]">−</button>
+                    <span className="text-[9px] font-mono w-5 text-center text-slate-600">{leftFontSize}</span>
+                    <button onClick={() => setLeftFontSize(s => Math.min(16, s+1))} className="text-slate-500 hover:text-purple-600 px-0.5 font-bold text-[10px]">+</button>
+                  </div>
+                  <button onClick={copyAllTSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold"><CopyIcon size={10}/>TSV</button>
+                  <button onClick={copyAllCSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold"><CopyIcon size={10}/>CSV</button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-4" style={{fontSize:`${leftFontSize}px`}}>
+                {/* Source info banner */}
+                {result._sources && (
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg px-3 py-2 flex items-start gap-2" style={{fontSize:`${Math.max(9,leftFontSize*0.85)}px`}}>
+                    <BrainIcon size={14} className="text-purple-600 flex-shrink-0 mt-0.5"/>
+                    <div className="flex-1">
+                      <div className="font-semibold text-purple-900">抽出ソース:</div>
+                      <div className="text-purple-700">{result._sources.join(' + ')}</div>
+                      {result._criticProviderUsed && <div className="mt-1 text-purple-700 text-[10px]"><ShieldCheckIcon size={10} className="inline mr-0.5"/><b>Critic担当:</b> {result._criticProviderUsed}</div>}
+                      {result._criticAssessment && <div className="mt-1 text-slate-700"><b>Critic評価:</b> {result._criticAssessment}</div>}
+                      {result._errors?.length > 0 && <div className="mt-1 text-amber-700 text-[10px]">部分エラー: {result._errors.join(' / ')}</div>}
+                    </div>
+                  </div>
+                )}
+
+                <section className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-100 px-2 py-1 border-b"><h3 className="font-semibold text-slate-700" style={{fontSize:`${leftFontSize}px`}}>PICO比較</h3></div>
+                  <table className="w-full">
+                    <thead className="bg-slate-50 text-slate-500 border-b">
+                      <tr>
+                        <th className="px-2 py-1 text-left w-10">要素</th>
+                        <th className="px-2 py-1 text-left border-l border-slate-200">設定</th>
+                        <th className="px-2 py-1 text-left border-l border-slate-200 bg-blue-50/50">論文</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {[["P", "p", "P"], ["I", "i", "I"], ["C", "c", "C"]].map(([l, k, pk]) => (
+                        <tr key={k}>
+                          <td className="px-2 py-1 font-medium">{l}</td>
+                          <td className="px-2 py-1 border-l border-slate-200">{pico[k] || "-"}</td>
+                          <td className="px-2 py-1 border-l border-slate-200 bg-blue-50/20">{result.paperPICO?.[pk] || "不明"}</td>
+                        </tr>
+                      ))}
+                      {result.paperPICO?.thirdGroup && <tr><td className="px-2 py-1 font-medium text-purple-700">3群</td><td className="px-2 py-1 border-l border-slate-200">-</td><td className="px-2 py-1 border-l border-slate-200 bg-purple-50/30 font-medium text-purple-800">{result.paperPICO.thirdGroup}</td></tr>}
+                      {result.paperPICO?.followUpDuration && <tr><td className="px-2 py-1 font-medium text-slate-500">追跡</td><td className="px-2 py-1 border-l border-slate-200">-</td><td className="px-2 py-1 border-l border-slate-200">{result.paperPICO.followUpDuration}</td></tr>}
+                    </tbody>
+                  </table>
+                </section>
+
+                {result.consortFlow && (
+                  <section className="border border-indigo-200 rounded-lg overflow-hidden">
+                    <div className="bg-indigo-50 px-2 py-1 border-b border-indigo-200"><h3 className="font-semibold text-indigo-800">🌀 CONSORT Flow</h3></div>
+                    <table className="w-full" style={{fontSize:`${Math.max(9,leftFontSize*0.9)}px`}}>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr><td className="px-2 py-0.5 text-slate-600">無作為化 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.randomized || "-"}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">割付 (介入/対照/3群)</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.allocatedIntervention || "-"} / {result.consortFlow.allocatedComparison || "-"}{result.consortFlow.allocatedThird ? ` / ${result.consortFlow.allocatedThird}` : ""}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">ITT解析 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.analyzedITT_intervention || "-"} / {result.consortFlow.analyzedITT_comparison || "-"}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">PP解析 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.analyzedPP_intervention || "-"} / {result.consortFlow.analyzedPP_comparison || "-"}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">脱落 (介入/対照)</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.lostToFollowUp_intervention || "-"} / {result.consortFlow.lostToFollowUp_comparison || "-"}</td></tr>
+                      </tbody>
+                    </table>
+                  </section>
+                )}
+
+                {result.baselineCharacteristics?.length > 0 && (
+                  <section className="border border-emerald-200 rounded-lg overflow-hidden">
+                    <div className="bg-emerald-50 px-2 py-1 border-b border-emerald-200 flex items-center justify-between">
+                      <h3 className="font-semibold text-emerald-800">👥 患者背景</h3>
+                      <button onClick={copyBaselineTSV} className="bg-white border border-emerald-300 px-1.5 py-0.5 rounded font-medium text-emerald-700 hover:bg-emerald-100" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}><CopyIcon size={9} className="inline mr-0.5"/>TSV</button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full whitespace-nowrap">
+                        <thead className="bg-slate-50 text-slate-500 border-b">
+                          <tr>
+                            <th className="px-1.5 py-1 text-left border-r sticky left-0 bg-slate-50 z-10 min-w-[80px]">変数</th>
+                            <th className="px-1 py-1 text-center border-r" colSpan="3">介入群</th>
+                            <th className="px-1 py-1 text-center border-r" colSpan="3">対照群</th>
+                            <th className="px-1 py-1 text-center">P値</th>
+                          </tr>
+                          <tr className="bg-slate-100 border-b" style={{fontSize:`${Math.max(7,leftFontSize*0.75)}px`}}>
+                            <th className="px-1.5 py-0.5 border-r sticky left-0 bg-slate-100 z-10"/>
+                            {["N","値","SD/%","N","値","SD/%"].map((h,i)=><th key={i} className="px-1 py-0.5 text-center border-r font-medium">{h}</th>)}
+                            <th className="px-1 py-0.5 text-center"/>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {result.baselineCharacteristics.map((b, idx) => (
+                            <tr key={idx} className="hover:bg-blue-50/30">
+                              <td className="px-1.5 py-1 border-r font-medium text-slate-800 sticky left-0 bg-white z-10">
+                                {b.variable}
+                                {b.unit && <span className="text-slate-400 ml-0.5">({b.unit})</span>}
+                                {b.pageNumber && <span className="text-slate-400 ml-0.5 font-mono" style={{fontSize:`${Math.max(6,leftFontSize*0.65)}px`}}>P{b.pageNumber}</span>}
+                              </td>
+                              <td className="px-1 py-1 border-r text-center">{b.interventionGroup?.n || "-"}</td>
+                              <td className="px-1 py-1 border-r text-center font-medium text-blue-700">{b.interventionGroup?.value || "-"}</td>
+                              <td className="px-1 py-1 border-r text-center text-slate-500">{b.interventionGroup?.sd || b.interventionGroup?.percent || b.interventionGroup?.iqr || "-"}</td>
+                              <td className="px-1 py-1 border-r text-center">{b.comparisonGroup?.n || "-"}</td>
+                              <td className="px-1 py-1 border-r text-center font-medium text-blue-700">{b.comparisonGroup?.value || "-"}</td>
+                              <td className="px-1 py-1 border-r text-center text-slate-500">{b.comparisonGroup?.sd || b.comparisonGroup?.percent || b.comparisonGroup?.iqr || "-"}</td>
+                              <td className="px-1 py-1 text-center">{b.pValue && b.pValue !== "-" ? <span className={`font-mono ${parseFloat(b.pValue)<0.05?'text-red-600 font-bold':'text-slate-600'}`}>{b.pValue}</span> : "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="px-2 py-1 bg-slate-50 border-t border-slate-200 text-slate-500 flex justify-between" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}>
+                      <span>{result.baselineCharacteristics.length}項目</span>
+                      <span>出処: {result.baselineCharacteristics[0]?.sourceLocation || "Table 1等"}</span>
+                    </div>
+                  </section>
+                )}
+
+                <div className="space-y-3">
+                  {result.extractedOutcomes?.map((oc, idx) => (
+                    <OutcomeCard key={idx} oc={oc} idx={idx} pico={pico} onEdit={editOutcome}
+                      onCopyTSV={copyOneTSV} onCopyCSV={copyOneCSV} fontSize={leftFontSize}
+                      onHighlight={(o) => { setHlQuery(o.evidenceText); setHlPage(o.pageNumber); setPdfSearchText(o.evidenceText || ""); }}
+                      onSendToSearch={sendToSearch}
+                      onReVerify={pickBestProvider(providers) ? reVerifyOutcome : null}/>
+                  ))}
+                  {(!result.extractedOutcomes?.length) && <div className="text-center py-6 text-slate-500">データなし</div>}
+                </div>
+
+                {result.expertCommentary && (
+                  <section className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-100 overflow-hidden">
+                    <div className="px-2 py-1.5 border-b border-indigo-100 flex items-center gap-1"><Sparkles size={12} className="text-indigo-600"/><h3 className="font-bold text-indigo-800">AI考察</h3></div>
+                    <div className="p-2 text-indigo-900 leading-relaxed whitespace-pre-wrap">{result.expertCommentary}</div>
+                  </section>
+                )}
+
+                {result.paperQualityAssessment && (
+                  <section className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg border border-amber-200 overflow-hidden">
+                    <div className="px-2 py-1.5 border-b border-amber-200 flex items-center gap-1"><ShieldIcon size={12} className="text-amber-600"/><h3 className="font-bold text-amber-800">論文品質評価</h3></div>
+                    <div className="p-2 text-amber-900 leading-relaxed whitespace-pre-wrap">{result.paperQualityAssessment}</div>
+                  </section>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-100 px-2 py-1 border-b"><h3 className="font-semibold text-slate-700">統計手法</h3></div>
+                    <ul className="p-2 list-disc pl-4 text-slate-600 space-y-0.5">
+                      {result.statisticalMethods?.length ? result.statisticalMethods.map((m, i) => <li key={i}>{m}</li>) : <li className="text-slate-400 list-none">不明</li>}
+                    </ul>
+                  </section>
+                  <section className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-100 px-2 py-1 border-b"><h3 className="font-semibold text-slate-700 flex items-center gap-1"><AlertCircle size={10} className="text-amber-500"/>不明点・要確認</h3></div>
+                    <ul className="p-2 list-disc pl-4 text-slate-600 space-y-0.5">
+                      {result.unclearItems?.length ? result.unclearItems.map((x, i) => <li key={i}>{x}</li>) : <li className="text-slate-400 list-none">なし</li>}
+                    </ul>
+                  </section>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full xl:w-[45%] h-full flex flex-col bg-slate-200 rounded-lg border border-slate-300 shadow-inner overflow-hidden relative split-pane">
+              <div className="bg-slate-800 text-slate-200 text-[9px] px-2 py-1.5 flex items-center justify-between z-10 flex-shrink-0">
+                <span className="flex items-center gap-1 font-mono truncate max-w-[35%]"><FileText size={11}/>{pdfFile?.name}</span>
+                <div className="flex items-center gap-1.5">
+                  {hlQuery ? <span className="bg-yellow-400 text-yellow-900 px-1 py-0.5 rounded font-bold text-[8px] animate-pulse">HL</span> : null}
+                  <div className="flex items-center gap-0.5 bg-slate-700 p-0.5 rounded">
+                    <button onClick={() => setPdfScale(s => Math.max(0.4, s-0.2))} className="p-0.5 hover:bg-slate-500 rounded text-slate-300"><ZoomOutIcon size={11}/></button>
+                    <span className="font-mono w-7 text-center text-[9px]">{Math.round(pdfScale*100)}%</span>
+                    <button onClick={() => setPdfScale(s => Math.min(3, s+0.2))} className="p-0.5 hover:bg-slate-500 rounded text-slate-300"><ZoomInIcon size={11}/></button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-700 px-2 py-1.5 flex items-center gap-1.5 z-10 flex-shrink-0 border-b border-slate-600">
+                <SearchIcon size={13} className="text-slate-400 flex-shrink-0"/>
+                <input type="text" value={pdfSearchText} onChange={e => setPdfSearchText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') executePdfSearch(); }}
+                  placeholder="テキストを貼り付けてEnterまたは検索..."
+                  className="flex-1 bg-slate-600 text-white text-[10px] px-2 py-1 rounded border border-slate-500 focus:outline-none focus:border-purple-400 placeholder-slate-400 font-mono"/>
+                <button onClick={executePdfSearch} className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 text-[9px] font-bold px-2 py-1 rounded flex items-center gap-0.5 flex-shrink-0"><TargetIcon size={10}/>検索</button>
+                <button onClick={() => { document.querySelectorAll('.highlight-hook').forEach(el => el.classList.remove('highlight-hook')); setPdfSearchText(""); setHlQuery(""); showToast("ハイライト解除"); }} className="text-slate-400 hover:text-white text-[9px] px-1 py-1 rounded flex-shrink-0" title="クリア"><XCircle size={12}/></button>
+              </div>
+
+              <div className="flex-1 overflow-auto relative bg-slate-300">
+                <PdfViewer file={pdfFile} searchQuery={hlQuery} targetPage={hlPage} onToast={showToast} scale={pdfScale}/>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 14: ROOT
+   ============================================================ */
+function App() {
+  const [page, setPage] = useState("setup");
+  const [providers, setProviders] = useState(null);
+  const [accuracyMode, setAccuracyMode] = useState('ultra');
+  const [initialConfig] = useState(() => loadConfig());
+
+  const handleSetupComplete = (providers, mode) => {
+    setProviders(providers);
+    setAccuracyMode(mode);
+    setPage("main");
+  };
+
+  if (page === "setup") return <SetupPage onComplete={handleSetupComplete} initialConfig={initialConfig}/>;
+  return <ExtractorPage providers={providers} accuracyMode={accuracyMode} onBack={() => setPage("setup")}/>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

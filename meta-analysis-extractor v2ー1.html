@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meta-Analysis Data Extractor Pro v3 (Canvas Optimized)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    html,body{height:100%;margin:0;overflow:hidden}
+    #root{height:100%;display:flex;flex-direction:column}
+    *{font-family:'Noto Sans JP',sans-serif;box-sizing:border-box}
+    code,.font-mono{font-family:'JetBrains Mono',monospace!important}
+    @keyframes spin{to{transform:rotate(360deg)}}.animate-spin{animation:spin 1s linear infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.animate-pulse{animation:pulse 2s cubic-bezier(.4,0,.6,1) infinite}
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .fade-in-up{animation:fadeInUp .4s ease-out forwards;opacity:0}
+    .fade-d1{animation-delay:.08s}.fade-d2{animation-delay:.16s}.fade-d3{animation-delay:.24s}.fade-d4{animation-delay:.32s}
+    @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+    .btn-shimmer{background:linear-gradient(90deg,#2563eb 0%,#3b82f6 40%,#60a5fa 50%,#3b82f6 60%,#2563eb 100%);background-size:200% 100%; transition: all 0.3s ease;}
+    .btn-shimmer:hover:not(:disabled){animation:shimmer 1.8s ease-in-out infinite; transform: translateY(-2px);}
+    ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+    .textLayer{position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;line-height:1;opacity:.3}
+    .textLayer>span{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}
+    .textLayer>span::selection{background:rgba(0,100,200,.3)}
+    .highlight-hook{background-color:rgba(250,204,21,.55)!important;color:transparent!important;box-shadow:0 0 0 3px rgba(250,204,21,.55);border-radius:2px;animation:pulseHL 1.5s ease-in-out infinite;z-index:10}
+    @keyframes pulseHL{0%,100%{background-color:rgba(250,204,21,.55);box-shadow:0 0 0 3px rgba(250,204,21,.55)}50%{background-color:rgba(250,204,21,.85);box-shadow:0 0 0 5px rgba(250,204,21,.85)}}
+    .editable-input{width:100%;min-width:35px;text-align:center;background:transparent;border:1px dashed transparent;border-radius:3px;transition:all .2s;padding:2px 3px;font-size:inherit;font-weight:inherit;color:inherit}
+    .editable-input:hover{background:rgba(255,255,255,.7);border-color:#cbd5e1}
+    .editable-input:focus{background:#fff;border-color:#3b82f6;border-style:solid;outline:none;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+    .api-input-glow:focus{box-shadow:0 0 0 3px rgba(37,99,235,.15),0 0 20px rgba(37,99,235,.08)}
+    
+    /* Toggle Switch CSS */
+    .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
+    .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
+    .toggle-checkbox:checked + .toggle-label:after { transform: translateX(100%); border-color: white; }
+    .toggle-label { width: 3rem; height: 1.5rem; background-color: #cbd5e1; border-radius: 9999px; position: relative; cursor: pointer; transition: background-color 0.3s; }
+    .toggle-label:after { content: ''; position: absolute; top: 0.125rem; left: 0.125rem; width: 1.25rem; height: 1.25rem; background-color: white; border-radius: 50%; transition: transform 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    
+    @media(max-width:1024px){.split-h{flex-direction:column!important}.split-pane{width:100%!important;height:50%!important}}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-hidden">
+<div id="root" class="h-full flex flex-col overflow-hidden"></div>
+
+<script type="text/babel">
+const {useState,useRef,useEffect,useCallback} = React;
+
+/* ============================================================
+   SECTION 1: ICON COMPONENTS
+   ============================================================ */
+const I=({children,size=18,className=""})=><svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>;
+const UploadCloud=({size,className})=><I size={size} className={className}><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></I>;
+const FileText=({size,className})=><I size={size} className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></I>;
+const SettingsIcon=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></I>;
+const PlusIcon=({size,className})=><I size={size} className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></I>;
+const Trash2=({size,className})=><I size={size} className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></I>;
+const CopyIcon=({size,className})=><I size={size} className={className}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></I>;
+const AlertCircle=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></I>;
+const CheckCircle2=({size,className})=><I size={size} className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></I>;
+const ChevronLeft=({size,className})=><I size={size} className={className}><polyline points="15 18 9 12 15 6"/></I>;
+const Activity=({size,className})=><I size={size} className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></I>;
+const FileSearch=({size,className})=><I size={size} className={className}><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v3"/><polyline points="14 2 14 8 20 8"/><circle cx="5" cy="14" r="3"/><line x1="2" y1="17" x2="4" y2="15"/></I>;
+const Database=({size,className})=><I size={size} className={className}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></I>;
+const InfoIcon=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></I>;
+const KeyIcon=({size,className})=><I size={size} className={className}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></I>;
+const ExternalLink=({size,className})=><I size={size} className={className}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></I>;
+const ShieldIcon=({size,className})=><I size={size} className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></I>;
+const EyeIcon=({size,className})=><I size={size} className={className}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></I>;
+const EyeOffIcon=({size,className})=><I size={size} className={className}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></I>;
+const ArrowRight=({size,className})=><I size={size} className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></I>;
+const XCircle=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></I>;
+const Sparkles=({size,className})=><I size={size} className={className}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></I>;
+const TargetIcon=({size,className})=><I size={size} className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></I>;
+const ZoomInIcon=({size,className})=><I size={size} className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></I>;
+const ZoomOutIcon=({size,className})=><I size={size} className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></I>;
+const LayersIcon=({size,className})=><I size={size} className={className}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></I>;
+const SaveIcon=({size,className})=><I size={size} className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></I>;
+const SearchIcon=({size,className})=><I size={size} className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></I>;
+const TypeIcon=({size,className})=><I size={size} className={className}><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></I>;
+const ZapIcon=({size,className})=><I size={size} className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></I>;
+
+/* ============================================================
+   SECTION 2: SYSTEM PROMPT
+   ============================================================ */
+const SYSTEM_PROMPT = `あなたは熟練した医学システマティックレビュー・メタ分析の専門家です。
+提供された論文情報（高解像度画像・ネイティブPDF・テキストデータ）を用い、メタ分析に必要な数値を極めて高い精度で網羅的に抽出してください。
+
+【最重要：全アウトカムの完全網羅と揺らぎの保持】
+1. 指定外のアウトカムも全て抽出。ユーザー指定外は「requestedOutcomeName」を「未指定（論文から自動抽出）」に。
+2. 抄録と本文の不一致は両方を別々のパターンとして並列抽出。
+3. 連続変数の「術前・術後・変化量」は3つ全て独立アウトカムとして抽出。
+4. ITT vs PP等の集団の違いも統合せず独立して抽出。
+
+【群のペアリング（超重要）】同じ評価項目・同じ時点のデータは必ずinterventionGroupとcomparisonGroupをペアとして格納。片方だけの抽出は厳禁。
+【出処ごとの完全分離（超重要）】記載場所が異なる場合は絶対に統合せず別々のアウトカムとして抽出。sourceLocationには単一の出処のみ記載。
+【3群比較への自動対応】3群以上の場合は自動的に第3群を抽出。
+
+【厳密なデータ抽出ルール】
+1. 文献番号の除外。2. 区切り文字の正確な解釈。3. SDとSEの厳格な区別（SEの場合はnotesに明記）。
+4. 二値変数は実数(n)を絶対優先。直接記載値優先、計算は最終手段。RR,OR,HR,RD,95%CI,P値も抽出。
+5. 連続変数: 症例数、平均値、平均差、SD、SE、HR、95%CI、P値。
+6. ゼロイベントは「0」として必ず抽出。7. 記載がない項目は「不明」と出力。推測厳禁。
+8. pageNumberにPDFページ番号（1始まり）を整数で記載。
+9. sourceLocationに出処、evidenceTextに根拠原文を記載。
+
+【図表からのデータ抽出】テキスト全探索を徹底。「Analyzed」「Failures」「Events」「n=」等のキーワードをスキャン。
+【患者背景】Table 1等から全項目抽出。性別と年齢は必須。
+【expertCommentary（必須）】揺らぎのポイント、SD/SE変換の必要性、注意点を日本語で記述。`;
+
+/* ============================================================
+   SECTION 3: RESPONSE SCHEMA
+   ============================================================ */
+const RESPONSE_SCHEMA = {
+  type:"OBJECT",
+  properties:{
+    paperPICO:{type:"OBJECT",properties:{P:{type:"STRING"},I:{type:"STRING"},C:{type:"STRING"},thirdGroup:{type:"STRING"}}},
+    statisticalMethods:{type:"ARRAY",items:{type:"STRING"}},
+    baselineCharacteristics:{type:"ARRAY",items:{type:"OBJECT",properties:{
+      category:{type:"STRING"},variable:{type:"STRING"},
+      interventionGroup:{type:"OBJECT",properties:{n:{type:"STRING"},value:{type:"STRING"},sd:{type:"STRING"},percent:{type:"STRING"},iqr:{type:"STRING"},range:{type:"STRING"}}},
+      comparisonGroup:{type:"OBJECT",properties:{n:{type:"STRING"},value:{type:"STRING"},sd:{type:"STRING"},percent:{type:"STRING"},iqr:{type:"STRING"},range:{type:"STRING"}}},
+      thirdGroup:{type:"OBJECT",properties:{n:{type:"STRING"},value:{type:"STRING"},sd:{type:"STRING"},percent:{type:"STRING"},iqr:{type:"STRING"},range:{type:"STRING"}}},
+      pValue:{type:"STRING"},unit:{type:"STRING"},dataType:{type:"STRING"},sourceLocation:{type:"STRING"},pageNumber:{type:"INTEGER"}
+    },required:["variable","dataType"]}},
+    extractedOutcomes:{type:"ARRAY",items:{type:"OBJECT",properties:{
+      requestedOutcomeName:{type:"STRING"},actualOutcomeName:{type:"STRING"},timePoint:{type:"STRING"},variationReason:{type:"STRING"},
+      calculationMethod:{type:"STRING"},variableType:{type:"STRING"},populationType:{type:"STRING"},populationDescription:{type:"STRING"},
+      interventionGroup:{type:"OBJECT",properties:{n_total:{type:"STRING"},events_or_mean:{type:"STRING"},sd_or_se:{type:"STRING"}}},
+      comparisonGroup:{type:"OBJECT",properties:{n_total:{type:"STRING"},events_or_mean:{type:"STRING"},sd_or_se:{type:"STRING"}}},
+      thirdGroupName:{type:"STRING"},
+      thirdGroup:{type:"OBJECT",properties:{n_total:{type:"STRING"},events_or_mean:{type:"STRING"},sd_or_se:{type:"STRING"}}},
+      effectEstimate:{type:"OBJECT",properties:{measureType:{type:"STRING"},value:{type:"STRING"},ci95:{type:"STRING"},pValue:{type:"STRING"}}},
+      evidenceText:{type:"STRING"},sourceLocation:{type:"STRING"},notes:{type:"STRING"},pageNumber:{type:"INTEGER"}
+    },required:["actualOutcomeName","variableType","evidenceText","sourceLocation"]}},
+    unclearItems:{type:"ARRAY",items:{type:"STRING"}},
+    expertCommentary:{type:"STRING"}
+  },
+  required:["paperPICO","statisticalMethods","baselineCharacteristics","extractedOutcomes","unclearItems","expertCommentary"]
+};
+
+/* ============================================================
+   SECTION 4: UTILITIES
+   ============================================================ */
+// Canvas環境に最適化されたExponential Backoff (1s, 2s, 4s, 8s, 16s)
+const fetchWithRetry=async(url,options,retries=5)=>{
+  const delays=[1000,2000,4000,8000,16000];
+  for(let i=0;i<retries;i++){
+    try{
+      const r=await fetch(url,options);
+      if(!r.ok){
+        let d={};try{d=await r.json();}catch(e){}
+        throw new Error(`API Error ${r.status}: ${d.error?.message||r.statusText}`);
+      }
+      return await r.json();
+    }
+    catch(e){
+      if(i===retries-1)throw e;
+      await new Promise(r=>setTimeout(r,delays[i]));
+    }
+  }
+};
+const clipCopy=(text)=>{
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(text);return true;
+  }
+  const ta=document.createElement("textarea");ta.value=text;ta.style.cssText="position:fixed;top:0;left:0;opacity:0";
+  document.body.appendChild(ta);ta.focus();ta.select();
+  let ok=false;try{ok=document.execCommand('copy');}catch(e){}
+  document.body.removeChild(ta);return ok;
+};
+const toDelimited=(headers,rows,delimiter)=>headers.join(delimiter)+"\n"+rows.map(r=>r.map(v=>String(v).replace(/[\t\n\r]/g,' ')).join(delimiter)).join("\n");
+
+/* ============================================================
+   SECTION 5: PDF VIEWER
+   ============================================================ */
+function PdfPage({pdf,pageNum,scale}){
+  const canvasRef=useRef(null);const textRef=useRef(null);const[w,setW]=useState('auto');
+  useEffect(()=>{
+    let task;
+    const render=async()=>{
+      try{
+        const page=await pdf.getPage(pageNum);
+        const vp=page.getViewport({scale});
+        const canvas=canvasRef.current;if(!canvas)return;
+        const ctx=canvas.getContext('2d');canvas.height=vp.height;canvas.width=vp.width;setW(`${vp.width}px`);
+        task=page.render({canvasContext:ctx,viewport:vp});
+        await task.promise;
+        const tc=await page.getTextContent();
+        const tl=textRef.current;if(!tl)return;
+        tl.innerHTML='';tl.style.width=`${vp.width}px`;tl.style.height=`${vp.height}px`;tl.style.setProperty('--scale-factor',scale);
+        pdfjsLib.renderTextLayer({textContentSource:tc,container:tl,viewport:vp,textDivs:[]});
+      }catch(e){if(e.name!=='RenderingCancelledException')console.warn(e);}
+    };render();return()=>{if(task)try{task.cancel();}catch(e){}};
+  },[pdf,pageNum,scale]);
+  return(<div id={`pdf-page-${pageNum}`} className="bg-white shadow-lg relative rounded overflow-hidden flex-shrink-0 mx-auto mb-4" style={{width:w}}><canvas ref={canvasRef} className="block"/><div ref={textRef} className="textLayer"/><div className="absolute top-1.5 left-1.5 bg-black/60 text-white text-[9px] font-mono px-1.5 py-0.5 rounded-full z-20">P.{pageNum}</div></div>);
+}
+
+function PdfViewer({file,searchQuery,targetPage,onToast,scale}){
+  const[pdf,setPdf]=useState(null);const[numPages,setNumPages]=useState(0);
+  useEffect(()=>{if(!file)return;let d=false;file.arrayBuffer().then(buf=>{if(d)return;pdfjsLib.getDocument({data:buf}).promise.then(doc=>{if(d)return;setPdf(doc);setNumPages(doc.numPages);}).catch(()=>onToast("PDF読込失敗","error"));});return()=>{d=true;};},[file]);
+  useEffect(()=>{if(!targetPage)return;const el=document.getElementById(`pdf-page-${targetPage}`);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});},[targetPage]);
+
+  // Highlight logic
+  useEffect(()=>{
+    if(!searchQuery)return;
+    const timer=setTimeout(()=>{
+      document.querySelectorAll('.highlight-hook').forEach(el=>el.classList.remove('highlight-hook'));
+      const clean=searchQuery.replace(/[\n\r\t]/g,' ').replace(/\s+/g,' ').trim();
+      if(!clean)return;
+      // 修正: 日本語や記号を消さずに、空白のみを削除して比較するように変更
+      const normQ=clean.toLowerCase().replace(/\s+/g,'');
+      if(!normQ)return;
+      let first=null;
+      let matchCount=0;
+      document.querySelectorAll('.textLayer span').forEach(span=>{
+        const t=span.textContent;if(!t.trim())return;
+        // 修正: こちらも空白のみ削除
+        const normS=t.toLowerCase().replace(/\s+/g,'');
+        if(!normS)return;
+        
+        // spanが検索クエリを含む、または検索クエリがspan(3文字以上)を含む場合にハイライト
+        if(normS.includes(normQ) || (normS.length>=3 && normQ.includes(normS))){
+          span.classList.add('highlight-hook');
+          matchCount++;
+          if(!first)first=span;
+        }
+      });
+      if(first){
+        first.scrollIntoView({behavior:'smooth',block:'center'});
+        onToast(`該当箇所（${matchCount}部分）をハイライトしました`);
+      }
+      else onToast("PDF上にテキストが見つかりません。別のキーワードをお試しください","error");
+    },700);
+    return()=>clearTimeout(timer);
+  },[searchQuery,scale]);
+
+  if(!pdf)return<div className="flex h-full items-center justify-center text-slate-400"><span className="animate-spin h-5 w-5 border-2 border-slate-300 border-t-blue-500 rounded-full mr-2"/>PDF読込中...</div>;
+  return(<div className="absolute top-0 left-0 min-w-full p-3 flex flex-col items-center pb-20">{Array.from({length:numPages},(_,i)=><PdfPage key={i+1} pdf={pdf} pageNum={i+1} scale={scale}/>)}</div>);
+}
+
+/* ============================================================
+   SECTION 6: TOAST
+   ============================================================ */
+function Toast({toast}){
+  if(!toast)return null;
+  return(<div className={`fixed top-3 right-3 px-3 py-2 rounded-lg shadow-lg z-[100] flex items-center gap-2 text-white text-xs font-medium ${toast.type==='error'?'bg-red-500':'bg-emerald-500'}`}>{toast.type==='error'?<AlertCircle size={15}/>:<CheckCircle2 size={15}/>}{toast.message}</div>);
+}
+
+/* ============================================================
+   SECTION 7: SETUP PAGE
+   ============================================================ */
+function SetupPage({onComplete}){
+  const[apiKey,setApiKey]=useState("");
+  const[showKey,setShowKey]=useState(false);
+  const[verifying,setVerifying]=useState(false);
+  const[vResult,setVResult]=useState(null);
+  const[vMsg,setVMsg]=useState("");
+  const[models,setModels]=useState([]);
+  const[selectedModel,setSelectedModel]=useState("gemini-2.5-flash-preview-09-2025");
+  const[useBuiltIn,setUseBuiltIn]=useState(true); // Default to using built-in API
+
+  const verify=async()=>{
+    if(!apiKey.trim()){setVResult('error');setVMsg('APIキーを入力してください。');return;}
+    setVerifying(true);setVResult(null);setModels([]);
+    try{
+      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+      if(r.ok){
+        const data=await r.json();
+        // 新しいモデルが上に来るように降順でソートして取得
+        const gm=(data.models||[]).map(m=>m.name.replace('models/','')).filter(n=>n.startsWith('gemini-')&&!n.includes('embedding')&&!n.includes('aqa')).sort((a,b)=>b.localeCompare(a));
+        setModels(gm);
+        if(gm.includes('gemini-2.5-flash'))setSelectedModel('gemini-2.5-flash');
+        else if(gm.length>0)setSelectedModel(gm[0]);
+        setVResult('ok');setVMsg(`接続成功！ 最新のモデル一覧を取得しました。`);
+      }else{
+        const d=await r.json().catch(()=>({}));setVResult('error');setVMsg(d.error?.message||`エラー (${r.status})`);
+      }
+    }catch(e){setVResult('error');setVMsg('通信エラー');}
+    setVerifying(false);
+  };
+
+  const handleStart = () => {
+    if (useBuiltIn) {
+      // Use internal key and strict preview model
+      onComplete("", "gemini-2.5-flash-preview-09-2025", true);
+    } else {
+      // Use provided key
+      onComplete(apiKey.trim(), selectedModel, false);
+    }
+  };
+
+  return(
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex flex-col overflow-auto">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/80 py-4 px-6 sticky top-0 z-10"><div className="max-w-3xl mx-auto flex items-center gap-3"><div className="bg-blue-600 text-white p-2 rounded-lg"><Activity size={22}/></div><div><h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs text-blue-600 font-mono">Pro v3</span></h1><p className="text-xs text-slate-500">論文データ自動抽出 — 初期設定</p></div></div></header>
+      <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-8">
+        <div className="text-center mb-8 fade-in-up"><h2 className="text-2xl font-extrabold text-slate-800 mb-2">AI設定</h2><p className="text-slate-500 text-sm">解析に使用するGemini AIの接続設定を行います。</p></div>
+        
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 mb-6 fade-in-up fade-d1">
+          <h3 className="font-bold text-rose-800 mb-2 flex items-center gap-2 text-sm"><AlertCircle size={18}/>重要なお願い</h3>
+          <ul className="list-disc pl-5 text-xs text-rose-900 space-y-1"><li><strong>数字の絶対確認:</strong> 元の論文と必ず照合</li><li><strong>SDとSEの混同リスク</strong></li><li><strong>図表の読み取り誤差</strong></li></ul>
+          <div className="bg-white/60 p-2 rounded mt-2 text-[10px] text-rose-800"><strong>原則:</strong> 本ツールは「強力なアシスタント」です。最終確認は研究者ご自身で。</div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 shadow-md p-5 mb-6 fade-in-up fade-d2">
+          
+          {/* New Toggle for Built-in API */}
+          <div className="flex items-center gap-4 mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+            <div className="flex-shrink-0">
+              <input type="checkbox" id="toggleBuiltIn" className="hidden toggle-checkbox" checked={useBuiltIn} onChange={(e) => {setUseBuiltIn(e.target.checked); setVResult(null);}} />
+              <label htmlFor="toggleBuiltIn" className="toggle-label block"></label>
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <ZapIcon size={16} className="text-amber-500"/>
+                システム内蔵の無料APIを使用する（推奨）
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1">
+                オンにするとAPIキー不要でCanvas環境の推奨モデル（現在は <b>gemini-2.5-flash-preview-09-2025</b>）を利用できます。<br/>
+                <span className="text-red-500 font-medium">※仕様上、内蔵APIは特定のモデルに固定されています。将来モデルの変更等で動かなくなった場合は、こちらのスイッチをオフにし、下の欄からご自身のAPIキーを入力して最新モデルを選択してください。</span>
+              </p>
+            </div>
+          </div>
+
+          <div className={`transition-opacity duration-300 ${useBuiltIn ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
+            <h3 className="font-bold text-slate-800 text-sm mb-3 flex items-center gap-2"><KeyIcon size={16} className="text-blue-600"/>ご自身のAPIキーを使用する場合</h3>
+            <p className="text-[10px] text-slate-500 mb-2">接続テストを行うと、現在Googleが提供している<b>最新のモデル一覧を自動取得</b>してリストから選べるようになります。</p>
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
+              <div className="relative flex-1">
+                <input type={showKey?"text":"password"} value={apiKey} onChange={e=>{setApiKey(e.target.value);setVResult(null);}} placeholder="AIza..." className="w-full px-3 py-2.5 pr-10 border-2 border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500 api-input-glow" disabled={useBuiltIn}/>
+                <button onClick={()=>setShowKey(!showKey)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" disabled={useBuiltIn}>{showKey?<EyeOffIcon size={16}/>:<EyeIcon size={16}/>}</button>
+              </div>
+              <button onClick={verify} disabled={verifying||useBuiltIn||!apiKey.trim()} className="bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white font-semibold px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 justify-center whitespace-nowrap">{verifying?<><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>確認中</>:<><Sparkles size={15}/>接続テスト</>}</button>
+            </div>
+            {vResult==='ok'&&<div className="space-y-2"><div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-2 rounded-lg text-xs"><CheckCircle2 size={16}/>{vMsg}</div>{models.length>0&&<div><label className="block text-[10px] font-semibold text-slate-500 mb-1">使用モデル:</label><select value={selectedModel} onChange={e=>setSelectedModel(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono bg-white">{models.map(m=><option key={m} value={m}>{m}</option>)}</select></div>}</div>}
+            {vResult==='error'&&<div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-xs"><XCircle size={16} className="flex-shrink-0 mt-0.5"/>{vMsg}</div>}
+          </div>
+        </div>
+        
+        <div className="text-center fade-in-up fade-d4">
+          <button onClick={handleStart} disabled={!useBuiltIn && !apiKey.trim()} className="btn-shimmer disabled:bg-slate-300 text-white font-bold px-8 py-3.5 rounded-xl text-base shadow-lg shadow-blue-200 disabled:shadow-none flex items-center gap-2 mx-auto w-full sm:w-auto min-w-[200px] justify-center">
+            ツールを開始 <ArrowRight size={18}/>
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 8: DATA PREPARATION
+   ============================================================ */
+async function extractPdfText(file){const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;let t='';for(let i=1;i<=pdf.numPages;i++){const p=await pdf.getPage(i);const c=await p.getTextContent();t+=`\n--- Page ${i} ---\n`+c.items.map(x=>x.str).join(' ');}return t;}
+async function extractPdfImages(file,onProgress){const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;const parts=[];for(let i=1;i<=pdf.numPages;i++){if(onProgress)onProgress(`高解像度レンダリング (${i}/${pdf.numPages})`);const p=await pdf.getPage(i);const vp=p.getViewport({scale:3.0});const c=document.createElement('canvas');const ctx=c.getContext('2d');c.height=vp.height;c.width=vp.width;await p.render({canvasContext:ctx,viewport:vp}).promise;parts.push({inlineData:{data:c.toDataURL('image/jpeg',0.95).split(',')[1],mimeType:"image/jpeg"}});c.width=0;c.height=0;}return parts;}
+async function getPdfBase64(file){const buf=await file.arrayBuffer();const bytes=new Uint8Array(buf);let binary='';const chunk=8192;for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode.apply(null,bytes.slice(i,i+chunk));return btoa(binary);}
+
+/* ============================================================
+   SECTION 9: EXPORT HELPERS
+   ============================================================ */
+const OC_HDRS=["要求アウトカム","実際のアウトカム","評価時点","揺らぎ説明","計算方法","変数型","対象集団","集団説明","介入群_N","介入群_イベント/平均","介入群_SD/SE","対照群_N","対照群_イベント/平均","対照群_SD/SE","第3群名","第3群_N","第3群_イベント/平均","第3群_SD/SE","指標","推定値","95%CI","P値","出処","根拠原文","注記","ページ"];
+function outcomeRow(o){return[o.requestedOutcomeName||"-",o.actualOutcomeName||"-",o.timePoint||"-",o.variationReason||"-",o.calculationMethod||"-",o.variableType||"-",o.populationType||"-",o.populationDescription||"-",o.interventionGroup?.n_total||"-",o.interventionGroup?.events_or_mean||"-",o.interventionGroup?.sd_or_se||"-",o.comparisonGroup?.n_total||"-",o.comparisonGroup?.events_or_mean||"-",o.comparisonGroup?.sd_or_se||"-",o.thirdGroupName||"-",o.thirdGroup?.n_total||"-",o.thirdGroup?.events_or_mean||"-",o.thirdGroup?.sd_or_se||"-",o.effectEstimate?.measureType||"-",o.effectEstimate?.value||"-",o.effectEstimate?.ci95||"-",o.effectEstimate?.pValue||"-",o.sourceLocation||"-",(o.evidenceText||"-").replace(/[\n\t]/g," "),o.notes||"-",o.pageNumber||"-"];}
+const BL_HDRS=["カテゴリ","変数","型","単位","介入_N","介入_値","介入_SD","介入_%","介入_IQR","介入_範囲","対照_N","対照_値","対照_SD","対照_%","対照_IQR","対照_範囲","第3群_N","第3群_値","第3群_SD","第3群_%","第3群_IQR","第3群_範囲","P値","出処","ページ"];
+function baselineRow(b){return[b.category||"-",b.variable||"-",b.dataType||"-",b.unit||"-",b.interventionGroup?.n||"-",b.interventionGroup?.value||"-",b.interventionGroup?.sd||"-",b.interventionGroup?.percent||"-",b.interventionGroup?.iqr||"-",b.interventionGroup?.range||"-",b.comparisonGroup?.n||"-",b.comparisonGroup?.value||"-",b.comparisonGroup?.sd||"-",b.comparisonGroup?.percent||"-",b.comparisonGroup?.iqr||"-",b.comparisonGroup?.range||"-",b.thirdGroup?.n||"-",b.thirdGroup?.value||"-",b.thirdGroup?.sd||"-",b.thirdGroup?.percent||"-",b.thirdGroup?.iqr||"-",b.thirdGroup?.range||"-",b.pValue||"-",b.sourceLocation||"-",b.pageNumber||"-"];}
+
+/* ============================================================
+   SECTION 10: OUTCOME CARD
+   ============================================================ */
+function OutcomeCard({oc,idx,pico,onEdit,onCopyTSV,onCopyCSV,onHighlight,onSendToSearch,fontSize}){
+  const isAuto=oc.requestedOutcomeName?.includes("未指定")||oc.requestedOutcomeName?.includes("自動");
+  const has3rd=!!(oc.thirdGroup||oc.thirdGroupName);
+  const EditCell=({group,field,cls=""})=>(<td className="border-r border-slate-100 px-0.5 py-0.5"><input className={`editable-input ${cls}`} value={oc[group]?.[field]||""} onChange={e=>onEdit(idx,group,field,e.target.value)} placeholder="-"/></td>);
+  const sz=fontSize;
+
+  return(
+    <div className={`border rounded-lg overflow-hidden shadow-sm ${isAuto?'border-amber-200':'border-slate-200'}`}>
+      <div className={`${isAuto?'bg-amber-50':'bg-slate-50'} px-3 py-2 border-b border-slate-200`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+              {isAuto&&<span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1 py-0.5 rounded flex items-center gap-0.5"><Sparkles size={8}/>自動</span>}
+              <span className="bg-blue-100 text-blue-800 text-[8px] font-bold px-1 py-0.5 rounded">{oc.variableType==='Binary'?'二値':oc.variableType==='Continuous'?'連続':'不明'}</span>
+              <span className="font-semibold text-slate-800 truncate">{oc.actualOutcomeName}</span>
+            </div>
+            <div className="text-slate-500" style={{fontSize:`${Math.max(8,sz*0.75)}px`}}>
+              時点:<span className="font-medium text-slate-700 mr-2">{oc.timePoint||"-"}</span>
+              出処:<span className="font-medium text-slate-700">{oc.sourceLocation||"-"}</span>
+              {oc.pageNumber&&<span className="ml-1.5 bg-slate-200 text-slate-700 px-1 py-0.5 rounded font-mono">P{oc.pageNumber}</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={()=>onCopyTSV(oc)} className="text-[8px] text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded font-medium hover:bg-blue-50 transition-colors"><CopyIcon size={9} className="inline mr-0.5"/>TSV</button>
+            <button onClick={()=>onCopyCSV(oc)} className="text-[8px] text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded font-medium hover:bg-blue-50 transition-colors"><CopyIcon size={9} className="inline mr-0.5"/>CSV</button>
+            <button onClick={()=>onHighlight(oc)} className="text-[8px] bg-yellow-400 hover:bg-yellow-500 text-yellow-900 border border-yellow-500 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 transition-colors"><TargetIcon size={9}/>確認</button>
+          </div>
+        </div>
+      </div>
+      {oc.variationReason&&<div className="bg-purple-50 text-purple-800 px-2.5 py-1.5 border-b border-purple-100" style={{fontSize:`${Math.max(8,sz*0.8)}px`}}><InfoIcon size={10} className="inline mr-0.5 text-purple-500"/><b>揺らぎ:</b> {oc.variationReason}</div>}
+      <div className="overflow-x-auto">
+        <table className="w-full whitespace-nowrap" style={{fontSize:`${sz}px`}}>
+          <thead className="bg-white text-slate-500 border-b" style={{fontSize:`${Math.max(7,sz*0.75)}px`}}>
+            <tr><th className="px-1 py-0.5 text-center border-r" colSpan="3">介入群</th><th className="px-1 py-0.5 text-center border-r" colSpan="3">対照群</th>{has3rd&&<th className="px-1 py-0.5 text-center border-r bg-purple-50/50 text-purple-800" colSpan="3">{oc.thirdGroupName||'第3群'}</th>}<th className="px-1 py-0.5 text-center" colSpan="4">効果推定値</th></tr>
+            <tr className="bg-slate-50 border-t">{["N","イベント/平均","SD/SE","N","イベント/平均","SD/SE"].map((h,i)=><th key={i} className="px-1 py-0.5 text-center border-r">{h}</th>)}{has3rd&&["N","イベント/平均","SD/SE"].map((h,i)=><th key={`t${i}`} className="px-1 py-0.5 text-center border-r bg-purple-50/20">{h}</th>)}{["指標","値","95%CI","P値"].map((h,i)=><th key={`e${i}`} className={`px-1 py-0.5 text-center ${i<3?'border-r':''}`}>{h}</th>)}</tr>
+          </thead>
+          <tbody className="bg-white"><tr>
+            <EditCell group="interventionGroup" field="n_total"/>
+            <EditCell group="interventionGroup" field="events_or_mean" cls="font-bold text-blue-700"/>
+            <EditCell group="interventionGroup" field="sd_or_se" cls="text-slate-500"/>
+            <EditCell group="comparisonGroup" field="n_total"/>
+            <EditCell group="comparisonGroup" field="events_or_mean" cls="font-bold text-blue-700"/>
+            <EditCell group="comparisonGroup" field="sd_or_se" cls="text-slate-500"/>
+            {has3rd&&<><EditCell group="thirdGroup" field="n_total"/><EditCell group="thirdGroup" field="events_or_mean" cls="font-bold text-purple-700"/><EditCell group="thirdGroup" field="sd_or_se" cls="text-slate-500"/></>}
+            <EditCell group="effectEstimate" field="measureType"/>
+            <EditCell group="effectEstimate" field="value" cls="font-bold text-emerald-700"/>
+            <EditCell group="effectEstimate" field="ci95"/>
+            <td className="px-0.5 py-0.5"><input className="editable-input" value={oc.effectEstimate?.pValue||""} onChange={e=>onEdit(idx,'effectEstimate','pValue',e.target.value)} placeholder="-"/></td>
+          </tr></tbody>
+        </table>
+      </div>
+      <div className="bg-amber-50/30 px-3 py-2 border-t border-slate-200 space-y-1.5" style={{fontSize:`${Math.max(8,sz*0.85)}px`}}>
+        <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">計算方法:</span><span className="text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono">{oc.calculationMethod||"論文に直接記載"}</span></div>
+        <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">出処:</span><span className="text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-semibold">{oc.sourceLocation}</span></div>
+        <div className="flex items-start gap-1.5">
+          <span className="font-semibold text-slate-600 min-w-[50px] flex-shrink-0">根拠原文:</span>
+          <div className="flex-1">
+            <blockquote className="text-slate-700 italic border-l-2 border-amber-300 pl-1.5 py-0.5 break-words whitespace-pre-wrap">"{oc.evidenceText}"</blockquote>
+            <button onClick={()=>onSendToSearch(oc.evidenceText,oc.pageNumber)} className="mt-1 text-[9px] bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-2 py-0.5 rounded font-bold flex items-center gap-1 w-fit transition-colors"><SearchIcon size={10}/>この文をPDF検索に送る</button>
+          </div>
+        </div>
+        {oc.notes&&<div className="bg-amber-50 border border-amber-200 px-2 py-1 rounded text-amber-700 flex items-start gap-1 mt-1"><AlertCircle size={12} className="flex-shrink-0 mt-0.5"/><span><b>注記:</b> {oc.notes}</span></div>}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 11: EXTRACTOR PAGE
+   ============================================================ */
+function ExtractorPage({apiKey,model,useBuiltIn,onBack}){
+  const[pico,setPico]=useState({p:"",i:"",c:""});
+  const[outcomes,setOutcomes]=useState([{id:1,name:"",definition:""}]);
+  const[pdfFile,setPdfFile]=useState(null);
+  const[status,setStatus]=useState("idle");
+  const[statusMsg,setStatusMsg]=useState("");
+  const[result,setResult]=useState(null);
+  const[errMsg,setErrMsg]=useState("");
+  const[toast,setToast]=useState(null);
+  const[hlQuery,setHlQuery]=useState("");
+  const[hlPage,setHlPage]=useState(null);
+  const[pdfScale,setPdfScale]=useState(1.0);
+  const[leftFontSize,setLeftFontSize]=useState(11);
+  const[pdfSearchText,setPdfSearchText]=useState("");
+  const fileRef=useRef(null);
+
+  const showToast=(m,t='success')=>{setToast({message:m,type:t});setTimeout(()=>setToast(null),3000);};
+  const addOutcome=()=>setOutcomes(p=>[...p,{id:Date.now(),name:"",definition:""}]);
+  const removeOutcome=(id)=>setOutcomes(p=>p.length>1?p.filter(o=>o.id!==id):p);
+  const changeOutcome=(id,f,v)=>setOutcomes(p=>p.map(o=>o.id===id?{...o,[f]:v}:o));
+  const handleDrop=(e)=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f?.type==="application/pdf")setPdfFile(f);else showToast("PDFのみ対応","error");};
+  const handleFileSelect=(e)=>{const f=e.target.files[0];if(f)setPdfFile(f);};
+
+  const editOutcome=(idx,group,field,value)=>{setResult(prev=>{const nr={...prev};nr.extractedOutcomes=[...nr.extractedOutcomes];nr.extractedOutcomes[idx]={...nr.extractedOutcomes[idx]};nr.extractedOutcomes[idx][group]={...nr.extractedOutcomes[idx][group],[field]:value};return nr;});};
+  const sendToSearch=(text,page)=>{setPdfSearchText(text||"");if(page)setHlPage(page);setHlQuery(text||"");showToast("検索ボックスに送信しました");};
+  const executePdfSearch=()=>{if(!pdfSearchText.trim())return;setHlQuery(pdfSearchText);};
+
+  const startAnalysis=async()=>{
+    if(!pdfFile){showToast("PDFをアップロードしてください","error");return;}
+    if(!pico.p||!pico.i||!pico.c){showToast("PICOを入力してください","error");return;}
+    setErrMsg("");setResult(null);setHlQuery("");setHlPage(null);setPdfSearchText("");
+    
+    try{
+      setStatus("reading_pdf");setStatusMsg("PDFのテキストと画像を準備中...");
+      const[imgs,txt,pdfB64]=await Promise.all([extractPdfImages(pdfFile,m=>setStatusMsg(m)),extractPdfText(pdfFile),getPdfBase64(pdfFile)]);
+      setStatus("analyzing");setStatusMsg("AIで抽出処理を実行中...");
+      
+      const valid=outcomes.filter(o=>o.name.trim());
+      const picoBlock=`【PICO】P:${pico.p} I:${pico.i} C:${pico.c}\n【アウトカム】\n${valid.length?valid.map(o=>`- ${o.name}: ${o.definition||'定義なし'}`).join('\n'):'全自動抽出'}`;
+      
+      const genConfig={responseMimeType:"application/json",responseSchema:RESPONSE_SCHEMA,temperature:0.1};
+      
+      // Determine the API URL based on built-in flag vs provided key
+      // The Canvas execution environment will resolve ${apiKey} automatically when set to ""
+      const actualKey = useBuiltIn ? "" : apiKey;
+      const actualModel = useBuiltIn ? "gemini-2.5-flash-preview-09-2025" : model;
+      const apiUrl=`https://generativelanguage.googleapis.com/v1beta/models/${actualModel}:generateContent?key=${actualKey}`;
+
+      const promptA=`${picoBlock}\n\n全アウトカムを網羅抽出。3群も自動検出。不明は「不明」。\n\n【テキスト】\n${txt}`;
+      const promptB=`${picoBlock}\n\n全アウトカムを網羅抽出。3群も自動検出。不明は「不明」。\n\n【テキスト】\n${txt.substring(0,5000)}`;
+      
+      const[resA,resB]=await Promise.allSettled([
+        fetchWithRetry(apiUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents:[{role:"user",parts:[{text:promptA},...imgs]}],systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},generationConfig:genConfig})}),
+        fetchWithRetry(apiUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents:[{role:"user",parts:[{text:promptB},{inlineData:{data:pdfB64,mimeType:"application/pdf"}}]}],systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},generationConfig:genConfig})})
+      ]);
+      
+      setStatusMsg("結果統合中...");
+      const parse=(res)=>{if(res.status!=='fulfilled')return null;try{const t=res.value.candidates?.[0]?.content?.parts?.[0]?.text;return t?JSON.parse(t):null;}catch(e){return null;}};
+      let rA=parse(resA),rB=parse(resB);
+      
+      if(!rA&&!rB){
+        setStatusMsg("フォールバック中...");
+        const fb=await fetchWithRetry(apiUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents:[{role:"user",parts:[{text:promptA},...imgs]}],systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},generationConfig:genConfig})});
+        const rt=fb.candidates?.[0]?.content?.parts?.[0]?.text;
+        if(!rt)throw new Error("AI応答なし");
+        rA=JSON.parse(rt);
+      }
+      
+      let primary,secondary;
+      if(!rA){primary=rB;secondary=null;}else if(!rB){primary=rA;secondary=null;}
+      else{const lA=(rA.extractedOutcomes?.length||0)+(rA.baselineCharacteristics?.length||0);const lB=(rB.extractedOutcomes?.length||0)+(rB.baselineCharacteristics?.length||0);primary=lA>=lB?rA:rB;secondary=lA>=lB?rB:rA;}
+      
+      if(secondary){
+        if(secondary.extractedOutcomes&&primary.extractedOutcomes){const pk=new Set(primary.extractedOutcomes.map(o=>`${o.actualOutcomeName}|${o.timePoint}|${o.variableType}`));secondary.extractedOutcomes.filter(o=>!pk.has(`${o.actualOutcomeName}|${o.timePoint}|${o.variableType}`)).forEach(o=>{o.notes=(o.notes||'')+' [補完]';primary.extractedOutcomes.push(o);});}
+        if(secondary.baselineCharacteristics){if(!primary.baselineCharacteristics)primary.baselineCharacteristics=secondary.baselineCharacteristics;else{const bk=new Set(primary.baselineCharacteristics.map(b=>b.variable));secondary.baselineCharacteristics.forEach(b=>{if(!bk.has(b.variable))primary.baselineCharacteristics.push(b);});}}
+        ['unclearItems','statisticalMethods'].forEach(k=>{if(secondary[k]){const s=new Set(primary[k]||[]);secondary[k].forEach(v=>{if(!s.has(v))(primary[k]||(primary[k]=[])).push(v);});}});
+        if(secondary.expertCommentary&&!primary.expertCommentary)primary.expertCommentary=secondary.expertCommentary;
+      }
+      
+      setResult(primary);setStatus("complete");setStatusMsg("");showToast(`解析完了（${[rA?'画像':null,rB?'PDF':null].filter(Boolean).join('+')}）`);
+    }catch(err){console.error(err);setStatus("error");setErrMsg(err.message);showToast("エラーが発生しました","error");}
+  };
+
+  const copyOneTSV=(o)=>{clipCopy(toDelimited(OC_HDRS,[outcomeRow(o)],"\t"))&&showToast("TSVコピー完了");};
+  const copyOneCSV=(o)=>{clipCopy(toDelimited(OC_HDRS,[outcomeRow(o)],","))&&showToast("CSVコピー完了");};
+  const copyAllTSV=()=>{if(!result)return;let t="";if(result.baselineCharacteristics?.length)t+="[患者背景]\n"+toDelimited(BL_HDRS,result.baselineCharacteristics.map(baselineRow),"\t")+"\n\n";if(result.extractedOutcomes?.length)t+="[アウトカム]\n"+toDelimited(OC_HDRS,result.extractedOutcomes.map(outcomeRow),"\t");clipCopy(t)&&showToast("全TSVコピー完了");};
+  const copyAllCSV=()=>{if(!result)return;let t="";if(result.baselineCharacteristics?.length)t+=toDelimited(BL_HDRS,result.baselineCharacteristics.map(baselineRow),",")+"\n\n";if(result.extractedOutcomes?.length)t+=toDelimited(OC_HDRS,result.extractedOutcomes.map(outcomeRow),",");clipCopy(t)&&showToast("全CSVコピー完了");};
+  const copyBaselineTSV=()=>{result?.baselineCharacteristics&&clipCopy(toDelimited(BL_HDRS,result.baselineCharacteristics.map(baselineRow),"\t"))&&showToast("患者背景TSVコピー完了");};
+  const saveSession=()=>{const s={pico,outcomes,result,model:useBuiltIn?"Built-In":model,timestamp:new Date().toISOString()};const b=new Blob([JSON.stringify(s,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`meta-extract-${Date.now()}.json`;a.click();showToast("保存完了");};
+
+  return(
+    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      <Toast toast={toast}/>
+      <header className="bg-white/90 backdrop-blur-sm border-b border-slate-200 py-2 px-3 z-20 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2"><button onClick={onBack} className="text-slate-400 hover:text-blue-600 p-0.5 transition-colors"><ChevronLeft size={20}/></button><Activity size={20} className="text-blue-700"/><h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] text-purple-600 font-mono">Pro v3</span></h1></div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded font-mono hidden sm:flex items-center gap-1">
+              {useBuiltIn ? <><ZapIcon size={10} className="text-amber-500"/> 内蔵API (gemini-2.5-flash-preview)</> : model}
+            </span>
+            {result&&<button onClick={saveSession} className="text-[10px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-medium text-slate-600 transition-colors"><SaveIcon size={12}/>保存</button>}
+          </div>
+        </div>
+      </header>
+
+      <main className={`flex-1 flex flex-col min-h-0 w-full overflow-hidden ${status==='complete'?'p-1.5 sm:p-3':''}`}>
+        {status!=='complete'&&(
+          <div className="flex-1 overflow-y-auto p-3 sm:p-5 max-w-4xl mx-auto w-full space-y-4 pb-10">
+            <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden fade-in-up">
+              <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center gap-2"><SettingsIcon size={15} className="text-slate-500"/><h2 className="font-semibold text-slate-700 text-xs">PICO設定</h2></div>
+              <div className="p-3 space-y-2">{[["P (患者)","p","例: 心不全患者"],["I (介入)","i","例: SGLT2阻害薬"],["C (比較)","c","例: プラセボ"]].map(([l,k,ph])=>(<div key={k}><label className="block text-[10px] font-medium text-slate-500 mb-0.5">{l}</label><input type="text" value={pico[k]} onChange={e=>setPico({...pico,[k]:e.target.value})} className="w-full text-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder={ph}/></div>))}</div>
+            </section>
+            <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden fade-in-up fade-d1">
+              <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between"><div className="flex items-center gap-2"><Database size={15} className="text-slate-500"/><h2 className="font-semibold text-slate-700 text-xs">アウトカム定義</h2></div><button onClick={addOutcome} className="text-[10px] flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium transition-colors"><PlusIcon size={13}/>追加</button></div>
+              <div className="p-3 space-y-2 max-h-[35vh] overflow-y-auto">
+                <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[10px] text-blue-800">全アウトカムが自動抽出されます。ここは優先探索用です。</div>
+                {outcomes.map((o,idx)=>(<div key={o.id} className="p-2 border border-slate-200 rounded bg-slate-50"><div className="flex justify-between items-start mb-1"><span className="text-[10px] font-bold text-slate-500">#{idx+1}</span>{outcomes.length>1&&<button onClick={()=>removeOutcome(o.id)} className="text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={13}/></button>}</div><input type="text" value={o.name} onChange={e=>changeOutcome(o.id,'name',e.target.value)} className="w-full text-xs p-1.5 border border-slate-300 rounded mb-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="アウトカム名"/><textarea value={o.definition} onChange={e=>changeOutcome(o.id,'definition',e.target.value)} className="w-full text-[10px] p-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 outline-none resize-none h-12" placeholder="定義・条件"/></div>))}
+              </div>
+            </section>
+            <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden fade-in-up fade-d2">
+              <div className="p-4">
+                <div className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${pdfFile?'border-blue-400 bg-blue-50':'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`} onDragOver={e=>e.preventDefault()} onDrop={handleDrop} onClick={()=>fileRef.current?.click()}>
+                  <input type="file" ref={fileRef} onChange={handleFileSelect} accept="application/pdf" className="hidden"/>
+                  {pdfFile?<div className="flex flex-col items-center text-blue-700"><FileText size={28} className="mb-1"/><span className="font-medium text-xs truncate w-full">{pdfFile.name}</span><span className="text-[10px] text-blue-500">{(pdfFile.size/1024/1024).toFixed(2)} MB</span></div>:<div className="flex flex-col items-center text-slate-500"><UploadCloud size={28} className="mb-1 text-slate-400"/><span className="font-medium text-xs">PDFをドロップまたはクリック</span></div>}
+                </div>
+                <button onClick={startAnalysis} disabled={status==='reading_pdf'||status==='analyzing'} className="w-full mt-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md">{(status==='reading_pdf'||status==='analyzing')?<><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>解析中...</>:<><FileSearch size={16}/>データ抽出を実行</>}</button>
+              </div>
+            </section>
+            {status==='idle'&&!result&&(<div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center p-8 text-slate-400 fade-in-up fade-d3"><Activity size={40} className="mb-3 opacity-20"/><p className="text-sm font-medium text-slate-500">結果はここに表示されます</p></div>)}
+            {(status==='reading_pdf'||status==='analyzing')&&(<div className="bg-white rounded-xl shadow-sm border border-blue-200 flex flex-col items-center justify-center p-8 fade-in-up"><div className="animate-spin h-14 w-14 border-4 border-blue-600 border-t-transparent rounded-full mb-4"/><h3 className="text-sm font-bold text-slate-700 mb-1">{status==='reading_pdf'?'PDF読込中':'AI解析中'}</h3><p className="text-[10px] text-slate-500 animate-pulse">{statusMsg}</p></div>)}
+            {status==='error'&&errMsg&&<div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-xs"><AlertCircle size={16} className="inline mr-1"/>{errMsg}</div>}
+          </div>
+        )}
+
+        {status==='complete'&&result&&(
+          <div className="flex flex-1 min-h-0 gap-2 split-h">
+            <div className="w-full xl:w-[55%] h-full flex flex-col bg-white rounded-lg shadow border border-slate-200 overflow-hidden split-pane">
+              <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5 border-b border-slate-200 flex-shrink-0">
+                <h2 className="font-bold text-xs text-slate-800 flex items-center gap-1.5"><Database size={14} className="text-purple-600"/>抽出データ</h2>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                    <TypeIcon size={11} className="text-slate-400"/>
+                    <button onClick={()=>setLeftFontSize(s=>Math.max(7,s-1))} className="text-slate-500 hover:text-blue-600 px-0.5 font-bold text-[10px] transition-colors">−</button>
+                    <span className="text-[9px] font-mono w-5 text-center text-slate-600">{leftFontSize}</span>
+                    <button onClick={()=>setLeftFontSize(s=>Math.min(16,s+1))} className="text-slate-500 hover:text-blue-600 px-0.5 font-bold text-[10px] transition-colors">+</button>
+                  </div>
+                  <button onClick={copyAllTSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold transition-colors"><CopyIcon size={10}/>TSV</button>
+                  <button onClick={copyAllCSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold transition-colors"><CopyIcon size={10}/>CSV</button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-4" style={{fontSize:`${leftFontSize}px`}}>
+                <section className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="bg-slate-100 px-2 py-1 border-b"><h3 className="font-semibold text-slate-700" style={{fontSize:`${leftFontSize}px`}}>PICO比較</h3></div>
+                  <table className="w-full"><thead className="bg-slate-50 text-slate-500 border-b"><tr><th className="px-2 py-1 text-left w-10">要素</th><th className="px-2 py-1 text-left border-l border-slate-200">設定</th><th className="px-2 py-1 text-left border-l border-slate-200 bg-blue-50/50">論文</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {[["P","p","P"],["I","i","I"],["C","c","C"]].map(([l,k,pk])=><tr key={k}><td className="px-2 py-1 font-medium">{l}</td><td className="px-2 py-1 border-l border-slate-200">{pico[k]||"-"}</td><td className="px-2 py-1 border-l border-slate-200 bg-blue-50/20">{result.paperPICO?.[pk]||"不明"}</td></tr>)}
+                    {result.paperPICO?.thirdGroup&&<tr><td className="px-2 py-1 font-medium text-purple-700">3群</td><td className="px-2 py-1 border-l border-slate-200">-</td><td className="px-2 py-1 border-l border-slate-200 bg-purple-50/30 font-medium text-purple-800">{result.paperPICO.thirdGroup}</td></tr>}
+                  </tbody></table>
+                </section>
+
+                {result.baselineCharacteristics?.length>0&&(
+                  <section className="border border-emerald-200 rounded-lg overflow-hidden">
+                    <div className="bg-emerald-50 px-2 py-1 border-b border-emerald-200 flex items-center justify-between"><h3 className="font-semibold text-emerald-800">👥 患者背景</h3><button onClick={copyBaselineTSV} className="bg-white border border-emerald-300 px-1.5 py-0.5 rounded font-medium text-emerald-700 hover:bg-emerald-100 transition-colors" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}><CopyIcon size={9} className="inline mr-0.5"/>TSV</button></div>
+                    <div className="overflow-x-auto"><table className="w-full whitespace-nowrap"><thead className="bg-slate-50 text-slate-500 border-b"><tr><th className="px-1.5 py-1 text-left border-r sticky left-0 bg-slate-50 z-10 min-w-[80px]">変数</th><th className="px-1 py-1 text-center border-r" colSpan="3">介入群</th><th className="px-1 py-1 text-center border-r" colSpan="3">対照群</th><th className="px-1 py-1 text-center">P値</th></tr><tr className="bg-slate-100 border-b" style={{fontSize:`${Math.max(7,leftFontSize*0.75)}px`}}><th className="px-1.5 py-0.5 border-r sticky left-0 bg-slate-100 z-10"/>{["N","値","SD/%","N","値","SD/%"].map((h,i)=><th key={i} className="px-1 py-0.5 text-center border-r font-medium">{h}</th>)}<th className="px-1 py-0.5 text-center"/></tr></thead>
+                    <tbody className="divide-y divide-slate-100">{result.baselineCharacteristics.map((b,idx)=>(<tr key={idx} className="hover:bg-blue-50/30"><td className="px-1.5 py-1 border-r font-medium text-slate-800 sticky left-0 bg-white z-10">{b.variable}{b.unit&&<span className="text-slate-400 ml-0.5">({b.unit})</span>}{b.pageNumber&&<span className="text-slate-400 ml-0.5 font-mono" style={{fontSize:`${Math.max(6,leftFontSize*0.65)}px`}}>P{b.pageNumber}</span>}</td><td className="px-1 py-1 border-r text-center">{b.interventionGroup?.n||"-"}</td><td className="px-1 py-1 border-r text-center font-medium text-blue-700">{b.interventionGroup?.value||"-"}</td><td className="px-1 py-1 border-r text-center text-slate-500">{b.interventionGroup?.sd||b.interventionGroup?.percent||b.interventionGroup?.iqr||"-"}</td><td className="px-1 py-1 border-r text-center">{b.comparisonGroup?.n||"-"}</td><td className="px-1 py-1 border-r text-center font-medium text-blue-700">{b.comparisonGroup?.value||"-"}</td><td className="px-1 py-1 border-r text-center text-slate-500">{b.comparisonGroup?.sd||b.comparisonGroup?.percent||b.comparisonGroup?.iqr||"-"}</td><td className="px-1 py-1 text-center">{b.pValue&&b.pValue!=="-"?<span className={`font-mono ${parseFloat(b.pValue)<0.05?'text-red-600 font-bold':'text-slate-600'}`}>{b.pValue}</span>:"-"}</td></tr>))}</tbody></table></div>
+                    <div className="px-2 py-1 bg-slate-50 border-t border-slate-200 text-slate-500 flex justify-between" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}><span>{result.baselineCharacteristics.length}項目</span><span>出処: {result.baselineCharacteristics[0]?.sourceLocation||"Table 1等"}</span></div>
+                  </section>
+                )}
+
+                <div className="space-y-3">
+                  {result.extractedOutcomes?.map((oc,idx)=>(
+                    <OutcomeCard key={idx} oc={oc} idx={idx} pico={pico} onEdit={editOutcome}
+                      onCopyTSV={copyOneTSV} onCopyCSV={copyOneCSV} fontSize={leftFontSize}
+                      onHighlight={(o)=>{setHlQuery(o.evidenceText);setHlPage(o.pageNumber);setPdfSearchText(o.evidenceText||"");}}
+                      onSendToSearch={sendToSearch}/>
+                  ))}
+                  {(!result.extractedOutcomes?.length)&&<div className="text-center py-6 text-slate-500">データなし</div>}
+                </div>
+
+                {result.expertCommentary&&(<section className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-100 overflow-hidden"><div className="px-2 py-1.5 border-b border-indigo-100 flex items-center gap-1"><Sparkles size={12} className="text-indigo-600"/><h3 className="font-bold text-indigo-800">AI考察</h3></div><div className="p-2 text-indigo-900 leading-relaxed whitespace-pre-wrap">{result.expertCommentary}</div></section>)}
+                <div className="grid grid-cols-2 gap-2">
+                  <section className="bg-white rounded-lg border border-slate-200 overflow-hidden"><div className="bg-slate-100 px-2 py-1 border-b"><h3 className="font-semibold text-slate-700">統計手法</h3></div><ul className="p-2 list-disc pl-4 text-slate-600 space-y-0.5">{result.statisticalMethods?.length?result.statisticalMethods.map((m,i)=><li key={i}>{m}</li>):<li className="text-slate-400 list-none">不明</li>}</ul></section>
+                  <section className="bg-white rounded-lg border border-slate-200 overflow-hidden"><div className="bg-slate-100 px-2 py-1 border-b"><h3 className="font-semibold text-slate-700 flex items-center gap-1"><AlertCircle size={10} className="text-amber-500"/>不明点</h3></div><ul className="p-2 list-disc pl-4 text-slate-600 space-y-0.5">{result.unclearItems?.length?result.unclearItems.map((x,i)=><li key={i}>{x}</li>):<li className="text-slate-400 list-none">なし</li>}</ul></section>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full xl:w-[45%] h-full flex flex-col bg-slate-200 rounded-lg border border-slate-300 shadow-inner overflow-hidden relative split-pane">
+              <div className="bg-slate-800 text-slate-200 text-[9px] px-2 py-1.5 flex items-center justify-between z-10 flex-shrink-0">
+                <span className="flex items-center gap-1 font-mono truncate max-w-[35%]"><FileText size={11}/>{pdfFile?.name}</span>
+                <div className="flex items-center gap-1.5">
+                  {hlQuery?<span className="bg-yellow-400 text-yellow-900 px-1 py-0.5 rounded font-bold text-[8px] animate-pulse">HL</span>:null}
+                  <div className="flex items-center gap-0.5 bg-slate-700 p-0.5 rounded">
+                    <button onClick={()=>setPdfScale(s=>Math.max(0.4,s-0.2))} className="p-0.5 hover:bg-slate-500 rounded text-slate-300 transition-colors"><ZoomOutIcon size={11}/></button>
+                    <span className="font-mono w-7 text-center text-[9px]">{Math.round(pdfScale*100)}%</span>
+                    <button onClick={()=>setPdfScale(s=>Math.min(3,s+0.2))} className="p-0.5 hover:bg-slate-500 rounded text-slate-300 transition-colors"><ZoomInIcon size={11}/></button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-700 px-2 py-1.5 flex items-center gap-1.5 z-10 flex-shrink-0 border-b border-slate-600">
+                <SearchIcon size={13} className="text-slate-400 flex-shrink-0"/>
+                <input
+                  type="text"
+                  value={pdfSearchText}
+                  onChange={e=>setPdfSearchText(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter')executePdfSearch();}}
+                  placeholder="テキストを貼り付けてEnterまたは検索ボタン..."
+                  className="flex-1 bg-slate-600 text-white text-[10px] px-2 py-1 rounded border border-slate-500 focus:outline-none focus:border-blue-400 placeholder-slate-400 font-mono transition-colors"
+                />
+                <button onClick={executePdfSearch} className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 text-[9px] font-bold px-2 py-1 rounded flex items-center gap-0.5 flex-shrink-0 transition-colors">
+                  <TargetIcon size={10}/>検索
+                </button>
+                <button onClick={()=>{document.querySelectorAll('.highlight-hook').forEach(el=>el.classList.remove('highlight-hook'));setPdfSearchText("");setHlQuery("");showToast("ハイライト解除");}} className="text-slate-400 hover:text-white text-[9px] px-1 py-1 rounded flex-shrink-0 transition-colors" title="クリア">
+                  <XCircle size={12}/>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-auto relative bg-slate-300">
+                <PdfViewer file={pdfFile} searchQuery={hlQuery} targetPage={hlPage} onToast={showToast} scale={pdfScale}/>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 12: ROOT
+   ============================================================ */
+function App(){
+  const[page,setPage]=useState("setup");
+  const[apiKey,setApiKey]=useState("");
+  const[model,setModel]=useState("");
+  const[useBuiltIn,setUseBuiltIn]=useState(true);
+  
+  const handleSetupComplete=(key,mdl,isBuiltIn)=>{
+    setApiKey(key);
+    setModel(mdl);
+    setUseBuiltIn(isBuiltIn);
+    setPage("main");
+  };
+  
+  if(page==="setup")return<SetupPage onComplete={handleSetupComplete}/>;
+  return<ExtractorPage apiKey={apiKey} model={model} useBuiltIn={useBuiltIn} onBack={()=>setPage("setup")}/>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

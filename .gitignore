@@ -1,0 +1,23 @@
+# Research PDFs (copyright concerns - don't commit)
+*.pdf
+
+# Old versions folder (keep local only)
+Old/
+
+# Image files (not core to the tool)
+*.jpg
+*.jpeg
+*.png
+!screenshot*.png
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+
+# Session exports (may contain extracted data)
+meta-extract-*.json
