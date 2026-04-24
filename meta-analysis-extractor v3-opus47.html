@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meta-Analysis Data Extractor Pro v3 — Multi-AI Brain</title>
+  <title>Meta-Analysis Data Extractor v3 — Gemini Edition</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
@@ -346,203 +346,127 @@ const CRITIC_SCHEMA = {
 };
 
 /* ============================================================
-   SECTION 4: AI PROVIDER ABSTRACTION
+   SECTION 4: GEMINI PROVIDER (Google AI Studio 専用)
    ============================================================ */
-const PROVIDERS = {
-  claude: {
-    name: "Claude (Anthropic)",
-    icon: "brain",
-    color: "from-orange-500 to-red-500",
-    models: [
-      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (最高精度/推奨)", thinking: true, priority: 1, cost: "論文1本 約$0.5〜$2", requires: "要支払い" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (コスパ良)", thinking: true, priority: 3, cost: "論文1本 約$0.1〜$0.4", requires: "要支払い" },
-      { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5 (高速/安価)", thinking: true, priority: 7, cost: "論文1本 約$0.02〜$0.08", requires: "要支払い" }
-    ],
-    defaultModel: "claude-opus-4-7",
-    keyFormat: "sk-ant-...",
-    docsUrl: "https://console.anthropic.com/settings/keys",
-    signup: "https://console.anthropic.com/",
-    billing: "前払いクレジット（最低$5〜）",
-    freeTier: "なし（無料枠なし）",
-    rateLimit: "Tier 1: 50 req/min、Tier 2+ で緩和",
-    strengths: "ネイティブPDF対応 / 16K思考トークン / 最高の推論精度 / Tool Use構造化出力"
-  },
-  gemini: {
-    name: "Google Gemini",
-    icon: "sparkles",
-    color: "from-blue-500 to-cyan-500",
-    models: [
-      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro (高精度)", thinking: true, priority: 2, cost: "無料枠 or 約$0.1〜$0.5", requires: "無料枠: 5req/分・25req/日" },
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash (バランス/推奨)", thinking: true, priority: 4, cost: "ほぼ無料", requires: "無料枠: 10req/分・250req/日" },
-      { id: "gemini-2.5-flash-preview-09-2025", name: "Gemini 2.5 Flash Preview", thinking: true, priority: 6, cost: "ほぼ無料", requires: "無料枠: 10req/分" }
-    ],
-    defaultModel: "gemini-2.5-pro",
-    keyFormat: "AIza...",
-    docsUrl: "https://aistudio.google.com/apikey",
-    signup: "https://aistudio.google.com/",
-    billing: "無料枠あり / 有料は従量課金（Pay-as-you-go）",
-    freeTier: "あり（Gemini 2.5 Flash/Pro ともに利用可、ただしレート制限厳しい）",
-    rateLimit: "無料: Pro=5req/分, Flash=10req/分 / 有料化で大幅緩和",
-    strengths: "無料で高性能モデル利用可 / 思考モード搭載 / マルチモーダル強い"
-  },
-  openai: {
-    name: "OpenAI (GPT)",
-    icon: "cpu",
-    color: "from-emerald-500 to-teal-500",
-    models: [
-      { id: "gpt-5", name: "GPT-5 (最高精度)", thinking: true, priority: 2, cost: "論文1本 約$0.3〜$1.5", requires: "Tier 1以上 (累積$5支払い後)" },
-      { id: "gpt-4.1", name: "GPT-4.1 (推奨)", thinking: false, priority: 5, cost: "論文1本 約$0.1〜$0.4", requires: "通常利用可" },
-      { id: "gpt-4o", name: "GPT-4o (コスパ良)", thinking: false, priority: 6, cost: "論文1本 約$0.05〜$0.2", requires: "通常利用可" }
-    ],
-    defaultModel: "gpt-4.1",
-    keyFormat: "sk-...",
-    docsUrl: "https://platform.openai.com/api-keys",
-    signup: "https://platform.openai.com/",
-    billing: "前払いクレジット（最低$5〜）",
-    freeTier: "なし（無料枠なし）",
-    rateLimit: "Tierに応じて段階的（Tier 1→5）",
-    strengths: "安定した精度 / 広く使われる標準 / JSON Schema対応"
-  }
+// Geminiモデル一覧（無料枠の rpm/rpd は 2026 年初頭時点の目安。実際の上限は公式参照）
+const GEMINI_MODELS = [
+  { id: "gemini-2.5-pro",          name: "Gemini 2.5 Pro (最高精度)",         thinking: true, priority: 1, rpm: 5,  rpd: 100,  tag: "精度最優先",   cost: "無料枠あり (5/分・100/日) ／ 有料 約$0.1〜$0.5" },
+  { id: "gemini-2.5-flash",        name: "Gemini 2.5 Flash (推奨/バランス)", thinking: true, priority: 2, rpm: 10, rpd: 500,  tag: "おすすめ",     cost: "無料枠あり (10/分・500/日) ／ ほぼ無料" },
+  { id: "gemini-2.5-flash-lite",   name: "Gemini 2.5 Flash Lite (高速/大量)",thinking: false,priority: 3, rpm: 15, rpd: 1000, tag: "大量処理向け", cost: "無料枠あり (15/分・1000/日)" },
+  { id: "gemini-2.0-flash",        name: "Gemini 2.0 Flash (旧/最大無料枠)", thinking: false,priority: 4, rpm: 15, rpd: 1500, tag: "無料枠最大",   cost: "無料枠あり (15/分・1500/日)" }
+];
+
+// 503/429 で本モデルが詰まった時の自動フォールバック先（priority 順）
+const FALLBACK_CHAIN = {
+  "gemini-2.5-pro":        ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
+  "gemini-2.5-flash":      ["gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
+  "gemini-2.5-flash-lite": ["gemini-2.0-flash", "gemini-2.5-flash"],
+  "gemini-2.0-flash":      ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
 };
 
-// Pick best provider for critic/verify based on priority
-function pickBestProvider(providers, excludeProvider = null) {
-  const candidates = [];
-  Object.entries(providers).forEach(([name, cfg]) => {
-    if (!cfg.enabled || !cfg.apiKey) return;
-    if (name === excludeProvider) return;
-    const modelInfo = PROVIDERS[name].models.find(m => m.id === cfg.model);
-    candidates.push({ providerName: name, apiKey: cfg.apiKey, model: cfg.model, priority: modelInfo?.priority || 99 });
-  });
-  candidates.sort((a, b) => a.priority - b.priority);
-  return candidates[0] || null;
-}
-
-// Unified critic/verify call that works with any provider
-async function callCriticAnyProvider(provider, systemPrompt, userText, pdfBase64, images, thinkingBudget, criticSchema) {
-  if (provider.providerName === 'claude') {
-    return await callClaude({
-      apiKey: provider.apiKey, model: provider.model,
-      systemPrompt, userText, pdfBase64,
-      thinkingBudget, useTools: false
-    });
-  } else if (provider.providerName === 'gemini') {
-    return await callGemini({
-      apiKey: provider.apiKey, model: provider.model,
-      systemPrompt, userText, images,
-      schema: criticSchema ? toGeminiSchema(criticSchema) : null,
-      thinkingBudget: Math.min(thinkingBudget, 12000)
-    });
-  } else if (provider.providerName === 'openai') {
-    return await callOpenAI({
-      apiKey: provider.apiKey, model: provider.model,
-      systemPrompt, userText, images,
-      schema: null
-    });
-  }
-  throw new Error(`未対応プロバイダー: ${provider.providerName}`);
-}
-
-// Exponential backoff retry
-const fetchWithRetry = async (url, options, retries = 5) => {
-  const delays = [1000, 2000, 4000, 8000, 16000];
-  let lastErr;
-  for (let i = 0; i < retries; i++) {
-    try {
-      const r = await fetch(url, options);
-      if (!r.ok) {
-        let d = {}; try { d = await r.json(); } catch (e) {}
-        const msg = d.error?.message || d.error?.type || r.statusText;
-        // 4xx clients errors (except 429) should not be retried
-        if (r.status >= 400 && r.status < 500 && r.status !== 429) {
-          throw new Error(`API Error ${r.status}: ${msg}`);
-        }
-        throw new Error(`API Error ${r.status}: ${msg}`);
-      }
-      return await r.json();
-    } catch (e) {
-      lastErr = e;
-      if (i === retries - 1) throw e;
-      // Don't retry auth errors
-      if (/401|403|invalid.*key|unauthorized/i.test(e.message)) throw e;
-      await new Promise(r => setTimeout(r, delays[i]));
-    }
-  }
-  throw lastErr;
+const GEMINI = {
+  name: "Google Gemini (AI Studio)",
+  models: GEMINI_MODELS,
+  defaultModel: "gemini-2.5-flash",
+  keyFormat: "AIza...",
+  docsUrl: "https://aistudio.google.com/apikey",
+  signup: "https://aistudio.google.com/"
 };
 
-// Claude API call (Anthropic)
-async function callClaude({ apiKey, model, systemPrompt, userText, pdfBase64, images, thinkingBudget = 16000, useTools = true }) {
-  const content = [];
-  if (pdfBase64) {
-    content.push({
-      type: "document",
-      source: { type: "base64", media_type: "application/pdf", data: pdfBase64 },
-      cache_control: { type: "ephemeral" }
-    });
-  }
-  if (images && images.length) {
-    images.forEach(img => content.push({
-      type: "image",
-      source: { type: "base64", media_type: "image/jpeg", data: img.inlineData.data }
-    }));
-  }
-  content.push({ type: "text", text: userText });
-
-  const body = {
-    model: model,
-    max_tokens: 16000,
-    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: content }]
+// 複数キーを順番に使うラウンドロビン（同プロジェクトのキーは枠を共有しますが、別プロジェクトのキーなら無料枠が掛け算で増えます）
+function makeKeyRotator(keys) {
+  const list = (Array.isArray(keys) ? keys : [keys]).map(k => (k || '').trim()).filter(Boolean);
+  let idx = 0;
+  return {
+    size: list.length,
+    next() { if (!list.length) return null; const k = list[idx % list.length]; idx++; return k; },
+    all() { return list.slice(); }
   };
-
-  // Extended thinking
-  if (thinkingBudget > 0) {
-    body.thinking = { type: "enabled", budget_tokens: thinkingBudget };
-    body.max_tokens = Math.max(body.max_tokens, thinkingBudget + 8000);
-  }
-
-  // Tool use for structured output
-  if (useTools) {
-    body.tools = [{
-      name: "submit_extraction",
-      description: "論文から抽出したメタ分析データを構造化して提出する",
-      input_schema: EXTRACT_SCHEMA_JSON
-    }];
-    body.tool_choice = thinkingBudget > 0 ? { type: "any" } : { type: "tool", name: "submit_extraction" };
-  }
-
-  const resp = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-      "content-type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-
-  // Parse response - find tool_use block or text block
-  if (useTools) {
-    const toolBlock = resp.content?.find(c => c.type === "tool_use");
-    if (toolBlock?.input) return toolBlock.input;
-  }
-  const textBlock = resp.content?.find(c => c.type === "text");
-  if (textBlock?.text) {
-    try {
-      // Strip markdown code fences if present
-      const t = textBlock.text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-      return JSON.parse(t);
-    } catch (e) {
-      throw new Error("Claude応答のJSONパース失敗: " + e.message);
-    }
-  }
-  throw new Error("Claude応答に有効なコンテンツなし");
 }
 
-// Gemini API call (Google)
-async function callGemini({ apiKey, model, systemPrompt, userText, pdfBase64, images, schema, thinkingBudget = 8000 }) {
+// Critic 役の選択（Gemini のみなので最高 priority のモデルを返す。Pro が設定されていなければ Flash）
+function pickCriticModel(extractionModel) {
+  if (extractionModel === "gemini-2.5-pro") return "gemini-2.5-pro";
+  // 抽出が Flash 系なら Critic は一段上の Pro を試したい
+  return "gemini-2.5-pro";
+}
+
+// Critic/Verify 用の呼び出し（Geminiのみ）
+async function callCriticAnyProvider(rotator, model, systemPrompt, userText, pdfBase64, images, thinkingBudget, criticSchema, onNotice) {
+  return await callGemini({
+    rotator, model,
+    systemPrompt, userText, images, pdfBase64,
+    schema: criticSchema ? toGeminiSchema(criticSchema) : null,
+    thinkingBudget: Math.min(thinkingBudget || 0, 12000),
+    onNotice
+  });
+}
+
+// fetch を1回だけ実行。リトライ可能性 (kind) と待機ヒント秒数 (retryAfterSec) を返す
+async function singleFetch(url, options) {
+  let resp;
+  try { resp = await fetch(url, options); }
+  catch (e) {
+    // ネットワークエラー
+    return { ok: false, kind: 'network', message: e.message || 'network error', retryAfterSec: 0, status: 0 };
+  }
+
+  if (resp.ok) {
+    try { return { ok: true, data: await resp.json() }; }
+    catch (e) { return { ok: false, kind: 'fatal', message: 'JSONパース失敗: ' + e.message, status: resp.status }; }
+  }
+
+  // エラーボディの読み取り
+  let body = {};
+  try { body = await resp.json(); } catch (e) {}
+  const msg = body.error?.message || body.error?.status || resp.statusText || '';
+
+  // Retry-After ヘッダー or エラー本文の retryDelay を秒数化
+  let retryAfterSec = 0;
+  const ra = resp.headers.get('retry-after');
+  if (ra) {
+    const n = parseInt(ra, 10);
+    if (!isNaN(n)) retryAfterSec = n;
+    else { const dt = Date.parse(ra); if (!isNaN(dt)) retryAfterSec = Math.max(0, Math.round((dt - Date.now()) / 1000)); }
+  }
+  const rd = body.error?.details?.find?.(d => d['@type']?.includes?.('RetryInfo'))?.retryDelay;
+  if (rd && !retryAfterSec) {
+    const m = String(rd).match(/(\d+(?:\.\d+)?)s/);
+    if (m) retryAfterSec = Math.ceil(parseFloat(m[1]));
+  }
+
+  // 種別判定
+  const status = resp.status;
+  const overloaded = status === 503 || /unavailable|overload|over.{0,3}capacity|busy|high demand/i.test(msg);
+  const rateLimit = status === 429 || /rate.?limit|quota|exhaust/i.test(msg);
+  const auth = status === 401 || status === 403 || /invalid.*key|unauthorized|api[_ ]?key/i.test(msg);
+  const badReq = status === 400 || status === 404;
+
+  let kind = 'fatal';
+  if (auth) kind = 'auth';
+  else if (overloaded) kind = 'overloaded';     // 503 → モデル過負荷。フォールバック推奨
+  else if (rateLimit) kind = 'ratelimit';       // 429 → レート制限。キー切替 or 待機
+  else if (status >= 500) kind = 'server';       // 5xx → リトライ
+  else if (badReq) kind = 'fatal';
+  else kind = 'fatal';
+
+  return { ok: false, kind, status, message: `${status} ${msg}`.trim(), retryAfterSec };
+}
+
+// 503/429 を加味した待機（ジッタ付き）
+function backoffMs(attempt, kind, retryAfterSec) {
+  if (retryAfterSec > 0) return Math.min(retryAfterSec * 1000 + Math.random() * 500, 60000);
+  // overloaded は長め。それ以外は通常指数バックオフ
+  const base = kind === 'overloaded' ? 6000 : kind === 'ratelimit' ? 8000 : 1500;
+  const exp = base * Math.pow(2, attempt);
+  const jitter = Math.random() * exp * 0.4;
+  return Math.min(exp + jitter, 45000);
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Gemini API 呼び出し（マルチキー・自動モデルフォールバック・賢いリトライ）
+async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, images, schema, thinkingBudget = 0, onNotice }) {
   const parts = [{ text: userText }];
   if (pdfBase64) parts.push({ inlineData: { data: pdfBase64, mimeType: "application/pdf" } });
   if (images) images.forEach(img => parts.push(img));
@@ -553,83 +477,90 @@ async function callGemini({ apiKey, model, systemPrompt, userText, pdfBase64, im
     genConfig.responseSchema = schema;
   }
   if (thinkingBudget > 0) {
-    genConfig.thinkingConfig = { thinkingBudget: thinkingBudget };
+    genConfig.thinkingConfig = { thinkingBudget };
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const body = {
-    contents: [{ role: "user", parts: parts }],
+  const body = JSON.stringify({
+    contents: [{ role: "user", parts }],
     systemInstruction: { parts: [{ text: systemPrompt }] },
     generationConfig: genConfig
-  };
-
-  const resp = await fetchWithRetry(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
   });
 
-  const text = resp.candidates?.[0]?.content?.parts?.find(p => p.text)?.text;
-  if (!text) throw new Error("Gemini応答なし");
-  try {
-    const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-    return JSON.parse(cleaned);
-  } catch (e) {
-    throw new Error("Gemini応答のJSONパース失敗: " + e.message);
+  // 試すモデルの順序（最初は指定モデル → 503 で詰まれば fallback chain）
+  const modelChain = [model, ...(FALLBACK_CHAIN[model] || [])];
+  const keys = rotator.all();
+  if (!keys.length) throw new Error("APIキーが設定されていません");
+
+  const notice = (msg) => { try { onNotice && onNotice(msg); } catch (e) {} };
+  let lastErr = null;
+
+  for (let mIdx = 0; mIdx < modelChain.length; mIdx++) {
+    const tryModel = modelChain[mIdx];
+    if (mIdx > 0) notice(`⚠️ ${model} が混雑のため ${tryModel} に切替`);
+
+    // 各モデルで最大 5 周（キーをローテートしながら）
+    const maxAttempts = Math.max(5, keys.length * 2);
+    let kIdx = 0;
+    let consecutiveOverload = 0;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const key = keys[kIdx % keys.length]; kIdx++;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${tryModel}:generateContent?key=${key}`;
+
+      const r = await singleFetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+
+      if (r.ok) {
+        const text = r.data?.candidates?.[0]?.content?.parts?.find(p => p.text)?.text;
+        if (!text) {
+          const blockReason = r.data?.promptFeedback?.blockReason;
+          if (blockReason) throw new Error(`Geminiが応答ブロック (${blockReason}): 安全フィルタの可能性`);
+          throw new Error("Gemini応答に本文なし");
+        }
+        try {
+          const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+          return JSON.parse(cleaned);
+        } catch (e) {
+          throw new Error("Gemini応答のJSONパース失敗: " + e.message);
+        }
+      }
+
+      lastErr = new Error(`[${tryModel}] ${r.message}`);
+
+      // 認証エラーは即終了（リトライしても無駄）
+      if (r.kind === 'auth') throw lastErr;
+      // 不正リクエスト等もリトライ不可
+      if (r.kind === 'fatal') throw lastErr;
+
+      if (r.kind === 'overloaded') {
+        consecutiveOverload++;
+        // 同モデルで 2 回連続 503 → フォールバックモデルへ
+        if (consecutiveOverload >= 2 && mIdx < modelChain.length - 1) break;
+      } else {
+        consecutiveOverload = 0;
+      }
+
+      // 待機してリトライ
+      const waitMs = backoffMs(attempt, r.kind, r.retryAfterSec);
+      notice(`${r.kind === 'overloaded' ? '🔁 503 過負荷' : r.kind === 'ratelimit' ? '⏳ レート制限' : '🔁 再試行'} (${tryModel}) → ${Math.round(waitMs/1000)}秒待機 [${attempt+1}/${maxAttempts}]`);
+      await sleep(waitMs);
+    }
   }
+
+  throw lastErr || new Error("Gemini呼び出しに失敗");
 }
 
-// OpenAI API call
-async function callOpenAI({ apiKey, model, systemPrompt, userText, images, schema }) {
-  const userContent = [{ type: "text", text: userText }];
-  if (images) {
-    images.forEach(img => userContent.push({
-      type: "image_url",
-      image_url: { url: `data:image/jpeg;base64,${img.inlineData.data}`, detail: "high" }
-    }));
-  }
-
-  const body = {
-    model: model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent }
-    ],
-    temperature: 0.1,
-    max_tokens: 16000
-  };
-  if (schema) {
-    body.response_format = {
-      type: "json_schema",
-      json_schema: { name: "extraction", schema: schema, strict: false }
-    };
-  } else {
-    body.response_format = { type: "json_object" };
-  }
-
-  const resp = await fetchWithRetry("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify(body)
+// 統一インターフェイス（互換のため残す。今は Gemini のみ）
+async function callAI(_providerName, config, params) {
+  return await callGemini({
+    rotator: config.rotator,
+    model: config.model,
+    schema: params.schema || EXTRACT_SCHEMA_GEMINI,
+    ...params
   });
-
-  const text = resp.choices?.[0]?.message?.content;
-  if (!text) throw new Error("OpenAI応答なし");
-  try { return JSON.parse(text); }
-  catch (e) { throw new Error("OpenAI応答のJSONパース失敗: " + e.message); }
-}
-
-// Unified AI caller
-async function callAI(providerName, config, params) {
-  const { apiKey, model } = config;
-  if (providerName === "claude") {
-    return await callClaude({ apiKey, model, ...params, useTools: params.useTools !== false });
-  } else if (providerName === "gemini") {
-    return await callGemini({ apiKey, model, schema: params.schema || EXTRACT_SCHEMA_GEMINI, ...params });
-  } else if (providerName === "openai") {
-    return await callOpenAI({ apiKey, model, schema: params.schema || EXTRACT_SCHEMA_JSON, ...params });
-  }
-  throw new Error(`未対応のプロバイダー: ${providerName}`);
 }
 
 /* ============================================================
@@ -903,20 +834,24 @@ function applyCorrections(extracted, criticReview) {
   return result;
 }
 
-// Main extraction pipeline
-async function runExtractionPipeline({ providers, accuracyMode, pdfFile, pico, outcomes, onProgress }) {
+// Main extraction pipeline (Gemini single-provider)
+async function runExtractionPipeline({ apiKeys, model, accuracyMode, pdfFile, pico, outcomes, onProgress, onNotice }) {
   const picoBlock = `【PICO設定】\nP: ${pico.p}\nI: ${pico.i}\nC: ${pico.c}\n\n【優先抽出アウトカム】\n${
     outcomes.filter(o => o.name.trim()).length
       ? outcomes.filter(o => o.name.trim()).map(o => `- ${o.name}${o.definition ? `: ${o.definition}` : ''}`).join('\n')
       : '全自動抽出モード（論文から全アウトカムを網羅）'
   }\n`;
 
-  // Stage 1: Prepare PDF
+  const rotator = makeKeyRotator(apiKeys);
+  if (rotator.size === 0) throw new Error("APIキーが設定されていません");
+
+  // Stage 1: Prepare PDF (画像化のスケールは精度モードで切替。free 枠を意識して標準では低め)
+  const imgScale = accuracyMode === 'ultra' ? 3.5 : accuracyMode === 'high' ? 3.0 : 2.5;
   onProgress("stage1", "PDF準備中...", 5);
   const [pdfBase64, pdfText, pdfImages] = await Promise.all([
     getPdfBase64(pdfFile),
     extractPdfText(pdfFile),
-    extractPdfImages(pdfFile, m => onProgress("stage1", m, 10), accuracyMode === 'ultra' ? 4.0 : 3.0)
+    extractPdfImages(pdfFile, m => onProgress("stage1", m, 10), imgScale)
   ]);
   onProgress("stage1", "PDF準備完了", 20);
 
@@ -928,72 +863,39 @@ async function runExtractionPipeline({ providers, accuracyMode, pdfFile, pico, o
 \n【参照テキスト（OCR済みPDF本文）】
 ${pdfText.substring(0, 40000)}`;
 
-  // Stage 2: Run extractions in parallel based on providers
-  const activeProviders = Object.entries(providers).filter(([_, cfg]) => cfg.enabled && cfg.apiKey);
-  if (activeProviders.length === 0) throw new Error("有効なAIプロバイダーがありません。APIキーを設定してください。");
+  // Stage 2: Extraction
+  const modelInfo = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[1];
+  onProgress("stage2", `Gemini 抽出中 (${modelInfo.name.replace(/\s*\(.+/, '')})...`, 25);
+  const thinkingBudget = accuracyMode === 'ultra' && modelInfo.thinking ? 12000
+                       : accuracyMode === 'high' && modelInfo.thinking ? 6000
+                       : 0;
 
-  onProgress("stage2", `並列抽出 (${activeProviders.length}モデル)...`, 25);
-
-  const extractionPromises = [];
-  const extractionLabels = [];
-
-  activeProviders.forEach(([name, cfg], idx) => {
-    extractionLabels.push(`${PROVIDERS[name].name} (${cfg.model})`);
-    if (name === "claude") {
-      // Claude gets both PDF native and text
-      extractionPromises.push(
-        callAI(name, cfg, {
-          systemPrompt: SYSTEM_PROMPT_EXTRACT,
-          userText: userPrompt,
-          pdfBase64: pdfBase64,
-          thinkingBudget: accuracyMode === 'ultra' ? 16000 : accuracyMode === 'high' ? 8000 : 2000
-        }).catch(e => ({ _error: e.message, _provider: name }))
-      );
-    } else if (name === "gemini") {
-      // Gemini gets text + images for best results
-      extractionPromises.push(
-        callAI(name, cfg, {
-          systemPrompt: SYSTEM_PROMPT_EXTRACT,
-          userText: userPrompt,
-          images: pdfImages,
-          thinkingBudget: accuracyMode === 'ultra' ? 12000 : accuracyMode === 'high' ? 6000 : 0
-        }).catch(e => ({ _error: e.message, _provider: name }))
-      );
-    } else if (name === "openai") {
-      // OpenAI with images
-      extractionPromises.push(
-        callAI(name, cfg, {
-          systemPrompt: SYSTEM_PROMPT_EXTRACT,
-          userText: userPrompt,
-          images: pdfImages
-        }).catch(e => ({ _error: e.message, _provider: name }))
-      );
-    }
-  });
-
-  const results = await Promise.all(extractionPromises);
-  const validResults = results.filter(r => r && !r._error);
-  const errors = results.filter(r => r?._error);
-
-  if (validResults.length === 0) {
-    throw new Error("すべての抽出が失敗しました:\n" + errors.map(e => `- ${e._provider}: ${e._error}`).join('\n'));
+  let extracted;
+  try {
+    extracted = await callGemini({
+      rotator, model,
+      systemPrompt: SYSTEM_PROMPT_EXTRACT,
+      userText: userPrompt,
+      images: pdfImages,
+      schema: EXTRACT_SCHEMA_GEMINI,
+      thinkingBudget,
+      onNotice: (m) => { onProgress("stage2", m, 35); onNotice && onNotice(m); }
+    });
+  } catch (e) {
+    throw new Error(`抽出に失敗しました: ${e.message}\n\n💡 ヒント: 503 (過負荷) が続く場合は、後述の使い方ガイドの【⑥ トラブル対処】を参照してください。`);
   }
 
-  // Stage 3: Merge (if multiple)
-  onProgress("stage3", "結果統合中...", 50);
-  let merged = validResults[0];
-  for (let i = 1; i < validResults.length; i++) {
-    merged = mergeResults(merged, validResults[i]);
-  }
-  merged._sources = extractionLabels.slice(0, validResults.length);
-  merged._errors = errors.map(e => `${e._provider}: ${e._error}`);
+  let merged = extracted;
+  merged._sources = [`${modelInfo.name}`];
 
-  // Stage 4: Critic review (uses best available provider)
-  const criticProvider = pickBestProvider(providers);
-  merged._criticProviderUsed = criticProvider ? `${PROVIDERS[criticProvider.providerName].name} (${criticProvider.model})` : null;
-  if ((accuracyMode === 'high' || accuracyMode === 'ultra') && criticProvider) {
-    const criticLabel = `${PROVIDERS[criticProvider.providerName].name} ${criticProvider.model}`;
-    onProgress("stage4", `${criticLabel} Critic レビュー中...`, 65);
+  // Stage 3 (簡略): 結果整形
+  onProgress("stage3", "結果整形中...", 50);
+
+  // Stage 4: Critic (Pro で監査。high/ultra のみ)
+  if (accuracyMode === 'high' || accuracyMode === 'ultra') {
+    const criticModel = pickCriticModel(model);
+    merged._criticProviderUsed = `Gemini ${criticModel}`;
+    onProgress("stage4", `${criticModel} で Critic レビュー中...`, 65);
     try {
       const criticPrompt = `【抽出されたデータ】
 ${JSON.stringify(merged, null, 2).substring(0, 40000)}
@@ -1005,13 +907,12 @@ ${pdfText.substring(0, 30000)}
 上記抽出データに対して徹底的に監査を実施し、corrections / missingOutcomes / overallAssessment / confidenceScore を含むJSONを返してください。`;
 
       const criticReview = await callCriticAnyProvider(
-        criticProvider,
-        SYSTEM_PROMPT_CRITIC,
-        criticPrompt,
-        pdfBase64,
-        pdfImages,
-        accuracyMode === 'ultra' ? 16000 : 8000,
-        CRITIC_SCHEMA
+        rotator, criticModel,
+        SYSTEM_PROMPT_CRITIC, criticPrompt,
+        pdfBase64, pdfImages,
+        accuracyMode === 'ultra' ? 12000 : 8000,
+        CRITIC_SCHEMA,
+        (m) => { onProgress("stage4", m, 70); onNotice && onNotice(m); }
       );
 
       merged = applyCorrections(merged, criticReview);
@@ -1020,13 +921,15 @@ ${pdfText.substring(0, 30000)}
     } catch (e) {
       console.warn("Critic段階失敗:", e);
       merged._criticError = e.message;
+      onProgress("stage4", `Criticスキップ (${e.message.substring(0, 60)}...)`, 80);
     }
   }
 
-  // Stage 5: Per-outcome verification (ultra mode, uses best provider)
-  if (accuracyMode === 'ultra' && criticProvider && merged.extractedOutcomes?.length) {
+  // Stage 5: 個別検証 (ultra のみ、低信頼度項目)
+  if (accuracyMode === 'ultra' && merged.extractedOutcomes?.length) {
+    const criticModel = pickCriticModel(model);
     const toVerify = merged.extractedOutcomes.filter(o => o.confidence === 'low' || (!o.confidence && o.notes?.includes('Critic')));
-    if (toVerify.length > 0 && toVerify.length <= 10) {
+    if (toVerify.length > 0 && toVerify.length <= 8) {
       onProgress("stage5", `個別検証 (${toVerify.length}項目)...`, 85);
       for (let i = 0; i < toVerify.length; i++) {
         const o = toVerify[i];
@@ -1037,12 +940,10 @@ ${JSON.stringify(o, null, 2)}
 ${pdfText.substring(0, 20000)}
 \n検証してJSONで返してください。`;
           const verified = await callCriticAnyProvider(
-            criticProvider,
-            SYSTEM_PROMPT_VERIFY,
-            verifyPrompt,
-            null, null,
-            4000,
-            null
+            rotator, criticModel,
+            SYSTEM_PROMPT_VERIFY, verifyPrompt,
+            null, null, 4000, null,
+            (m) => { onProgress("stage5", `検証 ${i+1}/${toVerify.length}: ${m}`, 85 + (i / toVerify.length) * 10); }
           );
           if (verified) {
             o._verified = verified.verified;
@@ -1173,391 +1074,506 @@ function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight,
 }
 
 /* ============================================================
-   SECTION 12: SETUP PAGE (Multi-Provider)
+   SECTION 12: SETUP PAGE (Gemini Only — Free-Tier Optimized)
    ============================================================ */
-function ProviderCard({ name, provider, config, onUpdate, onVerify, verifyState }) {
-  const [showKey, setShowKey] = useState(false);
-  const Icon = provider.icon === 'brain' ? BrainIcon : provider.icon === 'cpu' ? CpuIcon : Sparkles;
-
-  const handleKeyChange = (v) => onUpdate({ ...config, apiKey: v });
-  const handleModelChange = (v) => onUpdate({ ...config, model: v });
-  const handleToggle = () => onUpdate({ ...config, enabled: !config.enabled });
-
-  return (
-    <div className={`bg-white rounded-xl border-2 transition-all shadow-sm overflow-hidden ${config.enabled && config.apiKey ? 'border-purple-300 shadow-md' : 'border-slate-200'}`}>
-      <div className={`bg-gradient-to-r ${provider.color} text-white px-3 py-2 flex items-center justify-between`}>
-        <div className="flex items-center gap-2">
-          <Icon size={18}/>
-          <h3 className="font-bold text-sm">{provider.name}</h3>
-        </div>
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <input type="checkbox" checked={config.enabled} onChange={handleToggle} className="w-4 h-4"/>
-          <span className="text-xs font-medium">有効化</span>
-        </label>
-      </div>
-      <div className={`p-3 space-y-2 transition-opacity ${!config.enabled ? 'opacity-50' : ''}`}>
-        <div>
-          <label className="block text-[10px] font-semibold text-slate-600 mb-1 flex items-center gap-1"><KeyIcon size={10}/>APIキー</label>
-          <div className="relative">
-            <input
-              type={showKey ? "text" : "password"}
-              value={config.apiKey || ""}
-              onChange={e => handleKeyChange(e.target.value)}
-              placeholder={provider.keyFormat}
-              disabled={!config.enabled}
-              className="w-full px-3 py-2 pr-10 border-2 border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-purple-500 api-input-glow"
-            />
-            <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" disabled={!config.enabled}>
-              {showKey ? <EyeOffIcon size={14}/> : <EyeIcon size={14}/>}
-            </button>
-          </div>
-          <a href={provider.docsUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-blue-600 hover:underline inline-flex items-center gap-0.5 mt-1">
-            キー取得 <LinkIcon size={9}/>
-          </a>
-        </div>
-        <div>
-          <label className="block text-[10px] font-semibold text-slate-600 mb-1">モデル</label>
-          <select value={config.model || provider.defaultModel} onChange={e => handleModelChange(e.target.value)} disabled={!config.enabled} className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono bg-white">
-            {provider.models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-2 pt-1">
-          <button onClick={() => onVerify(name)} disabled={!config.enabled || !config.apiKey || verifyState?.verifying} className="flex-1 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white font-semibold text-[11px] px-3 py-1.5 rounded-lg flex items-center gap-1 justify-center">
-            {verifyState?.verifying ? <><span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"/>確認中</> : <><Sparkles size={11}/>接続テスト</>}
-          </button>
-          {verifyState?.result === 'ok' && <span className="text-emerald-600"><CheckCircle2 size={18}/></span>}
-          {verifyState?.result === 'error' && <span className="text-red-600"><XCircle size={18}/></span>}
-        </div>
-        {verifyState?.message && (
-          <div className={`text-[10px] px-2 py-1 rounded ${verifyState.result === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-            {verifyState.message}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function renderBold(text) {
   if (!text) return null;
   const parts = String(text).split(/\*\*(.+?)\*\*/g);
   return parts.map((p, i) => i % 2 === 1 ? React.createElement('b', { key: i }, p) : p);
 }
 
-function ApiKeyGuide() {
-  const [open, setOpen] = useState(null);
-
-  const guides = {
-    claude: {
-      title: "Claude (Anthropic) APIキー取得手順",
-      color: "from-orange-500 to-red-500",
-      tagline: "最高精度。論文解析の本命。ただし無料枠なし。Max/Pro Plan加入者も別途API契約が必要。",
-      steps: [
-        { t: "⚠️ 最重要：claude.ai と API は別サービス", d: "**claude.ai（チャット版。Free/Pro/Max/Team Plan すべて）と console.anthropic.com（API）は完全に別の契約・別の課金**です。**Max Plan（$100/月〜）に加入していても API は 1 円も使えません**。claude.ai の Settings 画面には API キー発行機能は**ありません**。アクセス先を間違えないよう注意（claude.ai ではなく **console.anthropic.com**）" },
-        { t: "API用アカウント作成", d: "**console.anthropic.com** にアクセスし、メールアドレスと電話番号でサインアップ（電話番号認証が必須）。claude.ai と同じメールでログインしても、**API用の組織（Organization）は別途作成**されます" },
-        { t: "支払い情報の登録（Max Planとは別建て）", d: "Settings → **Billing** で「Add Credit」。クレジットカード登録後、**最低 $5** の前払いクレジットを購入します（無料枠なし）。**Max Plan の月額料金とは完全に別の課金**で、API利用分はここから消費されます。論文1本あたり Opus 4.7 で $0.5〜$2 程度" },
-        { t: "APIキーの作成", d: "console.anthropic.com の Settings → **API Keys** → 「Create Key」。ワークスペースとキー名を選んで生成。**sk-ant-** で始まる文字列が発行されます（claude.ai 側には絶対に表示されません）" },
-        { t: "本アプリへ貼り付け", d: "上の Claude カードで有効化 → キーを貼付 → 接続テスト" }
-      ],
-      pricing: [
-        "Opus 4.7: 論文1本あたり 約$0.5〜$2（思考16K時）",
-        "Sonnet 4.6: 論文1本あたり 約$0.1〜$0.4（コスパ最良）",
-        "Haiku 4.5: 論文1本あたり 約$0.02〜$0.08（大量処理向け）"
-      ],
-      limits: [
-        "Tier 1（開始時）: 50 req/min、入力5 req/min で制限あり",
-        "Tier 2 ($40以上の支払い後): 制限大幅緩和",
-        "Tier 3/4 で更に緩和"
-      ],
-      tips: [
-        "✓ 初めはまず $5 クレジット + Sonnet 4.6 で試すのが安全",
-        "✓ 本格運用は Opus 4.7 / 重要論文のみ（コスト考慮）",
-        "✓ 本アプリはネイティブPDF対応 → Claude の強みを最大活用",
-        "✓ 思考トークン16K は Opus 4.7 の本気モード"
-      ],
-      urls: { main: "https://console.anthropic.com/", keys: "https://console.anthropic.com/settings/keys", pricing: "https://www.anthropic.com/pricing" }
-    },
-    gemini: {
-      title: "Google Gemini APIキー取得手順",
-      color: "from-blue-500 to-cyan-500",
-      tagline: "無料枠あり！Gemini 2.5 Pro も利用可能（ただしレート制限厳しい）",
-      steps: [
-        { t: "Google AI Studio を開く", d: "aistudio.google.com/apikey にアクセス（Googleアカウントでログイン）" },
-        { t: "APIキーの作成", d: "「Create API Key」ボタンをクリック。既存のGCPプロジェクトが無い場合は自動作成されます。**AIza** で始まる文字列が発行されます" },
-        { t: "有料化(任意)", d: "無料枠では Gemini 2.5 Pro は **5 req/分・25 req/日** と厳しい制限。本格利用には GCP コンソールで Billing を有効化して Pay-as-you-go に切り替え（制限が大幅緩和）" },
-        { t: "本アプリへ貼り付け", d: "上の Gemini カードで有効化 → キーを貼付 → 接続テスト" }
-      ],
-      pricing: [
-        "Gemini 2.5 Flash: 無料枠で処理可能（1日250リクエストまで）",
-        "Gemini 2.5 Pro (無料枠): 1日25リクエストまで（論文1-2本/日）",
-        "Gemini 2.5 Pro (有料): 論文1本 約$0.1〜$0.5"
-      ],
-      limits: [
-        "【無料】Gemini 2.5 Flash: 10 req/分、250 req/日、250K tokens/分",
-        "【無料】Gemini 2.5 Pro: 5 req/分、25 req/日（非常に厳しい）",
-        "【有料】上限大幅緩和。コストは $0.075/1Mトークン（Flash）〜"
-      ],
-      tips: [
-        "✓ 無料で始められる唯一のプロバイダー",
-        "✓ 日数本程度の論文なら無料枠で Pro が使える",
-        "✓ 大量処理なら Flash 推奨（無料枠内で賄える可能性大）",
-        "✓ 思考モード (Thinking) は Pro/Flash 両方で利用可能",
-        "⚠ 無料枠 Pro は本アプリの並列抽出でレート制限に当たりやすい"
-      ],
-      urls: { main: "https://aistudio.google.com/", keys: "https://aistudio.google.com/apikey", pricing: "https://ai.google.dev/pricing" }
-    },
-    openai: {
-      title: "OpenAI (GPT) APIキー取得手順",
-      color: "from-emerald-500 to-teal-500",
-      tagline: "最も広く使われる標準。GPT-5 は累積$5以上の支払い後に利用可",
-      steps: [
-        { t: "アカウント作成", d: "platform.openai.com にアクセス。ChatGPT とは別アカウント（同じメールで紐付け可）。電話番号認証必須" },
-        { t: "支払い情報の登録", d: "Settings → **Billing** → Add payment method → 最低 $5 のクレジット購入" },
-        { t: "Tier 確認", d: "**GPT-5 は Tier 1 以上（累積$5以上の支払い）が必要**。Tier 0 でも GPT-4.1 や GPT-4o は利用可能" },
-        { t: "APIキーの作成", d: "Settings → **API Keys** → 「Create new secret key」。**sk-proj-** または **sk-** で始まる文字列が発行（一度しか表示されないので要保存）" },
-        { t: "本アプリへ貼り付け", d: "上の OpenAI カードで有効化 → キーを貼付 → 接続テスト" }
-      ],
-      pricing: [
-        "GPT-5: 論文1本 約$0.3〜$1.5（Tier 1必須）",
-        "GPT-4.1: 論文1本 約$0.1〜$0.4（コスパ良好）",
-        "GPT-4o: 論文1本 約$0.05〜$0.2"
-      ],
-      limits: [
-        "Tier 0: 基本モデルのみ、レート制限あり",
-        "Tier 1 ($5支払い後): GPT-5 等の上位モデル利用可",
-        "Tier 2-5: 段階的に制限緩和"
-      ],
-      tips: [
-        "✓ GPT-4.1 は Claude Sonnet 4.6 と同等クラスの精度",
-        "✓ JSON Schema 厳密出力に対応（構造化データに強い）",
-        "✓ GPT-5 は Tier 1 到達まで使えない点に注意",
-        "⚠ 本アプリでは Claude ほどの PDF 直接処理精度は期待できない（画像経由）"
-      ],
-      urls: { main: "https://platform.openai.com/", keys: "https://platform.openai.com/api-keys", pricing: "https://openai.com/api/pricing/" }
-    }
+function GeminiKeyCard({ apiKeys, onChange, model, onModelChange, onVerify, verifyState }) {
+  const [showKeys, setShowKeys] = useState(false);
+  const updateKey = (idx, value) => {
+    const next = apiKeys.slice();
+    next[idx] = value;
+    onChange(next);
   };
+  const addKey = () => onChange([...apiKeys, ""]);
+  const removeKey = (idx) => onChange(apiKeys.length > 1 ? apiKeys.filter((_, i) => i !== idx) : [""]);
+  const validKeys = apiKeys.filter(k => k && k.trim()).length;
 
-  const Section = ({ name }) => {
-    const g = guides[name];
-    const isOpen = open === name;
-    return (
-      <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <button onClick={() => setOpen(isOpen ? null : name)} className={`w-full bg-gradient-to-r ${g.color} text-white px-3 py-2 flex items-center justify-between hover:opacity-95 transition-opacity`}>
-          <div className="flex items-center gap-2">
-            <KeyIcon size={16}/>
-            <span className="font-bold text-sm">{g.title}</span>
+  return (
+    <div className={`bg-white rounded-xl border-2 transition-all shadow-sm overflow-hidden ${validKeys > 0 ? 'border-purple-300 shadow-md' : 'border-slate-200'}`}>
+      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles size={20}/>
+          <div>
+            <h3 className="font-bold text-base">Google AI Studio (Gemini)</h3>
+            <p className="text-[10px] opacity-90">無料枠で利用可能。APIキー1個でOK・複数登録で枠を実質拡張</p>
           </div>
-          <span className="text-xs font-mono">{isOpen ? '▲ 閉じる' : '▼ 開く'}</span>
-        </button>
-        {isOpen && (
-          <div className="p-4 bg-white space-y-3 text-xs">
-            <div className="bg-slate-50 border-l-4 border-slate-400 px-3 py-2 text-slate-700 italic">{g.tagline}</div>
-
-            <div>
-              <h4 className="font-bold text-slate-800 mb-1.5 flex items-center gap-1"><ArrowRight size={12}/>取得手順</h4>
-              <ol className="space-y-1.5 list-decimal pl-5">
-                {g.steps.map((s, i) => (
-                  <li key={i} className="text-slate-700"><b>{s.t}</b>: {renderBold(s.d)}</li>
-                ))}
-              </ol>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="bg-emerald-50 border border-emerald-200 rounded p-2">
-                <h4 className="font-bold text-emerald-800 mb-1 text-[11px]">💰 料金目安（論文1本）</h4>
-                <ul className="list-disc pl-4 text-[10px] text-emerald-900 space-y-0.5">
-                  {g.pricing.map((p, i) => <li key={i}>{p}</li>)}
-                </ul>
+        </div>
+        {validKeys > 0 && <span className="bg-white/20 text-[10px] font-bold px-2 py-1 rounded">{validKeys}個 設定済</span>}
+      </div>
+      <div className="p-4 space-y-3">
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1"><KeyIcon size={11}/>APIキー（複数可）</label>
+            <button onClick={() => setShowKeys(!showKeys)} className="text-[10px] text-slate-500 hover:text-slate-700 flex items-center gap-0.5">
+              {showKeys ? <><EyeOffIcon size={11}/>隠す</> : <><EyeIcon size={11}/>表示</>}
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {apiKeys.map((key, idx) => (
+              <div key={idx} className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono text-slate-400 w-5 text-right">#{idx+1}</span>
+                <input
+                  type={showKeys ? "text" : "password"}
+                  value={key || ""}
+                  onChange={e => updateKey(idx, e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-purple-500 api-input-glow"
+                />
+                {apiKeys.length > 1 && (
+                  <button onClick={() => removeKey(idx)} className="text-slate-400 hover:text-red-500 p-1" title="削除">
+                    <Trash2 size={14}/>
+                  </button>
+                )}
               </div>
-              <div className="bg-amber-50 border border-amber-200 rounded p-2">
-                <h4 className="font-bold text-amber-800 mb-1 text-[11px]">⚡ レート制限</h4>
-                <ul className="list-disc pl-4 text-[10px] text-amber-900 space-y-0.5">
-                  {g.limits.map((l, i) => <li key={i}>{l}</li>)}
-                </ul>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-2">
+            <button onClick={addKey} className="text-[11px] text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1">
+              <PlusIcon size={11}/>キーを追加
+            </button>
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:underline inline-flex items-center gap-0.5">
+              キー発行ページ <LinkIcon size={10}/>
+            </a>
+          </div>
+          {apiKeys.length > 1 && (
+            <div className="mt-2 text-[10px] bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-blue-800">
+              💡 <b>別プロジェクト</b>のキーなら無料枠が掛け算で増えます。同一プロジェクトのキーは枠を共有します
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-700 mb-1.5">使用モデル</label>
+          <select value={model} onChange={e => onModelChange(e.target.value)} className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg text-xs font-mono bg-white focus:outline-none focus:border-purple-500">
+            {GEMINI_MODELS.map(m => (
+              <option key={m.id} value={m.id}>
+                {m.name} — 無料 {m.rpm}/分・{m.rpd}/日
+              </option>
+            ))}
+          </select>
+          <div className="mt-1.5 text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+            ⚡ <b>503エラー時は自動で別モデルに切替</b>します（例: Pro が混雑 → Flash に自動フォールバック）
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <button onClick={onVerify} disabled={validKeys === 0 || verifyState?.verifying} className="flex-1 bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white font-semibold text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 justify-center">
+            {verifyState?.verifying ? <><span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full"/>確認中...</> : <><Sparkles size={12}/>全キー接続テスト</>}
+          </button>
+          {verifyState?.result === 'ok' && <span className="text-emerald-600"><CheckCircle2 size={20}/></span>}
+          {verifyState?.result === 'error' && <span className="text-red-600"><XCircle size={20}/></span>}
+        </div>
+        {verifyState?.results && (
+          <div className="space-y-1">
+            {verifyState.results.map((r, i) => (
+              <div key={i} className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 ${r.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                {r.ok ? <CheckCircle2 size={11}/> : <XCircle size={11}/>}
+                <span className="font-mono">#{i+1}</span>
+                <span>{r.message}</span>
               </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded p-2">
-              <h4 className="font-bold text-blue-800 mb-1 text-[11px]">💡 使い方のコツ</h4>
-              <ul className="text-[10px] text-blue-900 space-y-0.5">
-                {g.tips.map((t, i) => <li key={i}>{t}</li>)}
-              </ul>
-            </div>
-
-            <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-100">
-              <a href={g.urls.main} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded flex items-center gap-1"><LinkIcon size={10}/>公式サイト</a>
-              <a href={g.urls.keys} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded flex items-center gap-1 font-bold"><KeyIcon size={10}/>APIキー発行ページ</a>
-              <a href={g.urls.pricing} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2 py-1 rounded flex items-center gap-1">💴 料金表</a>
-            </div>
+            ))}
           </div>
         )}
       </div>
-    );
-  };
+    </div>
+  );
+}
+
+function UsageGuide() {
+  const [open, setOpen] = useState(null);
+
+  const sections = [
+    {
+      id: 'what',
+      no: '①',
+      title: 'APIキーとは？',
+      icon: KeyIcon,
+      color: 'from-slate-500 to-slate-600',
+      body: (
+        <div className="space-y-3">
+          <div className="bg-slate-50 border-l-4 border-slate-400 px-3 py-2 text-slate-700">
+            <b>一言で:</b> APIキー = Googleのサーバーに「このリクエストは私からです」と証明するための長い文字列（パスワード相当）
+          </div>
+          <p>このアプリはブラウザから直接 Google の Gemini サーバーに「論文からデータを抽出して」と送信します。その時「誰として送っているか」を Google に知らせる必要があります。それが <code className="bg-slate-100 px-1 rounded">AIzaSy...</code> で始まる40文字前後のAPIキーです。</p>
+          <p><b>APIとは:</b> Application Programming Interface の略で、プログラム同士の会話ルール。ChatGPTやGeminiを「チャット画面」から使うのが普通の使い方、API経由で使うとこのアプリのように「別のアプリの中からAIを呼び出せる」ようになります。</p>
+          <div className="bg-emerald-50 border border-emerald-200 rounded p-2">
+            <b className="text-emerald-800">🔒 保存場所:</b> キーはあなたの<b>ブラウザ内（localStorage）にだけ</b>保存されます。サーバーには送信されません。別ブラウザや別端末では貼り直しが必要です。
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'get',
+      no: '②',
+      title: 'Google AI Studioで無料APIキーを取得する',
+      icon: Sparkles,
+      color: 'from-blue-500 to-cyan-500',
+      tag: '🆓',
+      body: (
+        <div className="space-y-2">
+          <ol className="list-decimal pl-5 space-y-1.5">
+            <li><b>Googleアカウントを用意</b> — 普段のGmailでOK</li>
+            <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-semibold">Google AI Studio のAPIキーページ</a> にアクセス</li>
+            <li><b>「Create API key」</b> ボタンをクリック</li>
+            <li>プロジェクト選択画面が出たら<b>「Create API key in new project」</b>を選択（既存プロジェクトもOK）</li>
+            <li>表示された <code className="bg-slate-100 px-1 rounded">AIzaSy...</code> の文字列を右のアイコンでコピー</li>
+            <li>このアプリの<b>「APIキー」</b>欄に貼り付けて保存</li>
+            <li><b>「全キー接続テスト」</b>で ✅ 成功 と出れば完了</li>
+          </ol>
+          <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-2 text-blue-900">
+            💳 <b>クレジットカード登録は不要</b>です。完全無料で始められます。
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'multi',
+      no: '③',
+      title: 'APIキーがいくつも作れるのはなぜ？',
+      icon: LayersIcon,
+      color: 'from-purple-500 to-pink-500',
+      tag: '🗝',
+      body: (
+        <div className="space-y-3">
+          <table className="w-full text-[11px] border border-slate-200 rounded overflow-hidden">
+            <tbody className="divide-y divide-slate-200">
+              <tr className="bg-slate-50"><td className="px-2 py-1.5 font-bold w-1/3">Googleアカウント</td><td className="px-2 py-1.5">あなた自身（1つ）</td></tr>
+              <tr><td className="px-2 py-1.5 font-bold">Google Cloud プロジェクト</td><td className="px-2 py-1.5">"財布"。<b>無料枠・請求・使用量はここ単位</b>で管理</td></tr>
+              <tr className="bg-slate-50"><td className="px-2 py-1.5 font-bold">APIキー</td><td className="px-2 py-1.5">プロジェクトに紐づく「鍵」。1つのプロジェクトに複数作れる</td></tr>
+            </tbody>
+          </table>
+          <div className="bg-amber-50 border border-amber-300 rounded p-2 text-amber-900">
+            ⚠️ <b>キーを増やしても無料枠は増えません</b><br/>
+            <span className="text-[11px]">同じプロジェクト内のキーは全て同じ無料枠を共有します。3つ作っても上限は3倍になりません。</span>
+          </div>
+          <div>
+            <b>では何のため？</b>
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              <li>アプリごとに使い分ける → どれかが漏洩したとき、その鍵だけ削除できる</li>
+              <li>古い鍵を定期的にローテーションする</li>
+              <li>チームで共有を避けたいときに個人ごとに分ける</li>
+            </ul>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-emerald-900">
+            💡 <b>無料枠を本当に増やしたい時</b>は、新しい <b>プロジェクト</b> を作成し、その中に新しいキーを作って、本アプリに <b>複数キー</b> として登録します（規約の範囲内で）。本アプリは複数キーを自動でローテートします。
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'rules',
+      no: '④',
+      title: '無料枠で絶対守ること',
+      icon: ShieldIcon,
+      color: 'from-rose-500 to-orange-500',
+      body: (
+        <div className="space-y-3">
+          <div className="bg-rose-50 border-l-4 border-rose-500 p-3">
+            <p className="font-bold text-rose-800 mb-1">🚨 他人に絶対に教えない・渡さない</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-rose-900 text-[11px]">
+              <li>SlackやLINEでコピペして送らない → 受け手に自分で作ってもらう</li>
+              <li>GitHub公開リポジトリにコミットしない → <code className="bg-white px-1 rounded">.env</code>に入れて<code className="bg-white px-1 rounded">.gitignore</code>追加</li>
+              <li>ブログやスクショに写り込ませない</li>
+              <li>漏れたら <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">Google AI Studio の鍵一覧</a> から🗑で即削除、作り直す</li>
+            </ul>
+          </div>
+          <div className="bg-emerald-50 border-l-4 border-emerald-500 p-3">
+            <p className="font-bold text-emerald-800 mb-1">💸 勝手に有料化することは"ありません"</p>
+            <p className="text-emerald-900 text-[11px]">Gemini APIは、あなたが明示的にBilling（請求先クレジットカード）を有効化しない限り、<b>無料枠を超えたら単にエラー（429）が返るだけ</b>で料金は発生しません。</p>
+            <p className="text-emerald-900 text-[11px] mt-1.5"><b>確認方法:</b> <a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">Google Cloud Billing</a> を開き、プロジェクトに「お支払いアカウントがリンクされていません」と表示されていれば、絶対に課金されません。</p>
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'limits',
+      no: '⑤',
+      title: '使用量・上限の確認方法',
+      icon: Activity,
+      color: 'from-indigo-500 to-blue-500',
+      body: (
+        <div className="space-y-3">
+          <div>
+            <b className="text-slate-800">無料枠の目安（モデル別）</b>
+            <table className="w-full text-[11px] border border-slate-200 mt-1.5 rounded overflow-hidden">
+              <thead className="bg-slate-100">
+                <tr><th className="px-2 py-1 text-left">モデル</th><th className="px-2 py-1 text-center">RPM(分)</th><th className="px-2 py-1 text-center">RPD(日)</th><th className="px-2 py-1 text-left">超えたら</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {GEMINI_MODELS.map(m => (
+                  <tr key={m.id}><td className="px-2 py-1 font-mono">{m.id}</td><td className="px-2 py-1 text-center">{m.rpm}</td><td className="px-2 py-1 text-center">{m.rpd}</td><td className="px-2 py-1 text-slate-600">1〜2分待つ／翌日UTC0時(日本朝9時)復活</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[10px] text-slate-500 mt-1">※ 上記は2026年初頭時点の目安。実際の上限値は <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">公式ドキュメント</a> でご確認ください。</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded p-2.5 text-blue-900">
+            <p className="font-bold mb-1">💡 実際の使用量を確認する方法</p>
+            <ol className="list-decimal pl-5 space-y-0.5 text-[11px]">
+              <li><a href="https://console.cloud.google.com/apis/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">Google Cloud Console の APIダッシュボード</a> にアクセス</li>
+              <li>プロジェクトを選択（例: "Generative Language Client"）</li>
+              <li>「API とサービス」→「ダッシュボード」→ <b>Generative Language API</b> をクリック</li>
+              <li>概要タブでグラフ確認: 📈 Traffic / 📉 Errors / ⏱ Latency</li>
+              <li>「Quotas & System Limits」タブで残量／上限確認</li>
+            </ol>
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'trouble',
+      no: '⑥',
+      title: 'トラブル対処',
+      icon: AlertCircle,
+      color: 'from-amber-500 to-red-500',
+      body: (
+        <div className="space-y-2.5">
+          <details className="border border-rose-200 rounded overflow-hidden">
+            <summary className="bg-rose-50 px-3 py-2 cursor-pointer font-bold text-rose-800 text-[12px]">🔴 「503 過負荷」「接続エラー」「抽出失敗」</summary>
+            <div className="p-3 text-[11px] space-y-1.5 bg-white">
+              <p><b>最も多い原因:</b> Geminiサーバー側の一時的な高負荷（"This model is currently experiencing high demand"）またはレート制限（RPM）</p>
+              <p className="font-semibold mt-1">本アプリの自動対処（既に組み込み済み）:</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>503発生時 → <b>自動的に別モデル（例: Pro→Flash）にフォールバック</b></li>
+                <li>429（レート制限）→ <b>登録済みの別キーに自動切替</b>（複数キー登録時）</li>
+                <li>サーバー指定の <code className="bg-slate-100 px-1 rounded">retry-after</code> を尊重して待機</li>
+                <li>指数バックオフ + ランダムジッタで再試行</li>
+              </ul>
+              <p className="font-semibold mt-1">それでもダメな場合:</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>1〜5分待ってから再実行</li>
+                <li>モデルを <b>Gemini 2.0 Flash</b> や <b>Flash Lite</b> に切替（無料枠が大きい）</li>
+                <li>別プロジェクトで作った2個目のキーを登録（無料枠が掛け算で増える）</li>
+                <li>ブラウザの広告ブロッカー／プライバシー拡張機能を一時OFF</li>
+                <li>会社/学校のネットワークだと <code className="bg-slate-100 px-1 rounded">generativelanguage.googleapis.com</code> がブロックされている可能性 → 自宅Wi-Fi等で試す</li>
+                <li>ブラウザのキャッシュをクリアして再読み込み（Ctrl+Shift+R）</li>
+              </ul>
+            </div>
+          </details>
+
+          <details className="border border-amber-200 rounded overflow-hidden">
+            <summary className="bg-amber-50 px-3 py-2 cursor-pointer font-bold text-amber-800 text-[12px]">🟠 「APIキーが無効」「401/403」と出る</summary>
+            <div className="p-3 text-[11px] space-y-1.5 bg-white">
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>キーをコピーミス（前後の空白、改行、引用符が混入）→ 貼り直し</li>
+                <li>キーを<b>Google AI Studio側で削除</b>している → 新しいキーを発行</li>
+                <li>キーが <b>Vertex AI 用</b>のものになっている → AI Studio で新規発行</li>
+                <li>VPN等で <b>Gemini非対応リージョン</b>からアクセス → 日本IPで再試行</li>
+              </ul>
+            </div>
+          </details>
+
+          <details className="border border-yellow-200 rounded overflow-hidden">
+            <summary className="bg-yellow-50 px-3 py-2 cursor-pointer font-bold text-yellow-800 text-[12px]">🟡 「無料枠上限」「Rate limit」と出るが無料枠は残っているはず</summary>
+            <div className="p-3 text-[11px] space-y-1.5 bg-white">
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>無料枠は <b>RPM（分単位）</b> と <b>RPD（日単位）</b> の<b>両方</b>でカウントされる。短時間連投で RPM に当たることが多い → 1〜2分待つ</li>
+                <li>本アプリの「Ultra精度モード」は1論文で5〜10リクエスト消費する → 連続実行なら「標準」モードに切替</li>
+                <li>RPDが残っていない可能性 → 翌日UTC0時（日本朝9時）まで待つか、別プロジェクトのキーを追加</li>
+              </ul>
+            </div>
+          </details>
+
+          <details className="border border-orange-200 rounded overflow-hidden">
+            <summary className="bg-orange-50 px-3 py-2 cursor-pointer font-bold text-orange-800 text-[12px]">🟠 「JSONパース失敗」「抽出に失敗」（3回連続）</summary>
+            <div className="p-3 text-[11px] space-y-1.5 bg-white">
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>論文PDFのスキャン品質が著しく悪い／OCR未実施 → 別PDF（テキスト埋込済）で試す</li>
+                <li>論文サイズが極端に大きい（300MB以上等）→ 不要ページを削除</li>
+                <li>モデルを <b>Gemini 2.5 Pro</b> に切替（複雑な論文ほどPro有利）</li>
+                <li>精度モードを「Ultra」に上げる（思考トークン増で安定）</li>
+              </ul>
+            </div>
+          </details>
+
+          <details className="border border-yellow-200 rounded overflow-hidden">
+            <summary className="bg-yellow-50 px-3 py-2 cursor-pointer font-bold text-yellow-800 text-[12px]">🟡 「Geminiの安全フィルタでブロック」</summary>
+            <div className="p-3 text-[11px] space-y-1.5 bg-white">
+              <ul className="list-disc pl-5 space-y-0.5">
+                <li>論文中の自殺・暴力・薬物関連の記述に過剰反応することがある</li>
+                <li>該当ページを除外したPDFを試す、または別モデル（Pro）に切替</li>
+                <li>同じ論文で繰り返し発生する場合は AI Studio から問題報告</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      )
+    }
+  ];
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6 fade-in-up fade-d2">
-      <h3 className="font-bold text-slate-800 text-sm mb-1 flex items-center gap-2"><KeyIcon size={16} className="text-purple-600"/>APIキーの取得方法</h3>
-      <p className="text-[11px] text-slate-500 mb-3">各サービスのバナーをクリックすると詳細な手順・料金・制限事項が表示されます</p>
+      <h3 className="font-bold text-slate-800 text-base mb-1 flex items-center gap-2">
+        <FileSearch size={18} className="text-purple-600"/>使い方ガイド
+      </h3>
+      <p className="text-[11px] text-slate-500 mb-3">
+        APIキーとは何か、取得方法、無料枠の仕組み、上限確認、トラブル対処までを初心者向けに解説します。
+      </p>
 
-      <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 mb-3 text-[11px]">
-        <p className="font-bold text-purple-900 mb-1 flex items-center gap-1"><InfoIcon size={12}/>どれを選ぶべき？</p>
-        <ul className="text-purple-800 space-y-0.5 pl-4 list-disc">
-          <li><b>精度最優先</b>: Claude Opus 4.7（ネイティブPDF対応。本アプリの設計思想に最適）</li>
-          <li><b>コスト最小/まず試す</b>: Gemini 2.5 Flash（無料枠で実用可能）</li>
-          <li><b>バランス</b>: Claude Sonnet 4.6 or Gemini 2.5 Pro（有料化）or GPT-4.1</li>
-          <li><b>最強の組み合わせ</b>: Claude Opus 4.7 + Gemini 2.5 Pro を両方有効化 → アンサンブル抽出 + Claude Critic</li>
-        </ul>
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-3 mb-3">
+        <p className="font-bold text-purple-900 text-[12px] mb-1.5">📑 目次</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+          {sections.map(s => (
+            <button key={s.id} onClick={() => { setOpen(s.id); document.getElementById(`guide-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+              className="text-left text-[11px] text-purple-800 hover:text-purple-600 hover:underline truncate">
+              {s.no} {s.title}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-2">
-        <Section name="claude"/>
-        <Section name="gemini"/>
-        <Section name="openai"/>
+        {sections.map(s => {
+          const isOpen = open === s.id;
+          const Icon = s.icon;
+          return (
+            <div key={s.id} id={`guide-${s.id}`} className="border border-slate-200 rounded-lg overflow-hidden">
+              <button onClick={() => setOpen(isOpen ? null : s.id)}
+                className={`w-full bg-gradient-to-r ${s.color} text-white px-3 py-2 flex items-center justify-between hover:opacity-95 transition-opacity`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-base">{s.tag || s.no}</span>
+                  <Icon size={15}/>
+                  <span className="font-bold text-sm">{s.title}</span>
+                </div>
+                <span className="text-xs font-mono">{isOpen ? '▲ 閉じる' : '▼ 開く'}</span>
+              </button>
+              {isOpen && (
+                <div className="p-4 bg-white text-[12px] text-slate-700 leading-relaxed">
+                  {s.body}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-700">
+        <p className="font-bold mb-1 flex items-center gap-1"><InfoIcon size={12} className="text-slate-500"/>最後に</p>
+        <p className="leading-relaxed">
+          このアプリは <b>Cochrane Handbook</b> 準拠でメタ分析向けに設計された RCT データ抽出ツールです。
+          AI抽出は強力ですが、<b>数値の最終確認は研究者ご自身で必ず原論文と照合してください</b>。
+          問題・改善提案は <a href="https://github.com/mxe050/DataEx/issues" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">GitHub Issues</a> へ。
+        </p>
       </div>
 
       <div className="mt-3 bg-rose-50 border border-rose-200 rounded-lg p-2 text-[10px] text-rose-800">
-        <ShieldIcon size={11} className="inline mr-0.5"/><b>セキュリティ注意:</b> APIキーは第三者に共有しないでください。本アプリは入力されたキーをブラウザの localStorage にのみ保存し、外部送信は各公式APIへの正規リクエストのみです。
+        <ShieldIcon size={11} className="inline mr-0.5"/>
+        <b>セキュリティ:</b> APIキーはブラウザの localStorage にのみ保存され、外部送信は Google API への正規リクエストのみです。
       </div>
     </div>
   );
 }
 
 function SetupPage({ onComplete, initialConfig }) {
-  const [providers, setProviders] = useState(() => ({
-    claude: { enabled: true, apiKey: "", model: PROVIDERS.claude.defaultModel, ...initialConfig.claude },
-    gemini: { enabled: false, apiKey: "", model: PROVIDERS.gemini.defaultModel, ...initialConfig.gemini },
-    openai: { enabled: false, apiKey: "", model: PROVIDERS.openai.defaultModel, ...initialConfig.openai }
-  }));
-  const [accuracyMode, setAccuracyMode] = useState(initialConfig.accuracyMode || 'ultra');
-  const [verifyStates, setVerifyStates] = useState({});
+  // 旧バージョンの設定からの移行: providers.gemini.apiKey 単一 → apiKeys[] 配列
+  const initialKeys = (() => {
+    if (Array.isArray(initialConfig.apiKeys) && initialConfig.apiKeys.length) return initialConfig.apiKeys;
+    const legacy = initialConfig.providers?.gemini?.apiKey;
+    if (legacy) return [legacy];
+    return [""];
+  })();
+  const [apiKeys, setApiKeys] = useState(initialKeys);
+  const [model, setModel] = useState(initialConfig.model || initialConfig.providers?.gemini?.model || GEMINI.defaultModel);
+  const [accuracyMode, setAccuracyMode] = useState(initialConfig.accuracyMode || 'high');
+  const [verifyState, setVerifyState] = useState({});
   const [saveKeys, setSaveKeys] = useState(initialConfig.saveKeys !== false);
 
-  const updateProvider = (name, cfg) => setProviders(p => ({ ...p, [name]: cfg }));
+  const validKeys = apiKeys.filter(k => k && k.trim());
 
-  const verifyProvider = async (name) => {
-    const cfg = providers[name];
-    setVerifyStates(s => ({ ...s, [name]: { verifying: true } }));
-    try {
-      if (name === "claude") {
-        const r = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": cfg.apiKey,
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true",
-            "content-type": "application/json"
-          },
-          body: JSON.stringify({
-            model: cfg.model || PROVIDERS.claude.defaultModel,
-            max_tokens: 10,
-            messages: [{ role: "user", content: "hi" }]
-          })
-        });
-        if (r.ok) setVerifyStates(s => ({ ...s, [name]: { result: 'ok', message: '接続成功' } }));
-        else { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || `エラー ${r.status}`); }
-      } else if (name === "gemini") {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cfg.apiKey}`);
-        if (r.ok) setVerifyStates(s => ({ ...s, [name]: { result: 'ok', message: '接続成功' } }));
-        else { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || `エラー ${r.status}`); }
-      } else if (name === "openai") {
-        const r = await fetch("https://api.openai.com/v1/models", {
-          headers: { "Authorization": `Bearer ${cfg.apiKey}` }
-        });
-        if (r.ok) setVerifyStates(s => ({ ...s, [name]: { result: 'ok', message: '接続成功' } }));
-        else { const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || `エラー ${r.status}`); }
+  const verifyAll = async () => {
+    setVerifyState({ verifying: true });
+    const results = [];
+    for (const key of validKeys) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key.trim()}`);
+        if (r.ok) results.push({ ok: true, message: '接続成功 ✓' });
+        else {
+          const d = await r.json().catch(() => ({}));
+          results.push({ ok: false, message: d.error?.message || `エラー ${r.status}` });
+        }
+      } catch (e) {
+        results.push({ ok: false, message: e.message });
       }
-    } catch (e) {
-      setVerifyStates(s => ({ ...s, [name]: { result: 'error', message: e.message } }));
     }
+    const allOk = results.length > 0 && results.every(r => r.ok);
+    setVerifyState({ result: allOk ? 'ok' : 'error', results });
   };
-
-  const anyEnabled = Object.values(providers).some(p => p.enabled && p.apiKey);
-  const claudeEnabled = providers.claude.enabled && providers.claude.apiKey;
 
   const handleStart = () => {
-    if (saveKeys) {
-      saveConfig({ providers, accuracyMode, saveKeys });
-    } else {
-      saveConfig({ providers: { claude: { ...providers.claude, apiKey: "" }, gemini: { ...providers.gemini, apiKey: "" }, openai: { ...providers.openai, apiKey: "" } }, accuracyMode, saveKeys });
-    }
-    onComplete(providers, accuracyMode);
+    const cfg = saveKeys
+      ? { apiKeys: validKeys, model, accuracyMode, saveKeys }
+      : { apiKeys: [], model, accuracyMode, saveKeys };
+    saveConfig(cfg);
+    onComplete({ apiKeys: validKeys, model }, accuracyMode);
   };
 
+  const accuracyModes = [
+    { id: 'standard', name: '標準', cost: '1論文 ≒ 1リクエスト', desc: '抽出のみ・最速', detail: '無料枠を最も節約。Critic監査なし', color: 'from-slate-400 to-slate-500' },
+    { id: 'high',     name: '高精度', cost: '1論文 ≒ 2リクエスト', desc: '抽出 + Critic監査', detail: '思考トークン6K + Pro Critic',     color: 'from-blue-500 to-indigo-500' },
+    { id: 'ultra',    name: 'Ultra', cost: '1論文 ≒ 3〜10リクエスト', desc: '抽出 + Critic + 個別検証', detail: '思考12K + 低信頼項目を再検証',  color: 'from-purple-600 to-pink-600' }
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/20 flex flex-col overflow-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/20 flex flex-col overflow-auto">
       <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/80 py-4 px-6 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <div className="gradient-purple text-white p-2 rounded-lg"><BrainIcon size={22}/></div>
+        <div className="max-w-4xl mx-auto flex items-center gap-3">
+          <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg"><Sparkles size={22}/></div>
           <div>
-            <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3 Multi-AI Brain</span></h1>
-            <p className="text-xs text-slate-500">多層AI抽出パイプライン — マルチプロバイダー対応</p>
+            <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3 / Gemini Edition</span></h1>
+            <p className="text-xs text-slate-500">Google AI Studio 無料APIキーで動く RCT データ抽出ツール</p>
           </div>
         </div>
       </header>
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
+      <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
         <div className="text-center mb-6 fade-in-up">
-          <h2 className="text-2xl font-extrabold text-slate-800 mb-2">AI設定</h2>
-          <p className="text-slate-500 text-sm">使用するAIプロバイダーを選択し、APIキーを入力してください</p>
+          <h2 className="text-2xl font-extrabold text-slate-800 mb-2">セットアップ</h2>
+          <p className="text-slate-500 text-sm">Google AI Studio の無料APIキーを貼り付けるだけで使い始められます</p>
         </div>
 
-        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4 mb-6 fade-in-up fade-d1">
-          <h3 className="font-bold text-purple-900 mb-2 flex items-center gap-2 text-sm"><BrainIcon size={18}/>推奨構成: Claude Opus 4.7 を主脳に</h3>
-          <p className="text-xs text-purple-800 leading-relaxed">
-            Claude Opus 4.7 は <strong>Extended Thinking（16K思考トークン）+ ネイティブPDF処理 + Tool Use</strong> を組み合わせ、
-            RCT論文の数値抽出精度を従来比で大幅に向上させます。
-            複数プロバイダーを有効にすると <strong>アンサンブル抽出 → 最精度モデルによる Critic レビュー → 個別検証</strong> の4段階で抽出精度を最大化します（Critic 役は有効なプロバイダーから自動選択）。
-          </p>
-        </div>
-
-        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-6 fade-in-up fade-d1">
-          <h3 className="font-bold text-rose-800 mb-1 flex items-center gap-2 text-sm"><AlertCircle size={16}/>使用上の注意</h3>
-          <ul className="list-disc pl-5 text-[11px] text-rose-900 space-y-0.5">
-            <li><strong>数値の最終確認は必須</strong>: 本ツールは強力なアシスタントですが、研究者ご自身で原論文と照合してください</li>
-            <li><strong>SDとSEの混同リスク</strong>: 抽出後 sdOrSe フィールドを必ず確認</li>
-            <li><strong>APIキーの管理</strong>: キーはご自身のブラウザにのみ保存されます（localStorage）。他者と共有しないでください</li>
+        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-4 mb-6 fade-in-up fade-d1">
+          <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2 text-sm"><Sparkles size={18}/>503エラーに強い設計</h3>
+          <ul className="text-xs text-blue-900 leading-relaxed space-y-1 list-disc pl-5">
+            <li><b>自動モデルフォールバック</b>: Pro が混雑（503）→ 自動で Flash や Flash Lite に切替</li>
+            <li><b>マルチキー・ローテーション</b>: 複数キー登録で実質的な無料枠を拡張（別プロジェクトのキーが効果大）</li>
+            <li><b>サーバー指定の retry-after を尊重</b> + 指数バックオフ + ジッタで賢く再試行</li>
+            <li><b>レート制限（429）→ 別キーに自動切替</b></li>
           </ul>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 fade-in-up fade-d2">
-          <ProviderCard name="claude" provider={PROVIDERS.claude} config={providers.claude} onUpdate={cfg => updateProvider("claude", cfg)} onVerify={verifyProvider} verifyState={verifyStates.claude}/>
-          <ProviderCard name="gemini" provider={PROVIDERS.gemini} config={providers.gemini} onUpdate={cfg => updateProvider("gemini", cfg)} onVerify={verifyProvider} verifyState={verifyStates.gemini}/>
-          <ProviderCard name="openai" provider={PROVIDERS.openai} config={providers.openai} onUpdate={cfg => updateProvider("openai", cfg)} onVerify={verifyProvider} verifyState={verifyStates.openai}/>
+        <div className="mb-6 fade-in-up fade-d2">
+          <GeminiKeyCard
+            apiKeys={apiKeys}
+            onChange={setApiKeys}
+            model={model}
+            onModelChange={setModel}
+            onVerify={verifyAll}
+            verifyState={verifyState}
+          />
         </div>
 
-        <ApiKeyGuide/>
+        <UsageGuide/>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6 fade-in-up fade-d3">
           <h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2"><LayersIcon size={16} className="text-purple-600"/>抽出精度モード</h3>
-          <div className="bg-slate-50 border border-slate-200 rounded p-2 mb-3 text-[10px] text-slate-700">
-            <p className="font-semibold mb-1">📌 精度モードは APIキーの種類に依存しません</p>
-            <p>どのプロバイダーでも選択可能です。ただし実効精度は「選択したモデル × 精度モード」で決まります。例えば Gemini Flash で Ultra を選ぶより、Claude Opus 4.7 で High を選んだ方が高精度。Ultra モードでは利用可能な最高精度モデルが Critic 役を自動選択されます。</p>
+          <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-3 text-[11px] text-amber-900">
+            💡 <b>無料枠を節約したいなら「標準」</b>。1論文の解析で消費する Gemini リクエスト数の目安が「コスト」欄に表示されています。
           </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {[
-              { id: 'standard', name: '標準', desc: '単一抽出・高速', detail: '思考なし or 軽量思考・コスト最小', color: 'from-slate-400 to-slate-500' },
-              { id: 'high', name: '高精度', desc: 'アンサンブル + Critic監査', detail: '思考8K + 並列抽出 + レビュー', color: 'from-blue-500 to-indigo-500' },
-              { id: 'ultra', name: 'Ultra (最高精度)', desc: '4段階パイプライン', detail: '思考16K + Critic + 個別検証', color: 'from-purple-600 to-pink-600' }
-            ].map(m => (
+            {accuracyModes.map(m => (
               <label key={m.id} className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${accuracyMode === m.id ? 'border-purple-500 bg-purple-50 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
                 <input type="radio" name="mode" value={m.id} checked={accuracyMode === m.id} onChange={() => setAccuracyMode(m.id)} className="hidden"/>
                 <div className={`bg-gradient-to-r ${m.color} text-white text-[10px] font-bold px-2 py-0.5 rounded inline-block mb-1`}>{m.name}</div>
                 <div className="font-semibold text-slate-800 text-sm">{m.desc}</div>
                 <div className="text-[10px] text-slate-500 mt-0.5">{m.detail}</div>
+                <div className="text-[10px] text-purple-700 font-mono mt-1 bg-purple-50 px-1.5 py-0.5 rounded inline-block">{m.cost}</div>
               </label>
             ))}
           </div>
-          {accuracyMode === 'ultra' && !anyEnabled && (
-            <div className="mt-2 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-              <AlertCircle size={11} className="inline mr-0.5"/>少なくとも1つのプロバイダーを有効化してください。
-            </div>
-          )}
-          {accuracyMode === 'ultra' && anyEnabled && !claudeEnabled && (
-            <div className="mt-2 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
-              <InfoIcon size={11} className="inline mr-0.5"/>Claude 未設定のため Critic 役は {providers.gemini.enabled && providers.gemini.apiKey ? 'Gemini 2.5 Pro' : providers.openai.enabled && providers.openai.apiKey ? 'GPT' : '代替モデル'} が担当します（Claude Opus 4.7 が最も精度が高いです）
-            </div>
-          )}
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 mb-6 fade-in-up fade-d3">
@@ -1568,10 +1584,10 @@ function SetupPage({ onComplete, initialConfig }) {
         </div>
 
         <div className="text-center fade-in-up fade-d4">
-          <button onClick={handleStart} disabled={!anyEnabled} className="btn-shimmer disabled:bg-slate-300 text-white font-bold px-8 py-3.5 rounded-xl text-base shadow-lg shadow-purple-200 disabled:shadow-none flex items-center gap-2 mx-auto min-w-[240px] justify-center">
-            <BrainIcon size={18}/>抽出ツールを開始 <ArrowRight size={18}/>
+          <button onClick={handleStart} disabled={validKeys.length === 0} className="btn-shimmer disabled:bg-slate-300 text-white font-bold px-8 py-3.5 rounded-xl text-base shadow-lg shadow-purple-200 disabled:shadow-none flex items-center gap-2 mx-auto min-w-[240px] justify-center">
+            <Sparkles size={18}/>抽出ツールを開始 <ArrowRight size={18}/>
           </button>
-          {!anyEnabled && <p className="text-[11px] text-slate-500 mt-2">少なくとも1つのプロバイダーを有効化してAPIキーを入力してください</p>}
+          {validKeys.length === 0 && <p className="text-[11px] text-slate-500 mt-2">APIキーを少なくとも1個入力してください</p>}
         </div>
       </main>
     </div>
@@ -1619,7 +1635,7 @@ function StageIndicator({ currentStage, progress, message }) {
   );
 }
 
-function ExtractorPage({ providers, accuracyMode, onBack }) {
+function ExtractorPage({ apiKeys, model, accuracyMode, onBack }) {
   const [pico, setPico] = useState({ p: "", i: "", c: "" });
   const [outcomes, setOutcomes] = useState([{ id: 1, name: "", definition: "" }]);
   const [pdfFile, setPdfFile] = useState(null);
@@ -1665,17 +1681,19 @@ function ExtractorPage({ providers, accuracyMode, onBack }) {
   const startAnalysis = async () => {
     if (!pdfFile) { showToast("PDFをアップロードしてください", "error"); return; }
     if (!pico.p || !pico.i || !pico.c) { showToast("PICOを入力してください", "error"); return; }
+    if (!apiKeys?.length) { showToast("APIキーが設定されていません", "error"); return; }
     setErrMsg(""); setResult(null); setHlQuery(""); setHlPage(null); setPdfSearchText("");
     setStatus("running");
 
     try {
       const res = await runExtractionPipeline({
-        providers, accuracyMode, pdfFile, pico, outcomes,
+        apiKeys, model, accuracyMode, pdfFile, pico, outcomes,
         onProgress: (stage, msg, pct) => {
           setCurrentStage(stage);
           setStatusMsg(msg);
           setProgress(pct);
-        }
+        },
+        onNotice: (msg) => showToast(msg, 'info')
       });
       setResult(res);
       setStatus("complete");
@@ -1691,20 +1709,19 @@ function ExtractorPage({ providers, accuracyMode, onBack }) {
   };
 
   const reVerifyOutcome = async (idx) => {
-    const verifier = pickBestProvider(providers);
-    if (!verifier) { showToast("再検証には有効なAPIキーが必要", "error"); return; }
+    if (!apiKeys?.length) { showToast("再検証にはAPIキーが必要", "error"); return; }
     const oc = result.extractedOutcomes[idx];
-    showToast(`${PROVIDERS[verifier.providerName].name.split(' ')[0]} で再検証中...`, "info");
+    const criticModel = pickCriticModel(model);
+    showToast(`${criticModel} で再検証中...`, "info");
     try {
       const pdfText = await extractPdfText(pdfFile);
       const prompt = `【検証対象】\n${JSON.stringify(oc, null, 2)}\n\n【参照テキスト】\n${pdfText.substring(0, 20000)}\n\n検証してJSON返答。`;
+      const rotator = makeKeyRotator(apiKeys);
       const v = await callCriticAnyProvider(
-        verifier,
-        SYSTEM_PROMPT_VERIFY,
-        prompt,
-        null, null,
-        6000,
-        null
+        rotator, criticModel,
+        SYSTEM_PROMPT_VERIFY, prompt,
+        null, null, 6000, null,
+        (m) => showToast(m, 'info')
       );
       setResult(prev => {
         const nr = { ...prev };
@@ -1742,7 +1759,7 @@ function ExtractorPage({ providers, accuracyMode, onBack }) {
   };
   const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
   const saveSession = () => {
-    const s = { pico, outcomes, result, providers: Object.fromEntries(Object.entries(providers).map(([k, v]) => [k, { ...v, apiKey: "***REDACTED***" }])), accuracyMode, timestamp: new Date().toISOString() };
+    const s = { pico, outcomes, result, model, accuracyMode, keyCount: apiKeys.length, timestamp: new Date().toISOString() };
     const b = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(b);
@@ -1751,7 +1768,7 @@ function ExtractorPage({ providers, accuracyMode, onBack }) {
     showToast("保存完了");
   };
 
-  const activeProviderInfo = Object.entries(providers).filter(([_, c]) => c.enabled && c.apiKey).map(([n, c]) => `${PROVIDERS[n].name.split(' ')[0]}`).join('+');
+  const activeProviderInfo = `Gemini ${(model || '').replace(/^gemini-/, '')}${apiKeys.length > 1 ? ` × ${apiKeys.length}キー` : ''}`;
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
@@ -1761,7 +1778,7 @@ function ExtractorPage({ providers, accuracyMode, onBack }) {
           <div className="flex items-center gap-2">
             <button onClick={onBack} className="text-slate-400 hover:text-purple-600 p-0.5 transition-colors"><ChevronLeft size={20}/></button>
             <BrainIcon size={20} className="text-purple-700"/>
-            <h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3 Opus 4.7</span></h1>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3 Gemini</span></h1>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded font-mono hidden sm:flex items-center gap-1">
@@ -1973,7 +1990,7 @@ function ExtractorPage({ providers, accuracyMode, onBack }) {
                       onCopyTSV={copyOneTSV} onCopyCSV={copyOneCSV} fontSize={leftFontSize}
                       onHighlight={(o) => { setHlQuery(o.evidenceText); setHlPage(o.pageNumber); setPdfSearchText(o.evidenceText || ""); }}
                       onSendToSearch={sendToSearch}
-                      onReVerify={pickBestProvider(providers) ? reVerifyOutcome : null}/>
+                      onReVerify={apiKeys?.length ? reVerifyOutcome : null}/>
                   ))}
                   {(!result.extractedOutcomes?.length) && <div className="text-center py-6 text-slate-500">データなし</div>}
                 </div>
@@ -2048,18 +2065,20 @@ function ExtractorPage({ providers, accuracyMode, onBack }) {
    ============================================================ */
 function App() {
   const [page, setPage] = useState("setup");
-  const [providers, setProviders] = useState(null);
-  const [accuracyMode, setAccuracyMode] = useState('ultra');
+  const [apiKeys, setApiKeys] = useState([]);
+  const [model, setModel] = useState(GEMINI.defaultModel);
+  const [accuracyMode, setAccuracyMode] = useState('high');
   const [initialConfig] = useState(() => loadConfig());
 
-  const handleSetupComplete = (providers, mode) => {
-    setProviders(providers);
+  const handleSetupComplete = ({ apiKeys, model }, mode) => {
+    setApiKeys(apiKeys);
+    setModel(model);
     setAccuracyMode(mode);
     setPage("main");
   };
 
   if (page === "setup") return <SetupPage onComplete={handleSetupComplete} initialConfig={initialConfig}/>;
-  return <ExtractorPage providers={providers} accuracyMode={accuracyMode} onBack={() => setPage("setup")}/>;
+  return <ExtractorPage apiKeys={apiKeys} model={model} accuracyMode={accuracyMode} onBack={() => setPage("setup")}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
