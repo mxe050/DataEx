@@ -670,9 +670,9 @@ function bestEffortJsonParse(text) {
   throw new Error(`JSON復旧失敗: 応答が${s.length}文字で破損 (チェックポイント${checkpoints.length}件試行)`);
 }
 
-// Gemini / Gemma API 呼び出し（マルチキー・自動モデルフォールバック・賢いリトライ）
-// Gemma は responseSchema 非対応 → schema を付けず、プロンプトでJSON指示する
-async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, images, schema, thinkingBudget = 0, onNotice }) {
+// Gemini API 呼び出し（マルチキー・自動モデルフォールバック・賢いリトライ）
+// onModelUsed: 成功時に実際に使われたモデル ID を呼び元に通知（フォールバック発生時の表示用）
+async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, images, schema, thinkingBudget = 0, onNotice, onModelUsed }) {
   const keys = rotator.all();
   if (!keys.length) throw new Error("APIキーが設定されていません");
 
@@ -758,7 +758,10 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
           throw new Error("応答に本文なし（モデルが空応答を返しました）");
         }
         try {
-          return bestEffortJsonParse(text);
+          const parsed = bestEffortJsonParse(text);
+          // 実際に成功したモデル ID を呼び元に通知（フォールバック発生時の表示精度のため）
+          try { onModelUsed && onModelUsed(tryModel); } catch (e) {}
+          return parsed;
         } catch (e) {
           throw new Error(`[${tryModel}] JSONパース失敗: ${e.message}\n応答先頭: ${text.substring(0, 200)}...`);
         }
@@ -1354,7 +1357,7 @@ ${pdfText.substring(0, isMultimodal ? 40000 : 80000)}`;
   onProgress("stage2", `${stage2Info.name.replace(/\s*\(.+/, '')} で核心抽出中...`, 35);
 
   let extracted;
-  const stagesUsed = { core: stage2Info.id };
+  const stagesUsed = { core: stage2Info.id };  // フォールバック発生時は onModelUsed で上書きされる
   try {
     extracted = await callGemini({
       rotator, model: stage2Info.id,
@@ -1364,7 +1367,8 @@ ${pdfText.substring(0, isMultimodal ? 40000 : 80000)}`;
       pdfBase64: pdfBase64,
       schema: SLIM_EXTRACT_SCHEMA_GEMINI,
       thinkingBudget: stage2Info.thinking ? 4000 : 0,
-      onNotice: (m) => { onProgress("stage2", m, 50); onNotice && onNotice(m); }
+      onNotice: (m) => { onProgress("stage2", m, 50); onNotice && onNotice(m); },
+      onModelUsed: (actualModel) => { stagesUsed.core = actualModel; }
     });
   } catch (e) {
     throw new Error(`抽出に失敗しました: ${e.message}\n\n💡 ヒント:\n・Flash Lite なら出力64K で安定、Flash は思考モードで精度向上\n・1論文 = 3 リクエスト消費。連投で RPD 20/日を超えると失敗するので 5論文/日 以内に\n・複数キー登録で 429/503 を回避（別プロジェクトのキーで枠が掛け算）`);
@@ -1395,7 +1399,8 @@ ${pdfText.substring(0, 40000)}`;
       images: null, pdfBase64: null,
       schema: SUPPLEMENT_SCHEMA_GEMINI,
       thinkingBudget: 0,
-      onNotice: (m) => { onProgress("stage3", m, 70); onNotice && onNotice(m); }
+      onNotice: (m) => { onProgress("stage3", m, 70); onNotice && onNotice(m); },
+      onModelUsed: (actualModel) => { stagesUsed.supplement = actualModel; }
     });
     if (supplement) {
       if (supplement.consortFlow) extracted.consortFlow = supplement.consortFlow;
@@ -1454,7 +1459,8 @@ ${pdfText.substring(0, 40000)}`;
         pdfBase64: !stage4Info.textOnly ? pdfBase64 : null,
         schema: CRITIC_REVIEW_SCHEMA_GEMINI,
         thinkingBudget: stage4Info.thinking ? 8000 : 0,
-        onNotice: (m) => { onProgress("stage4", m, 90); onNotice && onNotice(m); }
+        onNotice: (m) => { onProgress("stage4", m, 90); onNotice && onNotice(m); },
+        onModelUsed: (actualModel) => { stagesUsed.critic = actualModel; }
       });
 
       if (review && Array.isArray(review.correctedOutcomes) && review.correctedOutcomes.length > 0) {
@@ -2367,6 +2373,7 @@ sourceLocation には "Figure X" や "Table Y" のように出処、pageNumber=$
 evidenceText には画像内の文字・数値を文字起こし。evidenceTextJa はその日本語訳。
 figureType に種別（"Table"/"BarChart"/"LineChart"/"KaplanMeier"/"ForestPlot"/"Boxplot"）を記録。`;
 
+      let actualModelUsed = targetModel;
       const newOutcome = await callGemini({
         rotator,
         model: targetModel,
@@ -2376,15 +2383,21 @@ figureType に種別（"Table"/"BarChart"/"LineChart"/"KaplanMeier"/"ForestPlot"
         pdfBase64: null,
         schema: SINGLE_OUTCOME_SCHEMA_GEMINI,
         thinkingBudget: 0,
-        onNotice: (m) => showToast(m, 'info')
+        onNotice: (m) => showToast(m, 'info'),
+        onModelUsed: (m) => { actualModelUsed = m; }
       });
 
       if (!newOutcome || !newOutcome.actualOutcomeName) { throw new Error("有効なアウトカムが返されませんでした"); }
 
-      // 既存結果に追加
-      newOutcome.notes = (newOutcome.notes || '') + ` [${type === 'text' ? '📝選択テキスト' : '🔲選択範囲画像'}から追加抽出 P.${pageNum||'?'}]`;
+      // 既存結果に追加（実際に使われたモデルを記録 — フォールバック発生時の表示精度のため）
+      const modelLabel = actualModelUsed !== targetModel ? `${actualModelUsed}(${targetModel}からフォールバック)` : actualModelUsed;
+      newOutcome.notes = (newOutcome.notes || '') + ` [${type === 'text' ? '📝選択テキスト' : '🔲選択範囲画像'}から追加抽出 P.${pageNum||'?'} / ${modelLabel}]`;
       newOutcome._addedFromSelection = true;
+      newOutcome._actualModel = actualModelUsed;
       if (!newOutcome.pageNumber && pageNum) newOutcome.pageNumber = pageNum;
+      if (actualModelUsed !== targetModel) {
+        showToast(`📌 ${targetModel} → ${actualModelUsed} に自動切替して成功`, 'info');
+      }
 
       setResult(prev => {
         const base = prev || { extractedOutcomes: [], paperPICO: {}, statisticalMethods: [], unclearItems: [] };
@@ -2445,13 +2458,18 @@ figureType に種別（"Table"/"BarChart"/"LineChart"/"KaplanMeier"/"ForestPlot"
 【参照テキスト】
 ${pdfText.substring(0, 30000)}`;
 
+      let actualReModel = model;
       const v = await callGemini({
         rotator, model,
         systemPrompt: "数値抽出に特化した分析専門家として、要求された JSON だけを出力してください。",
         userText: focusPrompt,
         thinkingBudget: 0,
-        onNotice: (m) => showToast(m, 'info')
+        onNotice: (m) => showToast(m, 'info'),
+        onModelUsed: (m) => { actualReModel = m; }
       });
+      if (actualReModel !== model) {
+        showToast(`📌 ${model} → ${actualReModel} に自動切替して再抽出`, 'info');
+      }
 
       setResult(prev => {
         const nr = { ...prev };
