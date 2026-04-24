@@ -2203,7 +2203,21 @@ function StageIndicator({ currentStage, progress, message }) {
   );
 }
 
-function ExtractorPage({ apiKeys, model, onBack }) {
+function ExtractorPage({ apiKeys, model: initialModel, onBack }) {
+  // ローカルでモデル状態を持つ → 結果画面からでも変更可能
+  const [model, setModel] = useState(initialModel);
+  const handleModelChange = (newModel) => {
+    if (!GEMINI_MODELS.find(m => m.id === newModel)) return;
+    setModel(newModel);
+    // localStorage にも反映（次回起動でも保持）
+    try {
+      const cfg = loadConfig();
+      saveConfig({ ...cfg, model: newModel });
+    } catch (e) { console.warn('config save failed', e); }
+    const info = GEMINI_MODELS.find(m => m.id === newModel);
+    setTimeout(() => setToast({ message: `モデル変更: ${info.name.replace(/\s*\(.+/, '')}`, type: 'info' }), 50);
+    setTimeout(() => setToast(null), 3500);
+  };
   const [pico, setPico] = useState({ p: "", i: "", c: "" });
   const [outcomes, setOutcomes] = useState([{ id: 1, name: "", definition: "" }]);
   const [pdfFile, setPdfFile] = useState(null);
@@ -2450,7 +2464,6 @@ ${pdfText.substring(0, 30000)}`;
     showToast("保存完了");
   };
 
-  const activeProviderInfo = `Gemini ${(model || '').replace(/^gemini-/, '')}${apiKeys.length > 1 ? ` × ${apiKeys.length}キー` : ''}`;
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
@@ -2463,9 +2476,22 @@ ${pdfText.substring(0, 30000)}`;
             <h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3 Gemini</span></h1>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded font-mono hidden sm:flex items-center gap-1">
-              <LayersIcon size={10}/> {activeProviderInfo}
-            </span>
+            {/* モデル切替（結果画面からでも変更可能） */}
+            <div className="flex items-center gap-1 bg-blue-50 border-2 border-blue-300 rounded-lg px-2 py-1 hover:border-blue-500 transition-colors shadow-sm" title="抽出モデルを切替（次回の抽出から適用）">
+              <LayersIcon size={11} className="text-blue-700 flex-shrink-0"/>
+              <select
+                value={model}
+                onChange={e => handleModelChange(e.target.value)}
+                className="text-[11px] bg-transparent font-bold text-blue-900 outline-none cursor-pointer pr-1 max-w-[180px]"
+              >
+                {GEMINI_MODELS.map(m => (
+                  <option key={m.id} value={m.id}>{m.name.replace(/\s*\(.+/, '')}{m.thinking ? ' 🧠' : ''}</option>
+                ))}
+              </select>
+              {apiKeys.length > 1 && (
+                <span className="text-blue-700 text-[10px] font-mono bg-blue-100 px-1 rounded flex-shrink-0">×{apiKeys.length}キー</span>
+              )}
+            </div>
             {result && <button onClick={saveSession} className="text-[10px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-medium text-slate-600 transition-colors"><SaveIcon size={12}/>保存</button>}
           </div>
         </div>
