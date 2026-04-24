@@ -33,9 +33,15 @@
     .textLayer>span::selection{background:rgba(0,100,200,.3)}
     .highlight-hook{background-color:rgba(250,204,21,.55)!important;color:transparent!important;box-shadow:0 0 0 3px rgba(250,204,21,.55);border-radius:2px;animation:pulseHL 1.5s ease-in-out infinite;z-index:10}
     @keyframes pulseHL{0%,100%{background-color:rgba(250,204,21,.55);box-shadow:0 0 0 3px rgba(250,204,21,.55)}50%{background-color:rgba(250,204,21,.85);box-shadow:0 0 0 5px rgba(250,204,21,.85)}}
-    .editable-input{width:100%;min-width:35px;text-align:center;background:transparent;border:1px dashed transparent;border-radius:3px;transition:all .2s;padding:2px 3px;font-size:inherit;font-weight:inherit;color:inherit}
-    .editable-input:hover{background:rgba(255,255,255,.7);border-color:#cbd5e1}
+    .editable-input{width:100%;min-width:40px;text-align:center;background:transparent;border:1px dashed transparent;border-radius:3px;transition:all .2s;padding:3px 4px;font-size:inherit;font-weight:inherit;color:#0f172a}
+    .editable-input:hover{background:rgba(255,255,255,.85);border-color:#94a3b8}
     .editable-input:focus{background:#fff;border-color:#7c3aed;border-style:solid;outline:none;box-shadow:0 0 0 2px rgba(124,58,237,.15)}
+    .editable-input::placeholder{color:#dc2626;font-weight:700}
+    .editable-input.cell-empty{background:repeating-linear-gradient(45deg,#fef2f2,#fef2f2 4px,#fee2e2 4px,#fee2e2 8px);border:1px solid #fca5a5}
+    .editable-input.cell-empty::placeholder{color:#dc2626}
+    .ja-block{background:#eff6ff;border-left:3px solid #3b82f6;color:#1e3a8a;padding:6px 8px;border-radius:4px;font-weight:500}
+    .orig-block{background:#fffbeb;border-left:3px solid #f59e0b;color:#1e293b;padding:6px 8px;border-radius:4px;font-style:italic}
+    .orig-block:hover,.ja-block:hover{filter:brightness(0.97);cursor:pointer}
     .api-input-glow:focus{box-shadow:0 0 0 3px rgba(124,58,237,.15),0 0 20px rgba(124,58,237,.08)}
     .gradient-purple{background:linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%)}
     .gradient-text{background:linear-gradient(135deg,#7c3aed 0%,#ec4899 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -96,7 +102,34 @@ const ShieldCheckIcon=({size,className})=><I size={size} className={className}><
    ============================================================ */
 const SYSTEM_PROMPT_EXTRACT = `あなたは世界最高水準の医学システマティックレビュー/メタ分析の熟練専門家です。20年以上の臨床研究経験を持ち、Cochrane Handbookの隅々まで精通しています。
 
-【使命】提供されたRCT論文から、メタ分析に必要な数値データを「完全無欠の精度」で抽出する。
+【使命】提供されたRCT論文から、メタ分析に必要な**数値データ**を「完全無欠の精度」で抽出する。evidenceText（根拠文）だけでなく、**そこに含まれる全ての数値を必ず構造化フィールドに格納すること**。
+
+【🚨 最重要・絶対遵守ルール】
+**evidenceText に書いた数値は、必ず構造化フィールド（n_total, events_or_mean, sd_or_se, effectEstimate.value 等）にも転記すること**。evidenceText だけ書いて数値フィールドが空のレコードは厳禁。
+- evidence: "121 teeth examined at 5-year, 80% success in PCR, 56% in SW (p=0.36)"
+  → 必ず: interventionGroup.n_total="121", interventionGroup.events_or_mean="80%" (or actual count), comparisonGroup.events_or_mean="56%", effectEstimate.pValue="0.36"
+- evidence: "229 teeth randomized; PCR group n=114, SW group n=115"
+  → 必ず: interventionGroup.n_total="114", comparisonGroup.n_total="115"
+- 数値が "%" のみで実数が無くても、events_or_mean に "80%" と入れる（空にしない）
+- "p < 0.001" → effectEstimate.pValue="<0.001"
+- 95%CI が "0.21-4.08" → effectEstimate.ci95="0.21-4.08"
+
+【出力例（1アウトカムの完全な姿）】
+{
+  "actualOutcomeName": "5年生存率（PCR vs SW）",
+  "timePoint": "5年",
+  "variableType": "Binary",
+  "populationType": "ITT",
+  "interventionGroup": { "n_total": "114", "events_or_mean": "91 (80%)", "sd_or_se": "-" },
+  "comparisonGroup":   { "n_total": "115", "events_or_mean": "64 (56%)", "sd_or_se": "-" },
+  "effectEstimate": { "measureType": "IRR", "value": "0.38", "ci95": "0.23-0.63", "pValue": "0.001" },
+  "evidenceText": "Survival analysis showed success rates of 80% in PCR group and 56% in SW group...",
+  "evidenceTextJa": "生存解析では PCR群80%、SW群56%の成功率を示した...",
+  "sourceLocation": "本文 p.5 段落2 + Table 2",
+  "pageNumber": 5,
+  "confidence": "high",
+  "figureType": "None"
+}
 
 【思考プロセス（必須）】
 以下の順序で体系的に情報を収集してください：
@@ -944,9 +977,18 @@ ${isMultimodal ? '添付の論文PDF（テキスト + 高解像度画像）' : '
 
 ${figurePrompt}
 
-各 extractedOutcomes 項目に必ず以下を含めてください：
-- evidenceText: **論文の原文をそのまま引用**（改変禁止${isMultimodal ? '、図表からの場合はセル値・軸ラベル・凡例を文字起こし' : ''}）
+【🚨 最重要】各 extractedOutcomes 項目で、**evidenceText に書いた数値は必ず構造化フィールド (interventionGroup, comparisonGroup, effectEstimate) にも転記**してください。
+evidenceText だけ書いて数値フィールドが空のレコードは絶対に作らないこと。
+- 例: 原文 "PCR group n=114, success 91/114 (80%); SW group n=115, success 64/115 (56%); IRR 0.38 (95%CI 0.23-0.63, p=0.001)"
+  → interventionGroup.n_total="114", events_or_mean="91 (80%)"
+  → comparisonGroup.n_total="115", events_or_mean="64 (56%)"
+  → effectEstimate.value="0.38", ci95="0.23-0.63", pValue="0.001"
+
+各項目に必ず以下を含めてください：
+- evidenceText: 論文の原文をそのまま引用（改変禁止${isMultimodal ? '、図表からの場合はセル値・軸ラベル・凡例を文字起こし' : ''}）
 - evidenceTextJa: evidenceText の自然な日本語訳（医学用語は適切に訳出、数値はそのまま）
+- **interventionGroup / comparisonGroup の数値**: evidenceText 内の数値を必ず転記
+- **effectEstimate**: RR/OR/HR/MD等の効果量、95%CI、P値（記載があれば必ず）
 - pageNumber: PDFページ番号（1始まり）
 - sourceLocation: "Table 2", ${isMultimodal ? '"Figure 3 KMカーブ", ' : ''}"本文 p.5 段落2" など具体的な出処
 - confidence: high/medium/low
@@ -995,12 +1037,29 @@ function ConfidenceBadge({ confidence }) {
 function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight, onSendToSearch, onReVerify, fontSize }) {
   const isAuto = oc.requestedOutcomeName?.includes("未指定") || oc.requestedOutcomeName?.includes("自動");
   const has3rd = !!(oc.thirdGroup || oc.thirdGroupName);
-  const EditCell = ({ group, field, cls = "" }) => (
-    <td className="border-r border-slate-100 px-0.5 py-0.5">
-      <input className={`editable-input ${cls}`} value={oc[group]?.[field]||""} onChange={e=>onEdit(idx,group,field,e.target.value)} placeholder="-"/>
-    </td>
-  );
+  const EditCell = ({ group, field, cls = "" }) => {
+    const val = oc[group]?.[field] || "";
+    const empty = !val || val === "-" || val === "不明";
+    return (
+      <td className="border-r border-slate-200 px-0.5 py-0.5">
+        <input
+          className={`editable-input ${cls} ${empty ? 'cell-empty' : ''}`}
+          value={val}
+          onChange={e=>onEdit(idx,group,field,e.target.value)}
+          placeholder="未抽出"
+          title={empty ? `⚠️ ${field} が抽出されていません。原文を確認して手入力してください` : ''}
+        />
+      </td>
+    );
+  };
   const sz = fontSize;
+  // この outcome の数値抽出度を計算（0〜1）
+  const numFields = ['n_total','events_or_mean','sd_or_se'];
+  const filledI = numFields.filter(f => oc.interventionGroup?.[f] && oc.interventionGroup[f] !== '-' && oc.interventionGroup[f] !== '不明').length;
+  const filledC = numFields.filter(f => oc.comparisonGroup?.[f] && oc.comparisonGroup[f] !== '-' && oc.comparisonGroup[f] !== '不明').length;
+  const fillRatio = (filledI + filledC) / 6;
+  const hasEffect = !!(oc.effectEstimate?.value && oc.effectEstimate.value !== '-' && oc.effectEstimate.value !== '不明');
+  const allEmpty = filledI + filledC === 0 && !hasEffect;
 
   return (
     <div className={`border rounded-lg overflow-hidden shadow-sm ${isAuto?'border-amber-200':'border-slate-200'}`}>
@@ -1027,82 +1086,117 @@ function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight,
             <button onClick={()=>onCopyTSV(oc)} className="text-[8px] text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded font-medium hover:bg-blue-50 transition-colors"><CopyIcon size={9} className="inline mr-0.5"/>TSV</button>
             <button onClick={()=>onCopyCSV(oc)} className="text-[8px] text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded font-medium hover:bg-blue-50 transition-colors"><CopyIcon size={9} className="inline mr-0.5"/>CSV</button>
             <button onClick={()=>onHighlight(oc)} className="text-[8px] bg-yellow-400 hover:bg-yellow-500 text-yellow-900 border border-yellow-500 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 transition-colors"><TargetIcon size={9}/>確認</button>
-            {onReVerify && <button onClick={()=>onReVerify(idx)} className="text-[8px] bg-purple-500 hover:bg-purple-600 text-white px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5 transition-colors"><ShieldCheckIcon size={9}/>再検証</button>}
+            {onReVerify && <button onClick={()=>onReVerify(idx)} title="このアウトカムだけを再度AIに送って数値を補完" className="text-[10px] bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded font-bold flex items-center gap-0.5 transition-colors"><RefreshIcon size={10}/>数値再抽出</button>}
           </div>
         </div>
       </div>
-      {oc.variationReason && <div className="bg-purple-50 text-purple-800 px-2.5 py-1.5 border-b border-purple-100" style={{fontSize:`${Math.max(8,sz*0.8)}px`}}><InfoIcon size={10} className="inline mr-0.5 text-purple-500"/><b>揺らぎ:</b> {oc.variationReason}</div>}
-      {oc._verifyIssues?.length > 0 && <div className="bg-red-50 text-red-800 px-2.5 py-1.5 border-b border-red-100" style={{fontSize:`${Math.max(8,sz*0.8)}px`}}><AlertCircle size={10} className="inline mr-0.5"/><b>検証指摘:</b> {oc._verifyIssues.join(' / ')}</div>}
+      {oc.variationReason && <div className="bg-purple-50 text-purple-800 px-2.5 py-1.5 border-b border-purple-100" style={{fontSize:`${Math.max(10,sz*0.9)}px`}}><InfoIcon size={11} className="inline mr-0.5 text-purple-500"/><b>揺らぎ:</b> {oc.variationReason}</div>}
+      {oc._verifyIssues?.length > 0 && <div className="bg-red-50 text-red-800 px-2.5 py-1.5 border-b border-red-100" style={{fontSize:`${Math.max(10,sz*0.9)}px`}}><AlertCircle size={11} className="inline mr-0.5"/><b>検証指摘:</b> {oc._verifyIssues.join(' / ')}</div>}
+      {allEmpty && (
+        <div className="bg-red-50 text-red-800 px-2.5 py-1.5 border-b border-red-200 flex items-start gap-1.5" style={{fontSize:`${Math.max(10,sz*0.9)}px`}}>
+          <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-red-600"/>
+          <span><b>⚠️ 数値が抽出されていません。</b>下の根拠原文に数値があれば、各セル（赤斜線）をクリックして手入力するか、「再抽出」ボタンで AI に再依頼してください。</span>
+        </div>
+      )}
+      {!allEmpty && fillRatio < 0.5 && (
+        <div className="bg-amber-50 text-amber-800 px-2.5 py-1.5 border-b border-amber-200 flex items-start gap-1.5" style={{fontSize:`${Math.max(10,sz*0.85)}px`}}>
+          <AlertCircle size={12} className="flex-shrink-0 mt-0.5 text-amber-600"/>
+          <span><b>一部の数値が未抽出</b>（{Math.round(fillRatio*100)}% 充足）。赤斜線セルを確認・補完してください</span>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full whitespace-nowrap" style={{fontSize:`${sz}px`}}>
-          <thead className="bg-white text-slate-500 border-b" style={{fontSize:`${Math.max(7,sz*0.75)}px`}}>
-            <tr>
-              <th className="px-1 py-0.5 text-center border-r" colSpan="3">介入群</th>
-              <th className="px-1 py-0.5 text-center border-r" colSpan="3">対照群</th>
-              {has3rd && <th className="px-1 py-0.5 text-center border-r bg-purple-50/50 text-purple-800" colSpan="3">{oc.thirdGroupName||'第3群'}</th>}
-              <th className="px-1 py-0.5 text-center" colSpan="4">効果推定値</th>
+          <thead className="text-slate-700 border-b border-slate-300" style={{fontSize:`${Math.max(10,sz*0.85)}px`}}>
+            <tr className="bg-slate-100">
+              <th className="px-1.5 py-1 text-center border-r border-slate-300 font-bold text-blue-800" colSpan="3">介入群</th>
+              <th className="px-1.5 py-1 text-center border-r border-slate-300 font-bold text-slate-700" colSpan="3">対照群</th>
+              {has3rd && <th className="px-1.5 py-1 text-center border-r border-slate-300 bg-purple-100 text-purple-900 font-bold" colSpan="3">{oc.thirdGroupName||'第3群'}</th>}
+              <th className="px-1.5 py-1 text-center font-bold text-emerald-800" colSpan="4">効果推定値</th>
             </tr>
-            <tr className="bg-slate-50 border-t">
-              {["N","イベント/平均","SD/SE","N","イベント/平均","SD/SE"].map((h,i)=><th key={i} className="px-1 py-0.5 text-center border-r">{h}</th>)}
-              {has3rd && ["N","イベント/平均","SD/SE"].map((h,i)=><th key={`t${i}`} className="px-1 py-0.5 text-center border-r bg-purple-50/20">{h}</th>)}
-              {["指標","値","95%CI","P値"].map((h,i)=><th key={`e${i}`} className={`px-1 py-0.5 text-center ${i<3?'border-r':''}`}>{h}</th>)}
+            <tr className="bg-slate-50 border-t border-slate-200 text-slate-700 font-semibold">
+              {["N","イベント/平均","SD/SE","N","イベント/平均","SD/SE"].map((h,i)=><th key={i} className="px-1 py-0.5 text-center border-r border-slate-200">{h}</th>)}
+              {has3rd && ["N","イベント/平均","SD/SE"].map((h,i)=><th key={`t${i}`} className="px-1 py-0.5 text-center border-r border-slate-200 bg-purple-50">{h}</th>)}
+              {["指標","値","95%CI","P値"].map((h,i)=><th key={`e${i}`} className={`px-1 py-0.5 text-center ${i<3?'border-r border-slate-200':''}`}>{h}</th>)}
             </tr>
           </thead>
           <tbody className="bg-white">
             <tr>
-              <EditCell group="interventionGroup" field="n_total"/>
-              <EditCell group="interventionGroup" field="events_or_mean" cls="font-bold text-blue-700"/>
-              <EditCell group="interventionGroup" field="sd_or_se" cls="text-slate-500"/>
-              <EditCell group="comparisonGroup" field="n_total"/>
-              <EditCell group="comparisonGroup" field="events_or_mean" cls="font-bold text-blue-700"/>
-              <EditCell group="comparisonGroup" field="sd_or_se" cls="text-slate-500"/>
+              <EditCell group="interventionGroup" field="n_total" cls="font-bold text-blue-900"/>
+              <EditCell group="interventionGroup" field="events_or_mean" cls="font-bold text-blue-800"/>
+              <EditCell group="interventionGroup" field="sd_or_se" cls="text-slate-700"/>
+              <EditCell group="comparisonGroup" field="n_total" cls="font-bold text-slate-900"/>
+              <EditCell group="comparisonGroup" field="events_or_mean" cls="font-bold text-slate-800"/>
+              <EditCell group="comparisonGroup" field="sd_or_se" cls="text-slate-700"/>
               {has3rd && <>
-                <EditCell group="thirdGroup" field="n_total"/>
-                <EditCell group="thirdGroup" field="events_or_mean" cls="font-bold text-purple-700"/>
-                <EditCell group="thirdGroup" field="sd_or_se" cls="text-slate-500"/>
+                <EditCell group="thirdGroup" field="n_total" cls="font-bold text-purple-900"/>
+                <EditCell group="thirdGroup" field="events_or_mean" cls="font-bold text-purple-800"/>
+                <EditCell group="thirdGroup" field="sd_or_se" cls="text-slate-700"/>
               </>}
-              <EditCell group="effectEstimate" field="measureType"/>
-              <EditCell group="effectEstimate" field="value" cls="font-bold text-emerald-700"/>
-              <EditCell group="effectEstimate" field="ci95"/>
-              <td className="px-0.5 py-0.5"><input className="editable-input" value={oc.effectEstimate?.pValue||""} onChange={e=>onEdit(idx,'effectEstimate','pValue',e.target.value)} placeholder="-"/></td>
+              <EditCell group="effectEstimate" field="measureType" cls="font-semibold text-emerald-900"/>
+              <EditCell group="effectEstimate" field="value" cls="font-bold text-emerald-800"/>
+              <EditCell group="effectEstimate" field="ci95" cls="text-emerald-900"/>
+              {(() => {
+                const pv = oc.effectEstimate?.pValue || "";
+                const empty = !pv || pv === "-" || pv === "不明";
+                const sig = !empty && /^[<≤]?\s*0?\.0*[0-4]/.test(pv);
+                return (
+                  <td className="px-0.5 py-0.5">
+                    <input
+                      className={`editable-input ${sig ? 'font-bold text-red-700' : 'text-slate-800'} ${empty ? 'cell-empty' : ''}`}
+                      value={pv}
+                      onChange={e=>onEdit(idx,'effectEstimate','pValue',e.target.value)}
+                      placeholder="未抽出"
+                      title={empty ? '⚠️ P値が抽出されていません' : ''}
+                    />
+                  </td>
+                );
+              })()}
             </tr>
           </tbody>
         </table>
       </div>
-      <div className="bg-amber-50/30 px-3 py-2 border-t border-slate-200 space-y-1.5" style={{fontSize:`${Math.max(8,sz*0.85)}px`}}>
-        <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">計算方法:</span><span className="text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono">{oc.calculationMethod||"論文に直接記載"}</span></div>
-        <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">出処:</span><span className="text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 font-semibold">{oc.sourceLocation}</span></div>
-        {oc.populationDescription && <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">集団詳細:</span><span className="text-slate-800">{oc.populationDescription}</span></div>}
-        <div className="flex items-start gap-1.5">
-          <span className="font-semibold text-slate-600 min-w-[50px] flex-shrink-0">根拠原文:</span>
-          <div className="flex-1 space-y-1">
+      <div className="bg-slate-50 px-3 py-2.5 border-t border-slate-200 space-y-2" style={{fontSize:`${Math.max(11,sz*0.95)}px`}}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-1 border-b border-slate-200">
+          <div className="flex items-center gap-1"><span className="font-bold text-slate-600">計算:</span><span className="text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-300 font-mono text-[11px]">{oc.calculationMethod||"論文に直接記載"}</span></div>
+          <div className="flex items-center gap-1"><span className="font-bold text-slate-600">出処:</span><span className="text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-300 font-semibold">{oc.sourceLocation}</span></div>
+          {oc.populationDescription && <div className="flex items-center gap-1"><span className="font-bold text-slate-600">集団:</span><span className="text-slate-900">{oc.populationDescription}</span></div>}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-bold text-slate-700 flex items-center gap-1"><FileText size={12} className="text-amber-600"/>根拠（クリックでPDFを検索＆ハイライト）</span>
+            {oc.figureType && oc.figureType !== 'None' && (
+              <span className="text-[10px] text-purple-800 bg-purple-100 border border-purple-300 px-1.5 py-0.5 rounded font-bold">
+                📊 {oc.figureType}（目視抽出・要確認）
+              </span>
+            )}
+          </div>
+          <div className="space-y-1.5">
             <blockquote
               onClick={() => onSendToSearch(oc.evidenceText, oc.pageNumber)}
               title="クリックでPDFを検索＆ハイライト"
-              className="text-slate-700 italic border-l-2 border-amber-300 pl-1.5 py-1 px-1 break-words whitespace-pre-wrap cursor-pointer hover:bg-amber-50 hover:border-amber-500 rounded transition-colors group">
-              <span className="opacity-0 group-hover:opacity-100 absolute -ml-3 mt-0.5 text-amber-600"><SearchIcon size={10}/></span>
+              className="orig-block break-words whitespace-pre-wrap"
+              style={{fontSize:`${Math.max(11,sz*0.95)}px`,lineHeight:1.55}}>
+              <span className="text-[10px] font-bold text-amber-700 mr-1.5 not-italic">📄 原文:</span>
               "{oc.evidenceText}"
             </blockquote>
             {oc.evidenceTextJa && (
               <blockquote
                 onClick={() => onSendToSearch(oc.evidenceText, oc.pageNumber)}
                 title="クリックでPDFを検索＆ハイライト（原文側で検索）"
-                className="text-blue-900 not-italic border-l-2 border-blue-300 pl-1.5 py-1 px-1 break-words whitespace-pre-wrap cursor-pointer hover:bg-blue-50 hover:border-blue-500 rounded transition-colors bg-blue-50/30">
-                <span className="text-[9px] font-bold text-blue-600 mr-1">🇯🇵 訳:</span>
+                className="ja-block break-words whitespace-pre-wrap"
+                style={{fontSize:`${Math.max(11,sz*0.95)}px`,lineHeight:1.55}}>
+                <span className="text-[10px] font-bold text-blue-700 mr-1.5">🇯🇵 訳:</span>
                 {oc.evidenceTextJa}
               </blockquote>
             )}
-            {oc.figureType && oc.figureType !== 'None' && (
-              <div className="text-[9px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded inline-block">
-                📊 図表種別: <b>{oc.figureType}</b>（目視抽出のため要確認）
-              </div>
-            )}
-            <div className="flex items-center gap-1 text-[9px] text-slate-500">
-              <InfoIcon size={9}/>原文または訳文をクリック → PDFを検索＆ハイライト。失敗時は右の検索窓で文字を編集して再検索可
-            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
+            <InfoIcon size={10}/>ハイライト失敗時は、右上のPDF検索窓で文字を編集して再検索できます
           </div>
         </div>
-        {oc.notes && <div className="bg-amber-50 border border-amber-200 px-2 py-1 rounded text-amber-700 flex items-start gap-1 mt-1"><AlertCircle size={12} className="flex-shrink-0 mt-0.5"/><span><b>注記:</b> {oc.notes}</span></div>}
+
+        {oc.notes && <div className="bg-amber-50 border border-amber-300 px-2.5 py-1.5 rounded text-amber-900 flex items-start gap-1.5"><AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-amber-700"/><span style={{fontSize:`${Math.max(10,sz*0.9)}px`}}><b>注記:</b> {oc.notes}</span></div>}
       </div>
     </div>
   );
@@ -1683,7 +1777,7 @@ function ExtractorPage({ apiKeys, model, onBack }) {
   const [hlQuery, setHlQuery] = useState("");
   const [hlPage, setHlPage] = useState(null);
   const [pdfScale, setPdfScale] = useState(1.0);
-  const [leftFontSize, setLeftFontSize] = useState(11);
+  const [leftFontSize, setLeftFontSize] = useState(13);
   const [pdfSearchText, setPdfSearchText] = useState("");
   const fileRef = useRef(null);
 
@@ -1742,36 +1836,74 @@ function ExtractorPage({ apiKeys, model, onBack }) {
     }
   };
 
+  // 1アウトカムだけを再抽出（数値強化プロンプト）
   const reVerifyOutcome = async (idx) => {
-    if (!apiKeys?.length) { showToast("再検証にはAPIキーが必要", "error"); return; }
+    if (!apiKeys?.length) { showToast("再抽出にはAPIキーが必要", "error"); return; }
     const oc = result.extractedOutcomes[idx];
-    const criticModel = pickCriticModel(model);
-    showToast(`${criticModel} で再検証中...`, "info");
+    showToast(`${model} で「${oc.actualOutcomeName}」を数値再抽出中...`, "info");
     try {
       const pdfText = await extractPdfText(pdfFile);
-      const prompt = `【検証対象】\n${JSON.stringify(oc, null, 2)}\n\n【参照テキスト】\n${pdfText.substring(0, 20000)}\n\n検証してJSON返答。`;
       const rotator = makeKeyRotator(apiKeys);
-      const v = await callCriticAnyProvider(
-        rotator, criticModel,
-        SYSTEM_PROMPT_VERIFY, prompt,
-        null, null, 6000, null,
-        (m) => showToast(m, 'info')
-      );
+      const focusPrompt = `あなたは医学RCT論文のメタ分析データ抽出専門家です。
+以下の特定アウトカムについて、論文本文から**数値を完全に抽出**してください。
+
+【対象アウトカム】
+- 名称: ${oc.actualOutcomeName}
+- 時点: ${oc.timePoint || '不明'}
+- 集団: ${oc.populationType || '不明'}
+- 既に判明している根拠原文: "${oc.evidenceText || '(なし)'}"
+
+【あなたの仕事】
+論文本文を再精読し、上記アウトカムの介入群/対照群の N、イベント数または平均、SD/SE、効果量(RR/OR/HR/MD等)、95%CI、P値を**全て抽出**してください。
+根拠原文に既に含まれている数値は必ず転記。新たに見つかった数値も追加。
+不明なものは "不明" と記載してください。
+
+以下のJSON形式だけで返答（マークダウン不要）:
+{
+  "interventionGroup": { "n_total": "...", "events_or_mean": "...", "sd_or_se": "..." },
+  "comparisonGroup":   { "n_total": "...", "events_or_mean": "...", "sd_or_se": "..." },
+  "effectEstimate":    { "measureType": "...", "value": "...", "ci95": "...", "pValue": "..." },
+  "evidenceText":      "原文を再引用（必要なら追加）",
+  "evidenceTextJa":    "日本語訳",
+  "notes":             "追加の注記（あれば）"
+}
+
+【参照テキスト】
+${pdfText.substring(0, 30000)}`;
+
+      const v = await callGemini({
+        rotator, model,
+        systemPrompt: "数値抽出に特化した分析専門家として、要求された JSON だけを出力してください。",
+        userText: focusPrompt,
+        thinkingBudget: 0,
+        onNotice: (m) => showToast(m, 'info')
+      });
+
       setResult(prev => {
         const nr = { ...prev };
         nr.extractedOutcomes = [...nr.extractedOutcomes];
-        nr.extractedOutcomes[idx] = {
-          ...nr.extractedOutcomes[idx],
-          _verified: v.verified,
-          _verifyConfidence: v.confidence,
-          _verifyIssues: v.issues,
-          ...(v.correctedValues || {})
+        const cur = { ...nr.extractedOutcomes[idx] };
+        // 既存値が空の所だけ上書き、既に値がある所は保持
+        const mergeGroup = (curG, newG) => {
+          const out = { ...(curG || {}) };
+          Object.entries(newG || {}).forEach(([k, val]) => {
+            if (val && val !== '-' && val !== '不明' && (!out[k] || out[k] === '-' || out[k] === '不明')) out[k] = val;
+          });
+          return out;
         };
+        cur.interventionGroup = mergeGroup(cur.interventionGroup, v.interventionGroup);
+        cur.comparisonGroup = mergeGroup(cur.comparisonGroup, v.comparisonGroup);
+        cur.effectEstimate = mergeGroup(cur.effectEstimate, v.effectEstimate);
+        if (v.evidenceText && (!cur.evidenceText || v.evidenceText.length > cur.evidenceText.length)) cur.evidenceText = v.evidenceText;
+        if (v.evidenceTextJa && (!cur.evidenceTextJa || v.evidenceTextJa.length > cur.evidenceTextJa.length)) cur.evidenceTextJa = v.evidenceTextJa;
+        if (v.notes) cur.notes = (cur.notes ? cur.notes + ' / ' : '') + '[再抽出] ' + v.notes;
+        cur._reExtracted = true;
+        nr.extractedOutcomes[idx] = cur;
         return nr;
       });
-      showToast(`検証完了 (${v.verified ? '確認OK' : '要確認'} / 信頼度${v.confidence})`);
+      showToast(`数値再抽出完了`, 'success');
     } catch (e) {
-      showToast("検証失敗: " + e.message, "error");
+      showToast("再抽出失敗: " + e.message, "error");
     }
   };
 
@@ -1919,17 +2051,66 @@ function ExtractorPage({ apiKeys, model, onBack }) {
               <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-4" style={{fontSize:`${leftFontSize}px`}}>
                 {/* Source info banner */}
                 {result._sources && (
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg px-3 py-2 flex items-start gap-2" style={{fontSize:`${Math.max(9,leftFontSize*0.85)}px`}}>
-                    <BrainIcon size={14} className="text-purple-600 flex-shrink-0 mt-0.5"/>
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg px-3 py-2 flex items-start gap-2" style={{fontSize:`${Math.max(11,leftFontSize*0.9)}px`}}>
+                    <BrainIcon size={16} className="text-purple-600 flex-shrink-0 mt-0.5"/>
                     <div className="flex-1">
-                      <div className="font-semibold text-purple-900">抽出ソース:</div>
-                      <div className="text-purple-700">{result._sources.join(' + ')}</div>
-                      {result._criticProviderUsed && <div className="mt-1 text-purple-700 text-[10px]"><ShieldCheckIcon size={10} className="inline mr-0.5"/><b>Critic担当:</b> {result._criticProviderUsed}</div>}
-                      {result._criticAssessment && <div className="mt-1 text-slate-700"><b>Critic評価:</b> {result._criticAssessment}</div>}
-                      {result._errors?.length > 0 && <div className="mt-1 text-amber-700 text-[10px]">部分エラー: {result._errors.join(' / ')}</div>}
+                      <div className="font-bold text-purple-900">抽出ソース:</div>
+                      <div className="text-purple-800">{result._sources.join(' + ')}</div>
+                      {result._errors?.length > 0 && <div className="mt-1 text-amber-800"><b>部分エラー:</b> {result._errors.join(' / ')}</div>}
                     </div>
                   </div>
                 )}
+
+                {/* 抽出品質サマリー */}
+                {(() => {
+                  const ocs = result.extractedOutcomes || [];
+                  if (!ocs.length) return null;
+                  const numFields = ['n_total', 'events_or_mean', 'sd_or_se'];
+                  let totalCells = 0, filledCells = 0, allEmpty = 0;
+                  ocs.forEach(o => {
+                    let f = 0;
+                    numFields.forEach(k => {
+                      totalCells += 2;
+                      if (o.interventionGroup?.[k] && o.interventionGroup[k] !== '-' && o.interventionGroup[k] !== '不明') { filledCells++; f++; }
+                      if (o.comparisonGroup?.[k] && o.comparisonGroup[k] !== '-' && o.comparisonGroup[k] !== '不明') { filledCells++; f++; }
+                    });
+                    if (o.effectEstimate?.value && o.effectEstimate.value !== '-' && o.effectEstimate.value !== '不明') { filledCells++; f++; }
+                    totalCells++;
+                    if (f === 0) allEmpty++;
+                  });
+                  const ratio = totalCells > 0 ? filledCells / totalCells : 0;
+                  const pct = Math.round(ratio * 100);
+                  const isLow = ratio < 0.4 || allEmpty > ocs.length * 0.3;
+                  return (
+                    <div className={`rounded-lg px-3 py-2.5 border-2 ${isLow ? 'bg-red-50 border-red-300' : ratio < 0.7 ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-300'}`} style={{fontSize:`${Math.max(11,leftFontSize*0.9)}px`}}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          {isLow ? <AlertCircle size={16} className="text-red-600"/> : ratio < 0.7 ? <AlertCircle size={16} className="text-amber-600"/> : <CheckCircle2 size={16} className="text-emerald-600"/>}
+                          <span className={`font-bold ${isLow ? 'text-red-900' : ratio < 0.7 ? 'text-amber-900' : 'text-emerald-900'}`}>
+                            数値抽出率: <span className="font-mono text-base">{pct}%</span>
+                            <span className="text-[11px] font-normal ml-2">({filledCells} / {totalCells} 項目, アウトカム {ocs.length}件中 数値ゼロは {allEmpty}件)</span>
+                          </span>
+                        </div>
+                        <button
+                          onClick={startAnalysis}
+                          disabled={status === 'running'}
+                          className="text-[11px] bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white font-bold px-3 py-1 rounded flex items-center gap-1">
+                          <RefreshIcon size={11}/>全体を再抽出
+                        </button>
+                      </div>
+                      {isLow && (
+                        <div className="text-red-800 text-[11px] mt-1 leading-relaxed">
+                          ⚠️ <b>数値の抽出が不十分です。</b>以下のいずれかをお試しください:
+                          <ul className="list-disc pl-5 mt-1 space-y-0.5">
+                            <li><b>図表対応モデル（Gemini 2.5 Flash Lite）</b>に切替 → 図/表の数値も読み取れます</li>
+                            <li>下の各カードで赤斜線セルをクリックして手入力</li>
+                            <li>「全体を再抽出」で再試行（プロンプトが強化されています）</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <section className="border border-slate-200 rounded-lg overflow-hidden">
                   <div className="bg-slate-100 px-2 py-1 border-b"><h3 className="font-semibold text-slate-700" style={{fontSize:`${leftFontSize}px`}}>PICO比較</h3></div>
