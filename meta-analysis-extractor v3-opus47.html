@@ -696,7 +696,7 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
   for (let mIdx = 0; mIdx < modelChain.length; mIdx++) {
     const tryModel = modelChain[mIdx];
     const modelInfo = GEMINI_MODELS.find(m => m.id === tryModel) || {};
-    if (mIdx > 0) notice(`⚠️ ${model} が混雑のため ${tryModel} に切替`);
+    if (mIdx > 0) notice(`⚠️ あなたが選択した ${model} が利用不可 → 自動で ${tryModel} に切替`);
 
     // モデルごとにリクエストボディを構築
     // - Gemma: textOnly + systemInstruction 非対応 → systemPrompt をユーザーメッセージに統合
@@ -813,9 +813,9 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
         // ★ 最終モデルでも、短期 429 (TPM等) なら 4回まで粘る (待機累計 ≈55秒)
         // ダッシュボード上の RPM/RPD に余裕がある場合は短期バーストの可能性が高い
         if (isLastModel && attempt >= 4) {
-          throw new Error(`全モデル (${modelChain.join(' / ')}) で連続的に短期レート制限。\n${
+          throw new Error(`選択モデル ${model}${modelChain.length > 1 ? ` (+ フォールバック ${modelChain.slice(1).join(', ')})` : ''} すべて連続的に短期レート制限。\n${
             isTpmQuota ? '入力トークン量 (TPM) が一時的に上限超過の可能性' : 'API側の短期スロットリング'
-          }。\n💡 対処:\n・1〜2分待ってから再試行（TPM/RPMは1分で回復）\n・Google AI Studio ダッシュボードで RPD/TPM の使用率を確認\n・別プロジェクトのキーを追加して負荷分散`);
+          }。\n💡 対処:\n・1〜2分待ってから再試行（TPM/RPMは1分で回復）\n・Google AI Studio ダッシュボードで RPD/TPM の使用率を確認\n・別プロジェクトのキーを追加して負荷分散\n・Critic監査(Stage4)を含む3パスで負荷が高い → 連投を避ける`);
         }
       }
 
@@ -842,7 +842,9 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
         ? (isLastModel ? 20000 : 5000)
         : (isLastModel ? 12000 : 6000);
       waitMs = Math.min(waitMs, waitCap);
-      notice(`${r.kind === 'overloaded' ? '🔁 503 過負荷' : r.kind === 'ratelimit' ? `⏳ レート制限${isTpmQuota ? '(TPM)' : isDailyQuota ? '(RPD)' : ''}` : '🔁 再試行'} (${tryModel}) → ${Math.round(waitMs/1000)}秒待機 [${attempt+1}/${maxAttempts}]`);
+      // 表示: フォールバック中なら「選択 → 試行中」を明示（ユーザーが「Lite表示」に困惑しないため）
+      const modelLabel = mIdx > 0 ? `${model}失敗 → ${tryModel}にフォールバック中` : tryModel;
+      notice(`${r.kind === 'overloaded' ? '🔁 503 過負荷' : r.kind === 'ratelimit' ? `⏳ レート制限${isTpmQuota ? '(TPM)' : isDailyQuota ? '(RPD)' : ''}` : '🔁 再試行'} (${modelLabel}) → ${Math.round(waitMs/1000)}秒待機 [${attempt+1}/${maxAttempts}]`);
       await sleep(waitMs);
     }
   }
@@ -1474,12 +1476,14 @@ ${truncatedOutcomes}
 【参照テキスト（原論文）】
 ${pdfText.substring(0, 40000)}`;
 
+      // ★ Critic はテキスト主体（images/PDF を送らない）→ TPM 大幅節約
+      // outcomes JSON + pdfText だけで十分。画像はStage2で活用済み
       const review = await callGemini({
         rotator, model: stage4Info.id,
         systemPrompt: "あなたはメタ分析データ抽出の監査専門家です。Cochrane EPOC の risk-of-bias 評価者として活動してきた世界有数の専門家です。1桁の数値ミスも見逃さず、原文との照合で修正済み outcomes を返答します。",
         userText: criticPrompt,
-        images: !stage4Info.textOnly ? pdfImages : null,
-        pdfBase64: !stage4Info.textOnly ? pdfBase64 : null,
+        images: null,    // ← Stage2で画像は処理済みなので Critic では送らない（TPM節約）
+        pdfBase64: null, // ← 同上
         schema: CRITIC_REVIEW_SCHEMA_GEMINI,
         thinkingBudget: stage4Info.thinking ? 8000 : 0,
         onNotice: (m) => { onProgress("stage4", m, 90); onNotice && onNotice(m); },
