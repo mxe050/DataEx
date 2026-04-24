@@ -143,10 +143,19 @@ sourceLocationには単一の出処のみ記載（例: "Table 2", "Abstract Resu
    - 中央値のみの場合 notes に "中央値のみ（平均変換要検討）"
    - Mean difference, 95%CI, P値を抽出
 6. Time-to-event: HR, 95%CI, log-rank P値、群別 N、events、median follow-up
-7. 生存曲線から読み取った場合は notes に "KMカーブ目視推定" を明記
-8. 記載がない項目は "不明" と出力。推測・補間は厳禁
-9. pageNumber に PDFページ番号（1始まり）を整数で必ず記載
-10. evidenceText には**元文献の原文をそのまま**引用（改変禁止、数値を含む完全な文）
+7. 記載がない項目は "不明" と出力。推測・補間は厳禁
+8. pageNumber に PDFページ番号（1始まり）を整数で必ず記載
+9. evidenceText には**元文献の原文をそのまま**引用（改変禁止、数値を含む完全な文）。画像（図表）から抽出した場合はセル値や軸ラベル・凡例を可能な限り文字起こし
+10. evidenceTextJa は **evidenceText の自然な日本語訳**（数値・略語はそのまま）。図表からの場合は「[Figure 2 (KMカーブ) からの読取り] 介入群の12ヶ月生存率は78%」のように出典を明示
+
+【🔍 図・表からの抽出（必須・最重要）】
+論文添付の高解像度画像を必ず精査し、以下の図表からも数値を抽出してください：
+- **Table（表）**: 全行・全セルを精読。Table 1 = baseline, Table 2+ = outcomes が典型。表のヘッダー（行/列）を識別し、群×アウトカムの交点の数値を正確に拾う
+- **Bar chart / Line chart（棒/折れ線グラフ）**: Y軸目盛りと棒/点の高さを丁寧に読み取り、近似値と判定理由を notes に記載（例: "Fig 2 棒グラフから目視推定: 介入群 ~78%, エラーバー ~5%"）
+- **Kaplan-Meier カーブ**: 各群の特定時点（6ヶ月/12ヶ月/最終フォロー）の生存率、median survival、at-risk数（カーブ下のテーブル）を抽出。HR/95%CI/log-rank Pは別途抽出
+- **Forest plot**: メタ分析論文内のforest plotがあれば各サブグループの効果量・CIを抽出
+- **Boxplot**: median, IQR, range を box とヒゲから読み取る
+- 図表からの読み取りは confidence="low" または "medium" に設定し、figureType フィールドに種別を記録、notes に "[図表からの目視抽出]" と明記
 
 【CONSORT Flow Diagramからの抽出（重要）】
 Figure 1 (CONSORT) から以下を抽出:
@@ -293,11 +302,14 @@ const EXTRACT_SCHEMA_JSON = {
           thirdGroupName: { type: "string" },
           thirdGroup: { type: "object", properties: { n_total:{type:"string"}, events_or_mean:{type:"string"}, sd_or_se:{type:"string"} }},
           effectEstimate: { type: "object", properties: { measureType:{type:"string"}, value:{type:"string"}, ci95:{type:"string"}, pValue:{type:"string"} }},
-          evidenceText: { type: "string" }, sourceLocation: { type: "string" },
+          evidenceText: { type: "string", description: "原文の英語(または論文言語)を改変せず引用。表/図からの場合は表セル・軸ラベル等を文字起こし" },
+          evidenceTextJa: { type: "string", description: "evidenceText の日本語訳（数値はそのまま、医学用語は適切に訳出）" },
+          figureType: { type: "string", description: "出典が図表の場合の種別: Table | BarChart | LineChart | KaplanMeier | ForestPlot | Boxplot | None" },
+          sourceLocation: { type: "string" },
           notes: { type: "string" }, pageNumber: { type: "integer" },
           confidence: { type: "string" }, sdOrSe: { type: "string" }
         },
-        required: ["actualOutcomeName", "variableType", "evidenceText", "sourceLocation"]
+        required: ["actualOutcomeName", "variableType", "evidenceText", "evidenceTextJa", "sourceLocation"]
       }
     },
     unclearItems: { type: "array", items: { type: "string" } },
@@ -348,26 +360,31 @@ const CRITIC_SCHEMA = {
 /* ============================================================
    SECTION 4: GEMINI PROVIDER (Google AI Studio 専用)
    ============================================================ */
-// Geminiモデル一覧（無料枠の rpm/rpd は 2026 年初頭時点の目安。実際の上限は公式参照）
+// Google AI Studio で利用可能なモデル一覧（2026年4月時点の無料枠の実測値）
+// ※ Gemma は textOnly: PDFや画像入力非対応 → 抽出済みテキストのみで処理
+// ※ Gemini 2.5 Flash 系は RPD=20/日と厳しいが、マルチモーダル対応
+// ※ Gemini 2.5 Pro は無料枠なし（Billing 有効化必要）
 const GEMINI_MODELS = [
-  { id: "gemini-2.5-pro",          name: "Gemini 2.5 Pro (最高精度)",         thinking: true, priority: 1, rpm: 5,  rpd: 100,  tag: "精度最優先",   cost: "無料枠あり (5/分・100/日) ／ 有料 約$0.1〜$0.5" },
-  { id: "gemini-2.5-flash",        name: "Gemini 2.5 Flash (推奨/バランス)", thinking: true, priority: 2, rpm: 10, rpd: 500,  tag: "おすすめ",     cost: "無料枠あり (10/分・500/日) ／ ほぼ無料" },
-  { id: "gemini-2.5-flash-lite",   name: "Gemini 2.5 Flash Lite (高速/大量)",thinking: false,priority: 3, rpm: 15, rpd: 1000, tag: "大量処理向け", cost: "無料枠あり (15/分・1000/日)" },
-  { id: "gemini-2.0-flash",        name: "Gemini 2.0 Flash (旧/最大無料枠)", thinking: false,priority: 4, rpm: 15, rpd: 1500, tag: "無料枠最大",   cost: "無料枠あり (15/分・1500/日)" }
+  { id: "gemma-3-27b-it",        name: "Gemma 3 27B (推奨/テキスト主体)",   thinking: false, supportsSchema: false, textOnly: true,  rpm: 30, rpd: 14400, tpm: 15000,  tag: "推奨", note: "無料枠14,400/日。PDFテキストを高精度に抽出。図表は不可" },
+  { id: "gemma-3-12b-it",        name: "Gemma 3 12B (軽量・大量処理)",      thinking: false, supportsSchema: false, textOnly: true,  rpm: 30, rpd: 14400, tpm: 15000,  tag: "高速", note: "やや軽量。テキスト専用" },
+  { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite (図表対応)",  thinking: false, supportsSchema: true,  textOnly: false, rpm: 10, rpd: 20,    tpm: 250000, tag: "図表対応", note: "図・グラフも抽出。無料は20/日のみ" },
+  { id: "gemini-2.5-flash",      name: "Gemini 2.5 Flash (品質最高/限定)",  thinking: true,  supportsSchema: true,  textOnly: false, rpm: 5,  rpd: 20,    tpm: 250000, tag: "高品質", note: "高品質だが無料20/日かつRPM 5で詰まりやすい" },
+  { id: "gemini-2.5-pro",        name: "Gemini 2.5 Pro (要・有料設定)",     thinking: true,  supportsSchema: true,  textOnly: false, rpm: 5,  rpd: 0,     tpm: 250000, tag: "有料", paid: true, note: "無料枠なし。Billing有効化で利用可" }
 ];
 
-// 503/429 で本モデルが詰まった時の自動フォールバック先（priority 順）
+// 503/429 で本モデルが詰まった時の自動フォールバック先（textOnly→multimodal、または逆も可）
 const FALLBACK_CHAIN = {
-  "gemini-2.5-pro":        ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"],
-  "gemini-2.5-flash":      ["gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
-  "gemini-2.5-flash-lite": ["gemini-2.0-flash", "gemini-2.5-flash"],
-  "gemini-2.0-flash":      ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+  "gemma-3-27b-it":        ["gemma-3-12b-it", "gemini-2.5-flash-lite"],
+  "gemma-3-12b-it":        ["gemma-3-27b-it", "gemini-2.5-flash-lite"],
+  "gemini-2.5-flash-lite": ["gemma-3-27b-it", "gemini-2.5-flash"],
+  "gemini-2.5-flash":      ["gemini-2.5-flash-lite", "gemma-3-27b-it"],
+  "gemini-2.5-pro":        ["gemini-2.5-flash-lite", "gemma-3-27b-it"]
 };
 
 const GEMINI = {
-  name: "Google Gemini (AI Studio)",
+  name: "Google Gemini / Gemma (AI Studio)",
   models: GEMINI_MODELS,
-  defaultModel: "gemini-2.5-flash",
+  defaultModel: "gemma-3-27b-it",
   keyFormat: "AIza...",
   docsUrl: "https://aistudio.google.com/apikey",
   signup: "https://aistudio.google.com/"
@@ -465,43 +482,87 @@ function backoffMs(attempt, kind, retryAfterSec) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// Gemini API 呼び出し（マルチキー・自動モデルフォールバック・賢いリトライ）
+// 不完全 JSON (途中で切れた、末尾カンマ等) を救出する best-effort パーサ
+function bestEffortJsonParse(text) {
+  let s = text.trim();
+  // markdown フェンスを剥ぐ
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  // 末尾の "{ ... " で切れていれば、対応する閉じ括弧を補う
+  try { return JSON.parse(s); } catch (e) {}
+  // ブレース・ブラケットを数えて補完
+  let depth = 0, brackets = 0, inStr = false, escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (escape) { escape = false; continue; }
+    if (c === '\\') { escape = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+    else if (c === '[') brackets++;
+    else if (c === ']') brackets--;
+  }
+  let fixed = s;
+  if (inStr) fixed += '"';
+  // trailing カンマ削除
+  fixed = fixed.replace(/,\s*([}\]])/g, '$1').replace(/,\s*$/g, '');
+  while (brackets-- > 0) fixed += ']';
+  while (depth-- > 0) fixed += '}';
+  return JSON.parse(fixed);
+}
+
+// Gemini / Gemma API 呼び出し（マルチキー・自動モデルフォールバック・賢いリトライ）
+// Gemma は responseSchema 非対応 → schema を付けず、プロンプトでJSON指示する
 async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, images, schema, thinkingBudget = 0, onNotice }) {
-  const parts = [{ text: userText }];
-  if (pdfBase64) parts.push({ inlineData: { data: pdfBase64, mimeType: "application/pdf" } });
-  if (images) images.forEach(img => parts.push(img));
-
-  const genConfig = { temperature: 0.1 };
-  if (schema) {
-    genConfig.responseMimeType = "application/json";
-    genConfig.responseSchema = schema;
-  }
-  if (thinkingBudget > 0) {
-    genConfig.thinkingConfig = { thinkingBudget };
-  }
-
-  const body = JSON.stringify({
-    contents: [{ role: "user", parts }],
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    generationConfig: genConfig
-  });
-
-  // 試すモデルの順序（最初は指定モデル → 503 で詰まれば fallback chain）
-  const modelChain = [model, ...(FALLBACK_CHAIN[model] || [])];
   const keys = rotator.all();
   if (!keys.length) throw new Error("APIキーが設定されていません");
 
   const notice = (msg) => { try { onNotice && onNotice(msg); } catch (e) {} };
   let lastErr = null;
 
+  // 試すモデルの順序（最初は指定モデル → 503 で詰まれば fallback chain）
+  const modelChain = [model, ...(FALLBACK_CHAIN[model] || [])];
+
   for (let mIdx = 0; mIdx < modelChain.length; mIdx++) {
     const tryModel = modelChain[mIdx];
+    const modelInfo = GEMINI_MODELS.find(m => m.id === tryModel) || {};
     if (mIdx > 0) notice(`⚠️ ${model} が混雑のため ${tryModel} に切替`);
+
+    // モデルごとにリクエストボディを構築
+    // - Gemma: textOnly → 画像/PDFは送らない、schemaも非対応
+    // - Gemini: マルチモーダル → 画像/PDF送信可、schema対応
+    const isMultimodal = !modelInfo.textOnly;
+    const parts = [{ text: userText }];
+    if (isMultimodal) {
+      if (pdfBase64 && /gemini/.test(tryModel)) {
+        parts.push({ inlineData: { data: pdfBase64, mimeType: "application/pdf" } });
+      }
+      if (images) images.forEach(img => parts.push(img));
+    }
+
+    const genConfig = { temperature: 0.1, maxOutputTokens: 32768 };
+    if (schema && modelInfo.supportsSchema !== false) {
+      genConfig.responseMimeType = "application/json";
+      genConfig.responseSchema = schema;
+    } else if (schema) {
+      // Gemma: MIME のみ JSON 指定（schema 強制はしない）
+      genConfig.responseMimeType = "application/json";
+    }
+    if (thinkingBudget > 0 && modelInfo.thinking) {
+      genConfig.thinkingConfig = { thinkingBudget };
+    }
+
+    const body = JSON.stringify({
+      contents: [{ role: "user", parts }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      generationConfig: genConfig
+    });
 
     // 各モデルで最大 5 周（キーをローテートしながら）
     const maxAttempts = Math.max(5, keys.length * 2);
     let kIdx = 0;
     let consecutiveOverload = 0;
+    let consecutiveAuth = 0;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const key = keys[kIdx % keys.length]; kIdx++;
@@ -517,21 +578,25 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
         const text = r.data?.candidates?.[0]?.content?.parts?.find(p => p.text)?.text;
         if (!text) {
           const blockReason = r.data?.promptFeedback?.blockReason;
-          if (blockReason) throw new Error(`Geminiが応答ブロック (${blockReason}): 安全フィルタの可能性`);
-          throw new Error("Gemini応答に本文なし");
+          if (blockReason) throw new Error(`応答ブロック (${blockReason}): 安全フィルタの可能性`);
+          throw new Error("応答に本文なし（モデルが空応答を返しました）");
         }
         try {
-          const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-          return JSON.parse(cleaned);
+          return bestEffortJsonParse(text);
         } catch (e) {
-          throw new Error("Gemini応答のJSONパース失敗: " + e.message);
+          throw new Error(`[${tryModel}] JSONパース失敗: ${e.message}\n応答先頭: ${text.substring(0, 200)}...`);
         }
       }
 
       lastErr = new Error(`[${tryModel}] ${r.message}`);
 
-      // 認証エラーは即終了（リトライしても無駄）
-      if (r.kind === 'auth') throw lastErr;
+      // 認証エラー: 全キー試して全部ダメなら終了
+      if (r.kind === 'auth') {
+        consecutiveAuth++;
+        if (consecutiveAuth >= keys.length) throw lastErr;
+        notice(`🔑 キー#${(kIdx-1)%keys.length+1}が認証失敗 → 次のキーへ`);
+        continue;
+      }
       // 不正リクエスト等もリトライ不可
       if (r.kind === 'fatal') throw lastErr;
 
@@ -834,8 +899,9 @@ function applyCorrections(extracted, criticReview) {
   return result;
 }
 
-// Main extraction pipeline (Gemini single-provider)
-async function runExtractionPipeline({ apiKeys, model, accuracyMode, pdfFile, pico, outcomes, onProgress, onNotice }) {
+// Main extraction pipeline (Gemini/Gemma 単一パス・Critic廃止版)
+// 1回のAPIコールで完結 → 無料枠の浪費なし、Criticハングも発生しない。
+async function runExtractionPipeline({ apiKeys, model, pdfFile, pico, outcomes, onProgress, onNotice }) {
   const picoBlock = `【PICO設定】\nP: ${pico.p}\nI: ${pico.i}\nC: ${pico.c}\n\n【優先抽出アウトカム】\n${
     outcomes.filter(o => o.name.trim()).length
       ? outcomes.filter(o => o.name.trim()).map(o => `- ${o.name}${o.definition ? `: ${o.definition}` : ''}`).join('\n')
@@ -844,31 +910,55 @@ async function runExtractionPipeline({ apiKeys, model, accuracyMode, pdfFile, pi
 
   const rotator = makeKeyRotator(apiKeys);
   if (rotator.size === 0) throw new Error("APIキーが設定されていません");
+  const modelInfo = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[0];
+  const isMultimodal = !modelInfo.textOnly;
 
-  // Stage 1: Prepare PDF (画像化のスケールは精度モードで切替。free 枠を意識して標準では低め)
-  const imgScale = accuracyMode === 'ultra' ? 3.5 : accuracyMode === 'high' ? 3.0 : 2.5;
-  onProgress("stage1", "PDF準備中...", 5);
-  const [pdfBase64, pdfText, pdfImages] = await Promise.all([
-    getPdfBase64(pdfFile),
-    extractPdfText(pdfFile),
-    extractPdfImages(pdfFile, m => onProgress("stage1", m, 10), imgScale)
-  ]);
-  onProgress("stage1", "PDF準備完了", 20);
+  // Stage 1: PDF準備
+  // - テキスト抽出は常に実施（PDF.js による高品質テキスト抽出）
+  // - 画像抽出はマルチモーダルモデル時のみ（Gemmaでは不要・速度向上）
+  onProgress("stage1", isMultimodal ? "PDF準備中（テキスト + 高解像度画像）..." : "PDF準備中（テキスト抽出）...", 5);
+  const tasks = [extractPdfText(pdfFile)];
+  if (isMultimodal) {
+    tasks.push(getPdfBase64(pdfFile));
+    tasks.push(extractPdfImages(pdfFile, m => onProgress("stage1", m, 15), 3.5));
+  }
+  const taskResults = await Promise.all(tasks);
+  const pdfText = taskResults[0];
+  const pdfBase64 = isMultimodal ? taskResults[1] : null;
+  const pdfImages = isMultimodal ? taskResults[2] : null;
+  onProgress("stage1", isMultimodal ? `PDF準備完了 (${pdfImages.length}ページの高解像度画像)` : `PDF準備完了 (テキスト ${pdfText.length.toLocaleString()}文字)`, 25);
+
+  // モデル能力に応じて指示を変える
+  const figurePrompt = isMultimodal
+    ? `【重要】本文・表（Table）だけでなく、**図（Figure・グラフ・KMカーブ・棒/折れ線グラフ）からも数値を抽出**してください。画像は高解像度なので、軸目盛り・棒の高さ・カーブの位置を読み取り可能です。
+- 図表から読み取った場合は figureType フィールド（"Table"/"BarChart"/"LineChart"/"KaplanMeier"/"ForestPlot"/"Boxplot"）に記録
+- notes に「[図/表 X からの目視抽出]」と明記
+- 確信度は medium または low に`
+    : `【テキスト専用モード】このモデルは画像を読めないため、PDFから抽出済みのテキスト本文と表（Table のテキスト部分）からのみデータを抽出してください。図やグラフ（KMカーブ等）の数値が必要な場合は、本文中で言及された数値（"survival rate at 12 months was 78%" 等）を拾ってください。
+- 表（Table）は通常テキストとして抽出されているので、行・列を識別してセル値を読み取ってください
+- 画像のみに存在する数値（軸目盛り読取り）は抽出できないため、unclearItems に「[図XからのN値は要・目視確認]」と記載`;
 
   const userPrompt = `${picoBlock}
 \n【タスク】
-論文を徹底的に精読し、上記PICO/アウトカム設定に従ってメタ分析用データを抽出してください。
-不明項目は「不明」とし、推測は厳禁です。全アウトカム（指定外含む）を網羅してください。
-各項目に confidence (high/medium/low) を付与してください。
-\n【参照テキスト（OCR済みPDF本文）】
-${pdfText.substring(0, 40000)}`;
+${isMultimodal ? '添付の論文PDF（テキスト + 高解像度画像）' : 'PDFから抽出されたテキスト'}を徹底的に精読し、上記PICO/アウトカム設定に従ってメタ分析用データを抽出してください。
 
-  // Stage 2: Extraction
-  const modelInfo = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[1];
-  onProgress("stage2", `Gemini 抽出中 (${modelInfo.name.replace(/\s*\(.+/, '')})...`, 25);
-  const thinkingBudget = accuracyMode === 'ultra' && modelInfo.thinking ? 12000
-                       : accuracyMode === 'high' && modelInfo.thinking ? 6000
-                       : 0;
+${figurePrompt}
+
+各 extractedOutcomes 項目に必ず以下を含めてください：
+- evidenceText: **論文の原文をそのまま引用**（改変禁止${isMultimodal ? '、図表からの場合はセル値・軸ラベル・凡例を文字起こし' : ''}）
+- evidenceTextJa: evidenceText の自然な日本語訳（医学用語は適切に訳出、数値はそのまま）
+- pageNumber: PDFページ番号（1始まり）
+- sourceLocation: "Table 2", ${isMultimodal ? '"Figure 3 KMカーブ", ' : ''}"本文 p.5 段落2" など具体的な出処
+- confidence: high/medium/low
+
+不明項目は「不明」とし、推測は厳禁です。全アウトカム（指定外含む）を網羅してください。
+
+\n【参照テキスト（OCR済みPDF本文）】
+${pdfText.substring(0, isMultimodal ? 40000 : 80000)}`;
+
+  onProgress("stage2", `${modelInfo.name.replace(/\s*\(.+/, '')} で抽出中...`, 35);
+
+  const thinkingBudget = modelInfo.thinking ? 8000 : 0;
 
   let extracted;
   try {
@@ -877,95 +967,18 @@ ${pdfText.substring(0, 40000)}`;
       systemPrompt: SYSTEM_PROMPT_EXTRACT,
       userText: userPrompt,
       images: pdfImages,
+      pdfBase64: pdfBase64,
       schema: EXTRACT_SCHEMA_GEMINI,
       thinkingBudget,
-      onNotice: (m) => { onProgress("stage2", m, 35); onNotice && onNotice(m); }
+      onNotice: (m) => { onProgress("stage2", m, 50); onNotice && onNotice(m); }
     });
   } catch (e) {
-    throw new Error(`抽出に失敗しました: ${e.message}\n\n💡 ヒント: 503 (過負荷) が続く場合は、後述の使い方ガイドの【⑥ トラブル対処】を参照してください。`);
+    throw new Error(`抽出に失敗しました: ${e.message}\n\n💡 503 (過負荷) や 429 (レート上限) が続く場合は、使い方ガイド⑥ トラブル対処を参照。Gemma 3 27B モデルは無料枠が圧倒的に大きいので試す価値あり。`);
   }
 
-  let merged = extracted;
-  merged._sources = [`${modelInfo.name}`];
-
-  // Stage 3 (簡略): 結果整形
-  onProgress("stage3", "結果整形中...", 50);
-
-  // Stage 4: Critic (Pro で監査。high/ultra のみ)
-  if (accuracyMode === 'high' || accuracyMode === 'ultra') {
-    const criticModel = pickCriticModel(model);
-    merged._criticProviderUsed = `Gemini ${criticModel}`;
-    onProgress("stage4", `${criticModel} で Critic レビュー中...`, 65);
-    try {
-      const criticPrompt = `【抽出されたデータ】
-${JSON.stringify(merged, null, 2).substring(0, 40000)}
-\n【PICO設定】
-${picoBlock}
-\n【参照テキスト】
-${pdfText.substring(0, 30000)}
-\n【タスク】
-上記抽出データに対して徹底的に監査を実施し、corrections / missingOutcomes / overallAssessment / confidenceScore を含むJSONを返してください。`;
-
-      const criticReview = await callCriticAnyProvider(
-        rotator, criticModel,
-        SYSTEM_PROMPT_CRITIC, criticPrompt,
-        pdfBase64, pdfImages,
-        accuracyMode === 'ultra' ? 12000 : 8000,
-        CRITIC_SCHEMA,
-        (m) => { onProgress("stage4", m, 70); onNotice && onNotice(m); }
-      );
-
-      merged = applyCorrections(merged, criticReview);
-      merged._criticReview = criticReview;
-      onProgress("stage4", `Critic完了 (信頼度: ${criticReview.confidenceScore}/100)`, 80);
-    } catch (e) {
-      console.warn("Critic段階失敗:", e);
-      merged._criticError = e.message;
-      onProgress("stage4", `Criticスキップ (${e.message.substring(0, 60)}...)`, 80);
-    }
-  }
-
-  // Stage 5: 個別検証 (ultra のみ、低信頼度項目)
-  if (accuracyMode === 'ultra' && merged.extractedOutcomes?.length) {
-    const criticModel = pickCriticModel(model);
-    const toVerify = merged.extractedOutcomes.filter(o => o.confidence === 'low' || (!o.confidence && o.notes?.includes('Critic')));
-    if (toVerify.length > 0 && toVerify.length <= 8) {
-      onProgress("stage5", `個別検証 (${toVerify.length}項目)...`, 85);
-      for (let i = 0; i < toVerify.length; i++) {
-        const o = toVerify[i];
-        try {
-          const verifyPrompt = `【検証対象アウトカム】
-${JSON.stringify(o, null, 2)}
-\n【参照テキスト抜粋】
-${pdfText.substring(0, 20000)}
-\n検証してJSONで返してください。`;
-          const verified = await callCriticAnyProvider(
-            rotator, criticModel,
-            SYSTEM_PROMPT_VERIFY, verifyPrompt,
-            null, null, 4000, null,
-            (m) => { onProgress("stage5", `検証 ${i+1}/${toVerify.length}: ${m}`, 85 + (i / toVerify.length) * 10); }
-          );
-          if (verified) {
-            o._verified = verified.verified;
-            o._verifyConfidence = verified.confidence;
-            o._verifyIssues = verified.issues;
-            if (verified.correctedValues) {
-              Object.entries(verified.correctedValues).forEach(([k, v]) => {
-                if (typeof v === 'object' && o[k]) Object.assign(o[k], v);
-                else o[k] = v;
-              });
-            }
-          }
-          onProgress("stage5", `検証 ${i+1}/${toVerify.length}`, 85 + (i / toVerify.length) * 10);
-        } catch (e) {
-          console.warn(`検証失敗 (outcome ${i}):`, e);
-        }
-      }
-    }
-  }
-
-  onProgress("complete", "完了", 100);
-  return merged;
+  extracted._sources = [`${modelInfo.name}${modelInfo.textOnly ? ' [テキスト専用モード]' : ' [図表対応モード]'}`];
+  onProgress("complete", "抽出完了", 100);
+  return extracted;
 }
 
 /* ============================================================
@@ -1062,9 +1075,31 @@ function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight,
         {oc.populationDescription && <div className="flex items-start gap-1.5"><span className="font-semibold text-slate-600 min-w-[50px]">集団詳細:</span><span className="text-slate-800">{oc.populationDescription}</span></div>}
         <div className="flex items-start gap-1.5">
           <span className="font-semibold text-slate-600 min-w-[50px] flex-shrink-0">根拠原文:</span>
-          <div className="flex-1">
-            <blockquote className="text-slate-700 italic border-l-2 border-amber-300 pl-1.5 py-0.5 break-words whitespace-pre-wrap">"{oc.evidenceText}"</blockquote>
-            <button onClick={()=>onSendToSearch(oc.evidenceText,oc.pageNumber)} className="mt-1 text-[9px] bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-2 py-0.5 rounded font-bold flex items-center gap-1 w-fit transition-colors"><SearchIcon size={10}/>この文をPDF検索に送る</button>
+          <div className="flex-1 space-y-1">
+            <blockquote
+              onClick={() => onSendToSearch(oc.evidenceText, oc.pageNumber)}
+              title="クリックでPDFを検索＆ハイライト"
+              className="text-slate-700 italic border-l-2 border-amber-300 pl-1.5 py-1 px-1 break-words whitespace-pre-wrap cursor-pointer hover:bg-amber-50 hover:border-amber-500 rounded transition-colors group">
+              <span className="opacity-0 group-hover:opacity-100 absolute -ml-3 mt-0.5 text-amber-600"><SearchIcon size={10}/></span>
+              "{oc.evidenceText}"
+            </blockquote>
+            {oc.evidenceTextJa && (
+              <blockquote
+                onClick={() => onSendToSearch(oc.evidenceText, oc.pageNumber)}
+                title="クリックでPDFを検索＆ハイライト（原文側で検索）"
+                className="text-blue-900 not-italic border-l-2 border-blue-300 pl-1.5 py-1 px-1 break-words whitespace-pre-wrap cursor-pointer hover:bg-blue-50 hover:border-blue-500 rounded transition-colors bg-blue-50/30">
+                <span className="text-[9px] font-bold text-blue-600 mr-1">🇯🇵 訳:</span>
+                {oc.evidenceTextJa}
+              </blockquote>
+            )}
+            {oc.figureType && oc.figureType !== 'None' && (
+              <div className="text-[9px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded inline-block">
+                📊 図表種別: <b>{oc.figureType}</b>（目視抽出のため要確認）
+              </div>
+            )}
+            <div className="flex items-center gap-1 text-[9px] text-slate-500">
+              <InfoIcon size={9}/>原文または訳文をクリック → PDFを検索＆ハイライト。失敗時は右の検索窓で文字を編集して再検索可
+            </div>
           </div>
         </div>
         {oc.notes && <div className="bg-amber-50 border border-amber-200 px-2 py-1 rounded text-amber-700 flex items-start gap-1 mt-1"><AlertCircle size={12} className="flex-shrink-0 mt-0.5"/><span><b>注記:</b> {oc.notes}</span></div>}
@@ -1152,12 +1187,29 @@ function GeminiKeyCard({ apiKeys, onChange, model, onModelChange, onVerify, veri
           <select value={model} onChange={e => onModelChange(e.target.value)} className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg text-xs font-mono bg-white focus:outline-none focus:border-purple-500">
             {GEMINI_MODELS.map(m => (
               <option key={m.id} value={m.id}>
-                {m.name} — 無料 {m.rpm}/分・{m.rpd}/日
+                {m.name} — {m.paid ? '有料のみ' : `無料 ${m.rpm}/分・${m.rpd.toLocaleString()}/日`}
               </option>
             ))}
           </select>
-          <div className="mt-1.5 text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1">
-            ⚡ <b>503エラー時は自動で別モデルに切替</b>します（例: Pro が混雑 → Flash に自動フォールバック）
+          {(() => {
+            const sel = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[0];
+            return (
+              <div className="mt-1.5 space-y-1">
+                <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                  {sel.textOnly
+                    ? <span className="bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded font-bold">📝 テキスト専用（図/グラフ不可）</span>
+                    : <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded font-bold">🖼 図表対応（画像から抽出）</span>}
+                  {sel.thinking && <span className="bg-purple-100 text-purple-800 border border-purple-300 px-1.5 py-0.5 rounded">🧠 思考トークン</span>}
+                  {sel.paid && <span className="bg-rose-100 text-rose-800 border border-rose-300 px-1.5 py-0.5 rounded font-bold">💳 有料</span>}
+                </div>
+                <div className="text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+                  {sel.note}
+                </div>
+              </div>
+            );
+          })()}
+          <div className="mt-1.5 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+            ⚡ <b>503/429エラー時は自動で別モデルに切替</b>します（フォールバック先は同等カテゴリを優先）
           </div>
         </div>
 
@@ -1373,8 +1425,8 @@ function UsageGuide() {
             <div className="p-3 text-[11px] space-y-1.5 bg-white">
               <ul className="list-disc pl-5 space-y-0.5">
                 <li>無料枠は <b>RPM（分単位）</b> と <b>RPD（日単位）</b> の<b>両方</b>でカウントされる。短時間連投で RPM に当たることが多い → 1〜2分待つ</li>
-                <li>本アプリの「Ultra精度モード」は1論文で5〜10リクエスト消費する → 連続実行なら「標準」モードに切替</li>
-                <li>RPDが残っていない可能性 → 翌日UTC0時（日本朝9時）まで待つか、別プロジェクトのキーを追加</li>
+                <li>本アプリは <b>1論文 = 1リクエスト</b>。RPM 5/10 でも普通の使い方なら問題なく動く</li>
+                <li>RPDが残っていない可能性 → 翌日UTC0時（日本朝9時）まで待つか、別プロジェクトのキーを追加 / <b>Gemma 3 27B</b> モデル（無料 14,400/日）に切替</li>
               </ul>
             </div>
           </details>
@@ -1385,8 +1437,8 @@ function UsageGuide() {
               <ul className="list-disc pl-5 space-y-0.5">
                 <li>論文PDFのスキャン品質が著しく悪い／OCR未実施 → 別PDF（テキスト埋込済）で試す</li>
                 <li>論文サイズが極端に大きい（300MB以上等）→ 不要ページを削除</li>
-                <li>モデルを <b>Gemini 2.5 Pro</b> に切替（複雑な論文ほどPro有利）</li>
-                <li>精度モードを「Ultra」に上げる（思考トークン増で安定）</li>
+                <li>モデルを <b>Gemini 2.5 Flash Lite</b> に切替（マルチモーダル対応で図表も読める）</li>
+                <li>テキスト中心の論文なら <b>Gemma 3 27B</b> でも十分（無料枠が圧倒的に大きい）</li>
               </ul>
             </div>
           </details>
@@ -1479,7 +1531,6 @@ function SetupPage({ onComplete, initialConfig }) {
   })();
   const [apiKeys, setApiKeys] = useState(initialKeys);
   const [model, setModel] = useState(initialConfig.model || initialConfig.providers?.gemini?.model || GEMINI.defaultModel);
-  const [accuracyMode, setAccuracyMode] = useState(initialConfig.accuracyMode || 'high');
   const [verifyState, setVerifyState] = useState({});
   const [saveKeys, setSaveKeys] = useState(initialConfig.saveKeys !== false);
 
@@ -1506,17 +1557,11 @@ function SetupPage({ onComplete, initialConfig }) {
 
   const handleStart = () => {
     const cfg = saveKeys
-      ? { apiKeys: validKeys, model, accuracyMode, saveKeys }
-      : { apiKeys: [], model, accuracyMode, saveKeys };
+      ? { apiKeys: validKeys, model, saveKeys }
+      : { apiKeys: [], model, saveKeys };
     saveConfig(cfg);
-    onComplete({ apiKeys: validKeys, model }, accuracyMode);
+    onComplete({ apiKeys: validKeys, model });
   };
-
-  const accuracyModes = [
-    { id: 'standard', name: '標準', cost: '1論文 ≒ 1リクエスト', desc: '抽出のみ・最速', detail: '無料枠を最も節約。Critic監査なし', color: 'from-slate-400 to-slate-500' },
-    { id: 'high',     name: '高精度', cost: '1論文 ≒ 2リクエスト', desc: '抽出 + Critic監査', detail: '思考トークン6K + Pro Critic',     color: 'from-blue-500 to-indigo-500' },
-    { id: 'ultra',    name: 'Ultra', cost: '1論文 ≒ 3〜10リクエスト', desc: '抽出 + Critic + 個別検証', detail: '思考12K + 低信頼項目を再検証',  color: 'from-purple-600 to-pink-600' }
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/20 flex flex-col overflow-auto">
@@ -1525,7 +1570,7 @@ function SetupPage({ onComplete, initialConfig }) {
           <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg"><Sparkles size={22}/></div>
           <div>
             <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3 / Gemini Edition</span></h1>
-            <p className="text-xs text-slate-500">Google AI Studio 無料APIキーで動く RCT データ抽出ツール</p>
+            <p className="text-xs text-slate-500">Google AI Studio の無料APIキーで動く RCT データ抽出ツール</p>
           </div>
         </div>
       </header>
@@ -1536,13 +1581,22 @@ function SetupPage({ onComplete, initialConfig }) {
         </div>
 
         <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-4 mb-6 fade-in-up fade-d1">
-          <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2 text-sm"><Sparkles size={18}/>503エラーに強い設計</h3>
-          <ul className="text-xs text-blue-900 leading-relaxed space-y-1 list-disc pl-5">
-            <li><b>自動モデルフォールバック</b>: Pro が混雑（503）→ 自動で Flash や Flash Lite に切替</li>
-            <li><b>マルチキー・ローテーション</b>: 複数キー登録で実質的な無料枠を拡張（別プロジェクトのキーが効果大）</li>
-            <li><b>サーバー指定の retry-after を尊重</b> + 指数バックオフ + ジッタで賢く再試行</li>
-            <li><b>レート制限（429）→ 別キーに自動切替</b></li>
-          </ul>
+          <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2 text-sm"><Sparkles size={18}/>無料枠で実用的に動く設計</h3>
+          <div className="text-xs text-blue-900 leading-relaxed space-y-2">
+            <div className="bg-white/60 border border-blue-200 rounded p-2">
+              <p className="font-bold mb-1">📊 モデル選択の指針</p>
+              <ul className="space-y-1 list-disc pl-5">
+                <li><b>普段使い → Gemma 3 27B（推奨）</b>: PDFテキストのみ処理。<b>無料 14,400/日</b> = 実質無制限。表は文字情報として扱えるので RCT データ抽出に十分</li>
+                <li><b>図・KMカーブも必要 → Gemini 2.5 Flash Lite</b>: マルチモーダルだが無料 20/日のみ。図表が重要な論文の時だけ切替</li>
+                <li><span className="text-rose-700">⚠ Gemini 2.5 Flash は RPM 5・RPD 20 で制限が即枯渇するため非推奨</span></li>
+              </ul>
+            </div>
+            <ul className="space-y-1 list-disc pl-5">
+              <li><b>1論文 = 1 APIリクエスト</b>。Critic 等の追加コール無し（停止リスクなし）</li>
+              <li><b>各項目に原文 + 日本語訳を併記</b>。クリックでPDFを検索＆ハイライト</li>
+              <li><b>503/429 自動回避</b>: モデル別フォールバック + 複数キー自動ローテーション</li>
+            </ul>
+          </div>
         </div>
 
         <div className="mb-6 fade-in-up fade-d2">
@@ -1557,24 +1611,6 @@ function SetupPage({ onComplete, initialConfig }) {
         </div>
 
         <UsageGuide/>
-
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-6 fade-in-up fade-d3">
-          <h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2"><LayersIcon size={16} className="text-purple-600"/>抽出精度モード</h3>
-          <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-3 text-[11px] text-amber-900">
-            💡 <b>無料枠を節約したいなら「標準」</b>。1論文の解析で消費する Gemini リクエスト数の目安が「コスト」欄に表示されています。
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {accuracyModes.map(m => (
-              <label key={m.id} className={`cursor-pointer border-2 rounded-lg p-3 transition-all ${accuracyMode === m.id ? 'border-purple-500 bg-purple-50 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
-                <input type="radio" name="mode" value={m.id} checked={accuracyMode === m.id} onChange={() => setAccuracyMode(m.id)} className="hidden"/>
-                <div className={`bg-gradient-to-r ${m.color} text-white text-[10px] font-bold px-2 py-0.5 rounded inline-block mb-1`}>{m.name}</div>
-                <div className="font-semibold text-slate-800 text-sm">{m.desc}</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">{m.detail}</div>
-                <div className="text-[10px] text-purple-700 font-mono mt-1 bg-purple-50 px-1.5 py-0.5 rounded inline-block">{m.cost}</div>
-              </label>
-            ))}
-          </div>
-        </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 mb-6 fade-in-up fade-d3">
           <label className="flex items-center gap-2 cursor-pointer">
@@ -1600,32 +1636,30 @@ function SetupPage({ onComplete, initialConfig }) {
 function StageIndicator({ currentStage, progress, message }) {
   const stages = [
     { id: 'stage1', label: 'PDF準備', icon: FileText },
-    { id: 'stage2', label: '並列AI抽出', icon: CpuIcon },
-    { id: 'stage3', label: '結果統合', icon: LayersIcon },
-    { id: 'stage4', label: 'Critic監査', icon: ShieldCheckIcon },
-    { id: 'stage5', label: '個別検証', icon: BrainIcon }
+    { id: 'stage2', label: 'AI抽出', icon: CpuIcon },
+    { id: 'complete', label: '完了', icon: CheckCircle2 }
   ];
   const currentIdx = stages.findIndex(s => s.id === currentStage);
   return (
     <div className="bg-white rounded-xl border border-purple-200 shadow-md p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><BrainIcon size={16} className="text-purple-600"/>多層抽出パイプライン実行中</h3>
+        <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><Sparkles size={16} className="text-purple-600"/>抽出パイプライン実行中</h3>
         <span className="text-xs text-slate-500 font-mono">{progress}%</span>
       </div>
       <div className="w-full bg-slate-100 rounded-full h-2 mb-3 overflow-hidden">
         <div className="gradient-purple h-full transition-all duration-500" style={{width: `${progress}%`}}/>
       </div>
-      <div className="grid grid-cols-5 gap-1">
+      <div className="grid grid-cols-3 gap-2">
         {stages.map((s, i) => {
           const Icon = s.icon;
           const active = i === currentIdx;
           const done = i < currentIdx || currentStage === 'complete';
           return (
             <div key={s.id} className={`text-center ${active ? 'stage-pulse' : ''}`}>
-              <div className={`mx-auto w-8 h-8 rounded-full flex items-center justify-center mb-1 transition-all ${done ? 'bg-emerald-500 text-white' : active ? 'gradient-purple text-white' : 'bg-slate-100 text-slate-400'}`}>
-                {done ? <CheckCircle2 size={16}/> : <Icon size={14}/>}
+              <div className={`mx-auto w-9 h-9 rounded-full flex items-center justify-center mb-1 transition-all ${done ? 'bg-emerald-500 text-white' : active ? 'gradient-purple text-white' : 'bg-slate-100 text-slate-400'}`}>
+                {done ? <CheckCircle2 size={18}/> : <Icon size={16}/>}
               </div>
-              <div className={`text-[9px] font-medium ${active ? 'text-purple-700' : done ? 'text-emerald-700' : 'text-slate-400'}`}>{s.label}</div>
+              <div className={`text-[10px] font-medium ${active ? 'text-purple-700' : done ? 'text-emerald-700' : 'text-slate-400'}`}>{s.label}</div>
             </div>
           );
         })}
@@ -1635,7 +1669,7 @@ function StageIndicator({ currentStage, progress, message }) {
   );
 }
 
-function ExtractorPage({ apiKeys, model, accuracyMode, onBack }) {
+function ExtractorPage({ apiKeys, model, onBack }) {
   const [pico, setPico] = useState({ p: "", i: "", c: "" });
   const [outcomes, setOutcomes] = useState([{ id: 1, name: "", definition: "" }]);
   const [pdfFile, setPdfFile] = useState(null);
@@ -1687,7 +1721,7 @@ function ExtractorPage({ apiKeys, model, accuracyMode, onBack }) {
 
     try {
       const res = await runExtractionPipeline({
-        apiKeys, model, accuracyMode, pdfFile, pico, outcomes,
+        apiKeys, model, pdfFile, pico, outcomes,
         onProgress: (stage, msg, pct) => {
           setCurrentStage(stage);
           setStatusMsg(msg);
@@ -1759,7 +1793,7 @@ function ExtractorPage({ apiKeys, model, accuracyMode, onBack }) {
   };
   const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
   const saveSession = () => {
-    const s = { pico, outcomes, result, model, accuracyMode, keyCount: apiKeys.length, timestamp: new Date().toISOString() };
+    const s = { pico, outcomes, result, model, keyCount: apiKeys.length, timestamp: new Date().toISOString() };
     const b = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(b);
@@ -1782,7 +1816,7 @@ function ExtractorPage({ apiKeys, model, accuracyMode, onBack }) {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-1 rounded font-mono hidden sm:flex items-center gap-1">
-              <LayersIcon size={10}/> {accuracyMode.toUpperCase()} | {activeProviderInfo}
+              <LayersIcon size={10}/> {activeProviderInfo}
             </span>
             {result && <button onClick={saveSession} className="text-[10px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-medium text-slate-600 transition-colors"><SaveIcon size={12}/>保存</button>}
           </div>
@@ -1840,7 +1874,7 @@ function ExtractorPage({ apiKeys, model, accuracyMode, onBack }) {
                   )}
                 </div>
                 <button onClick={startAnalysis} disabled={status==='running'} className="w-full mt-3 btn-shimmer disabled:bg-slate-300 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md">
-                  {status === 'running' ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>解析中...</> : <><BrainIcon size={16}/>抽出実行 ({accuracyMode.toUpperCase()})</>}
+                  {status === 'running' ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>解析中...</> : <><Sparkles size={16}/>抽出実行</>}
                 </button>
               </div>
             </section>
@@ -2067,18 +2101,16 @@ function App() {
   const [page, setPage] = useState("setup");
   const [apiKeys, setApiKeys] = useState([]);
   const [model, setModel] = useState(GEMINI.defaultModel);
-  const [accuracyMode, setAccuracyMode] = useState('high');
   const [initialConfig] = useState(() => loadConfig());
 
-  const handleSetupComplete = ({ apiKeys, model }, mode) => {
+  const handleSetupComplete = ({ apiKeys, model }) => {
     setApiKeys(apiKeys);
     setModel(model);
-    setAccuracyMode(mode);
     setPage("main");
   };
 
   if (page === "setup") return <SetupPage onComplete={handleSetupComplete} initialConfig={initialConfig}/>;
-  return <ExtractorPage apiKeys={apiKeys} model={model} accuracyMode={accuracyMode} onBack={() => setPage("setup")}/>;
+  return <ExtractorPage apiKeys={apiKeys} model={model} onBack={() => setPage("setup")}/>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
