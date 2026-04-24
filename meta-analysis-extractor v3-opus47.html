@@ -441,13 +441,14 @@ const GEMINI_MODELS = [
   { id: "gemini-2.5-pro",        name: "Gemini 2.5 Pro (要・有料設定)",     thinking: true,  supportsSchema: true,  textOnly: false, rpm: 5,  rpd: 0,     tpm: 250000, maxOut: 65536, tag: "有料", paid: true, note: "無料枠なし。Billing有効化で利用可" }
 ];
 
-// 503/429 で本モデルが詰まった時の自動フォールバック先（textOnly→multimodal、または逆も可）
+// 503/429 で本モデルが詰まった時の自動フォールバック先
+// マルチモーダル系を先に並べ、テキスト専用 (Gemma) は最後（画像コール時はランタイムで除外される）
 const FALLBACK_CHAIN = {
   "gemma-3-27b-it":        ["gemma-3-12b-it", "gemini-2.5-flash-lite"],
   "gemma-3-12b-it":        ["gemma-3-27b-it", "gemini-2.5-flash-lite"],
-  "gemini-2.5-flash-lite": ["gemma-3-27b-it", "gemini-2.5-flash"],
+  "gemini-2.5-flash-lite": ["gemini-2.5-flash", "gemma-3-27b-it"],
   "gemini-2.5-flash":      ["gemini-2.5-flash-lite", "gemma-3-27b-it"],
-  "gemini-2.5-pro":        ["gemini-2.5-flash-lite", "gemma-3-27b-it"]
+  "gemini-2.5-pro":        ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemma-3-27b-it"]
 };
 
 const GEMINI = {
@@ -620,7 +621,15 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
   let lastErr = null;
 
   // 試すモデルの順序（最初は指定モデル → 503 で詰まれば fallback chain）
-  const modelChain = [model, ...(FALLBACK_CHAIN[model] || [])];
+  // 画像/PDFを含むコールの場合、テキスト専用モデル（Gemma 等）はフォールバック先から除外
+  const hasMedia = (images && images.length > 0) || !!pdfBase64;
+  const rawChain = [model, ...(FALLBACK_CHAIN[model] || [])];
+  const modelChain = rawChain.filter(mid => {
+    if (mid === model) return true; // 指定モデルは必ず試す
+    const info = GEMINI_MODELS.find(x => x.id === mid);
+    if (hasMedia && info?.textOnly) return false; // メディア含むコールでテキスト専用は除外
+    return true;
+  });
 
   for (let mIdx = 0; mIdx < modelChain.length; mIdx++) {
     const tryModel = modelChain[mIdx];
