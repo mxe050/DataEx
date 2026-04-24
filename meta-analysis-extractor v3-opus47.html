@@ -581,12 +581,15 @@ async function singleFetch(url, options) {
     if (m) retryAfterSec = Math.ceil(parseFloat(m[1]));
   }
 
-  // 種別判定
+  // 種別判定（status コード優先。キーワード一致は補助的にしか使わない）
   const status = resp.status;
-  const overloaded = status === 503 || /unavailable|overload|over.{0,3}capacity|busy|high demand/i.test(msg);
-  const rateLimit = status === 429 || /rate.?limit|quota|exhaust/i.test(msg);
-  const auth = status === 401 || status === 403 || /invalid.*key|unauthorized|api[_ ]?key/i.test(msg);
+  const overloaded = status === 503;  // ★ 厳密に 503 のみ
+  const rateLimit = status === 429;   // ★ 厳密に 429 のみ
+  const auth = status === 401 || status === 403;
   const badReq = status === 400 || status === 404;
+  // 429 のサブ種別を判定（メッセージ内容から）
+  const isDailyQuota = rateLimit && /per.?day|RPD|requests.?per.?day|daily/i.test(msg);
+  const isTpmQuota = rateLimit && /TPM|tokens.?per.?minute|input.?tokens/i.test(msg);
 
   let kind = 'fatal';
   if (auth) kind = 'auth';
@@ -596,7 +599,7 @@ async function singleFetch(url, options) {
   else if (badReq) kind = 'fatal';
   else kind = 'fatal';
 
-  return { ok: false, kind, status, message: `${status} ${msg}`.trim(), retryAfterSec };
+  return { ok: false, kind, status, message: `${status} ${msg}`.trim(), retryAfterSec, isDailyQuota, isTpmQuota };
 }
 
 // 503/429 を加味した待機（ジッタ付き）
@@ -734,8 +737,10 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
     }
     const body = JSON.stringify(requestBody);
 
-    // 各モデルで最大 5 周（キーをローテートしながら）
-    const maxAttempts = Math.max(5, keys.length * 2);
+    // 各モデルで最大試行回数。最終モデル時は短期 429 を粘るため多め（5回）。
+    // 上記の throw 条件で attempt >= 4 で諦めるので、5 で十分余裕がある。
+    const isLastInChain = mIdx >= modelChain.length - 1;
+    const maxAttempts = isLastInChain ? Math.max(5, keys.length * 2) : Math.max(3, keys.length * 2);
     let kIdx = 0;
     let consecutiveOverload = 0;
     let consecutiveAuth = 0;
@@ -779,24 +784,38 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
       // 不正リクエスト等もリトライ不可
       if (r.kind === 'fatal') throw lastErr;
 
-      // レート制限: 長期 (retry-after > 15s) または日次クォータ枯渇なら即フォールバック
-      const isDailyQuota = /per.?day|RPD|requests.?per.?day|daily/i.test(r.message);
-      const longWait = r.retryAfterSec > 15;
+      // 429 のサブ種別判定（singleFetch から伝搬）
+      const isDailyQuota = !!r.isDailyQuota;     // 日次クォータ枯渇 → 翌日まで回復不可
+      const isTpmQuota = !!r.isTpmQuota;          // TPM 超過 → 1分待てば回復
+      const longWait = r.retryAfterSec > 30;     // サーバー指定 > 30s → 別モデル推奨
       const isLastModel = mIdx >= modelChain.length - 1;
 
       if (r.kind === 'ratelimit') {
-        if ((isDailyQuota || longWait) && !isLastModel) {
-          notice(`⏳ ${tryModel} ${isDailyQuota ? '日次クォータ枯渇' : `${r.retryAfterSec}秒待機要`} → 別モデルへ切替`);
+        // ★ 日次クォータ枯渇のみ早期throw / フォールバック（短期は粘る）
+        if (isDailyQuota) {
+          if (!isLastModel) {
+            notice(`⏳ ${tryModel} 日次クォータ枯渇 → 別モデルに切替`);
+            break;
+          } else {
+            throw new Error(`全モデル (${modelChain.join(' / ')}) の日次クォータ枯渇。\n翌日(UTC0時/日本朝9時)まで待機 or 別プロジェクトのキーを追加してください。`);
+          }
+        }
+        // 長期待機指示 (>30s) もフォールバック先があるなら切替
+        if (longWait && !isLastModel) {
+          notice(`⏳ ${tryModel} 長期待機要 (${r.retryAfterSec}秒) → 別モデルに切替`);
           break;
         }
-        // 短期レート制限でも 1 回試したら次モデルへ（無駄な待機を避ける）
+        // 短期レート制限 (TPM 等): フォールバック先があれば 2回試して切替
         if (attempt >= 1 && !isLastModel) {
-          notice(`⏳ ${tryModel} レート制限継続 → 別モデルに切替`);
+          notice(`⏳ ${tryModel} ${isTpmQuota ? 'TPM超過' : 'レート制限'} → 別モデルに切替`);
           break;
         }
-        // ★ 最終モデルでもレート制限の場合: 2回試して諦める（無限ループ防止）
-        if (isLastModel && attempt >= 1) {
-          throw new Error(`全モデル (${modelChain.join(' / ')}) がレート制限。${isDailyQuota ? '日次上限到達のため翌日(UTC0時/日本朝9時)まで待機' : '一時的に高負荷のため数分後に再試行'} か、別プロジェクトのキーを追加してください。`);
+        // ★ 最終モデルでも、短期 429 (TPM等) なら 4回まで粘る (待機累計 ≈55秒)
+        // ダッシュボード上の RPM/RPD に余裕がある場合は短期バーストの可能性が高い
+        if (isLastModel && attempt >= 4) {
+          throw new Error(`全モデル (${modelChain.join(' / ')}) で連続的に短期レート制限。\n${
+            isTpmQuota ? '入力トークン量 (TPM) が一時的に上限超過の可能性' : 'API側の短期スロットリング'
+          }。\n💡 対処:\n・1〜2分待ってから再試行（TPM/RPMは1分で回復）\n・Google AI Studio ダッシュボードで RPD/TPM の使用率を確認\n・別プロジェクトのキーを追加して負荷分散`);
         }
       }
 
@@ -814,12 +833,16 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
 
       // 待機してリトライ（待機時間を厳しく上限化：体感「動かない」感を排除）
       let waitMs = backoffMs(attempt, r.kind, r.retryAfterSec);
-      // 待機上限：レート制限で最終モデル=20s、それ以外=5s（フォールバック余地あり）/ 503なら8s
+      // 待機上限：
+      //   ratelimit + フォールバック先あり: 5s（即切替するので短く）
+      //   ratelimit + 最終モデル: 20s（粘る前提で長め）
+      //   503 + フォールバック先あり: 6s
+      //   503 + 最終モデル: 12s
       const waitCap = r.kind === 'ratelimit'
         ? (isLastModel ? 20000 : 5000)
         : (isLastModel ? 12000 : 6000);
       waitMs = Math.min(waitMs, waitCap);
-      notice(`${r.kind === 'overloaded' ? '🔁 503 過負荷' : r.kind === 'ratelimit' ? '⏳ レート制限' : '🔁 再試行'} (${tryModel}) → ${Math.round(waitMs/1000)}秒待機 [${attempt+1}/${maxAttempts}]`);
+      notice(`${r.kind === 'overloaded' ? '🔁 503 過負荷' : r.kind === 'ratelimit' ? `⏳ レート制限${isTpmQuota ? '(TPM)' : isDailyQuota ? '(RPD)' : ''}` : '🔁 再試行'} (${tryModel}) → ${Math.round(waitMs/1000)}秒待機 [${attempt+1}/${maxAttempts}]`);
       await sleep(waitMs);
     }
   }
