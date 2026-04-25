@@ -335,7 +335,39 @@ notes に "[特殊デザイン: split-mouth]" 等を必ず記録。
 
 ■ 複数時点・類似アウトカム
 - 同研究の異なる時点（24h / 48h / 1w）は別レコード
-- 類似アウトカム（pain at rest / on movement / worst / average / on chewing）は混ぜず独立抽出`;
+- 類似アウトカム（pain at rest / on movement / worst / average / on chewing）は混ぜず独立抽出
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【🎯 2群比較RCT専用 + 連続量パターン網羅（最重要・絶対遵守）】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 本アプリは2群比較RCT専用（介入群 vs 対照群）
+- **イベント数 / 症例数(N) / 平均値 / SD は必ず介入群と対照群の両方を抽出**（片方のみは厳禁）
+- 片方しか論文/選択範囲に見当たらない場合でも、周辺テキスト・他Table・本文を参照して両群を埋める努力をする
+- それでも対照群データが見つからない場合のみ、notes に "[警告: 対照群データ未確認 — 要確認]" を明記して両フィールドの分かる方を残す
+- HR / RR / OR / MD / SMD は2群を統合した単一指標のため effectEstimate に1値で記録可（向きは notes に明記）
+- 3群試験の場合: 最も関連する2群比較（介入 vs 対照）に絞って抽出。thirdGroup フィールドは原則使用しない
+
+■ 連続量は術前/術後/変化量の全パターンを別レコードで抽出（最重要）
+論文に術前値・術後値・変化量・群間差が併記されている場合、**全パターンを独立レコードで抽出**する（後で利用者が選択できるように）:
+  (1) 術前値 (baseline / pre-op): 各群の mean ± SD
+  (2) 術後値 (post-op / follow-up at time T): 各群の mean ± SD
+  (3) 変化量 (change = post − pre): 各群の mean ± SD
+  (4) 変化量 (change = pre − post): 符号反対（論文表記に従う）
+  (5) 群間差 (between-group MD): 単一値 + 95%CI + p
+  (6) ANCOVA調整済み群間差: 単一値 + 95%CI + p
+
+actualOutcomeName に必ずパターンを明記:
+  - "HbA1c 術前値 mean/SD"
+  - "HbA1c 12週時 mean/SD（術後値）"
+  - "HbA1c 12週時の変化量 (post-pre) mean/SD"
+  - "HbA1c 12週時 群間差 (MD)"
+  - "HbA1c 12週時 ANCOVA調整済みMD"
+
+notes に必ず以下のいずれかを付与:
+  "[術前]" / "[術後]" / "[変化量 post-pre]" / "[変化量 pre-post]" / "[群間差MD]" / "[ANCOVA調整]"
+
+論文に複数パターンが併記されているのに1パターンしか抽出しないのは情報損失。**見つかった全パターンを必ず独立レコードで保持**。`;
 
 const SYSTEM_PROMPT_CRITIC = `あなたは医学メタ分析データ抽出の監査役（Critic）です。Cochrane EPOCの Risk-of-bias 評価者として活動してきた世界有数の専門家です。
 
@@ -2667,7 +2699,23 @@ function ExtractorPage({ apiKeys, model: initialModel, onBack }) {
       const sysPrompt = `あなたは医学RCT論文のメタ分析データ抽出専門家です。提供された論文の${type === 'text' ? '選択テキスト' : '選択画像'}から、**1個のアウトカム**を抽出してください。
 JSON1個（配列でなく単一オブジェクト）だけを返答。マークダウン不要。
 evidenceText には選択された原文（${type === 'image' ? '画像から読取り、' : ''}改変禁止、120文字以内に要約抜粋可）を、evidenceTextJa にその日本語訳を入れてください。
-数値（n, 平均, SD, 効果量, P値）は必ず構造化フィールドに入れてください。`;
+数値（n, 平均, SD, 効果量, P値）は必ず構造化フィールドに入れてください。
+
+【🎯 2群比較RCT専用ルール（絶対遵守）】
+本アプリは2群比較RCT（介入群 vs 対照群）専用。3群以上は扱わない。
+- **イベント数 / 症例数(N) / 平均値 / SD は必ず介入群と対照群の両方を抽出**（片方のみは厳禁）
+- 選択範囲内に対照群が見えない場合: 画像/テキストの周辺、隣接する Box/Table/段落を必ず精査して両群の値を抽出する
+- 例: 選択範囲に "Group A: n=115, success=96" のみ表示でも、画像/ページ内に "Group B: n=114, success=70" 等が併記されていれば**必ず両方を読み取る**
+- どうしても周辺に対照群が無い場合のみ、notes に "[警告: 対照群データが選択範囲内に不在 — 周辺を要確認]" を明記し、interventionGroup に値を入れて comparisonGroup の n_total/events_or_mean/sd_or_se は "未抽出" にせず可能な限り推定または "不明" を入れる
+- HR / RR / OR / MD など2群を統合した指標は単一値で記録可
+- 3群試験でも、最も関連する2群比較に絞る（thirdGroup フィールドは使用しない）
+
+【🔬 連続量の全パターン抽出（厳守）】
+連続量で術前値・術後値・変化量・群間差が選択範囲または周辺に併記されている場合、**見つかった全パターンを区別**して抽出。本コールでは1個のアウトカムしか返せないため、**最も情報量の多いパターン（通常は変化量 or 群間差MD）を優先**し、他パターンが併記されていることを notes に明記:
+- 例: "[術後値も併記: 介入群 25.3±12.1 / 対照群 38.7±14.5 (Table X)]"
+- 例: "[術前値も併記: 介入群 38.5±11.2 / 対照群 39.1±10.8]"
+- actualOutcomeName に必ずパターンを明記: "[術後値]" / "[変化量 post-pre]" / "[群間差MD]" / "[ANCOVA調整]" 等
+- 利用者が後で別パターンを抽出できるよう、併記された値は必ず notes に転記する`;
 
       const userPrompt = type === 'text'
         ? `【論文の選択箇所（${pageNum ? `P.${pageNum}` : 'ページ不明'}）】\n${text}\n\n上記から1個のアウトカム（actualOutcomeName, interventionGroup/comparisonGroup の数値, effectEstimate, evidenceText, evidenceTextJa, sourceLocation, pageNumber=${pageNum||0}, confidence）を抽出。`
