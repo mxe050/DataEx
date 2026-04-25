@@ -548,11 +548,41 @@ async function callCriticAnyProvider(rotator, model, systemPrompt, userText, pdf
   });
 }
 
+// ============================================================
+// API診断ログ（モジュールレベル + リアクティブ購読）
+// アプリ内パネルでDevTools不要で全API通信を確認できる
+// ============================================================
+const __apiLog = [];
+const __apiLogListeners = [];
+const MAX_API_LOG = 100;
+
+function pushApiLog(entry) {
+  __apiLog.push({ ...entry, ts: new Date() });
+  if (__apiLog.length > MAX_API_LOG) __apiLog.shift();
+  __apiLogListeners.forEach(fn => { try { fn([...__apiLog]); } catch (e) {} });
+}
+function useApiLog() {
+  const [log, setLog] = useState([...__apiLog]);
+  useEffect(() => {
+    __apiLogListeners.push(setLog);
+    return () => {
+      const i = __apiLogListeners.indexOf(setLog);
+      if (i >= 0) __apiLogListeners.splice(i, 1);
+    };
+  }, []);
+  return log;
+}
+
 // fetch を1回だけ実行。リトライ可能性 (kind) と待機ヒント秒数 (retryAfterSec) を返す
 // url は診断ログ用にも参照される（key= 部分はマスク）
 async function singleFetch(url, options) {
+  const t0 = Date.now();
+  const maskedUrl = url.replace(/key=[^&]+/, 'key=***');
+  const modelMatch = url.match(/\/models\/([^:?]+)/);
+  const modelName = modelMatch ? modelMatch[1] : '?';
   // ★ 診断: 全リクエストを console に記録（ブラウザ DevTools で確認可能）
-  try { console.log(`[Gemini API →] ${url.replace(/key=[^&]+/, 'key=***')}`); } catch (e) {}
+  try { console.log(`[Gemini API →] ${maskedUrl}`); } catch (e) {}
+  pushApiLog({ phase: 'request', model: modelName, url: maskedUrl });
   let resp;
   try { resp = await fetch(url, options); }
   catch (e) {
@@ -561,8 +591,15 @@ async function singleFetch(url, options) {
   }
 
   if (resp.ok) {
-    try { return { ok: true, data: await resp.json() }; }
-    catch (e) { return { ok: false, kind: 'fatal', message: 'JSONパース失敗: ' + e.message, status: resp.status }; }
+    try {
+      const data = await resp.json();
+      pushApiLog({ phase: 'response', model: modelName, status: 200, ok: true, durationMs: Date.now() - t0 });
+      return { ok: true, data };
+    }
+    catch (e) {
+      pushApiLog({ phase: 'response', model: modelName, status: resp.status, ok: false, error: 'JSONパース失敗', durationMs: Date.now() - t0 });
+      return { ok: false, kind: 'fatal', message: 'JSONパース失敗: ' + e.message, status: resp.status };
+    }
   }
 
   // エラーボディの読み取り
@@ -614,15 +651,16 @@ async function singleFetch(url, options) {
     try {
       console.warn(`[Gemini API ${status}] kind=${kind}`, {
         url: url.replace(/key=[^&]+/, 'key=***'),
-        status,
-        msg,
-        retryAfterSec,
-        quotaId,
-        quotaMetric,
-        body
+        status, msg, retryAfterSec, quotaId, quotaMetric, body
       });
     } catch (e) {}
   }
+  // アプリ内診断パネルに記録
+  pushApiLog({
+    phase: 'response', model: modelName, status, ok: false, kind,
+    error: msg.substring(0, 200), retryAfterSec, quotaId, quotaMetric,
+    durationMs: Date.now() - t0
+  });
 
   return { ok: false, kind, status, message: `${status} ${msg}`.trim(), retryAfterSec, isDailyQuota, isTpmQuota, isRpmQuota, quotaId };
 }
@@ -2293,6 +2331,75 @@ function SetupPage({ onComplete, initialConfig }) {
 /* ============================================================
    SECTION 13: EXTRACTOR PAGE
    ============================================================ */
+// API 診断ログパネル（DevTools 不要で全 API 通信を確認）
+function ApiDiagPanel({ onClose }) {
+  const log = useApiLog();
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [log.length]);
+  // pair: requests と responses をまとめて表示しやすく
+  const pairs = [];
+  for (let i = 0; i < log.length; i++) {
+    const e = log[i];
+    if (e.phase === 'request') {
+      const next = log[i+1];
+      if (next && next.phase === 'response' && next.model === e.model) {
+        pairs.push({ ...next, requestedAt: e.ts });
+        i++;
+      } else {
+        pairs.push({ phase: 'pending', model: e.model, ts: e.ts });
+      }
+    } else {
+      pairs.push(e);
+    }
+  }
+  const recent = pairs.slice(-30);
+  const fmtTime = (d) => d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}` : '-';
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-2 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-2 border-b bg-slate-800 text-white rounded-t-xl">
+          <h3 className="font-bold flex items-center gap-2 text-sm"><Activity size={16}/>API 診断ログ <span className="text-[10px] text-slate-300 font-mono">(直近 {recent.length} 件)</span></h3>
+          <div className="flex gap-2">
+            <button onClick={() => { __apiLog.length = 0; __apiLogListeners.forEach(fn => fn([])); }} className="text-[10px] bg-slate-600 hover:bg-slate-500 px-2 py-1 rounded">クリア</button>
+            <button onClick={onClose} className="text-slate-300 hover:text-white"><XCircle size={18}/></button>
+          </div>
+        </div>
+        <div className="px-4 py-2 bg-blue-50 border-b text-[11px] text-blue-900">
+          💡 <b>見方</b>: 各行は「呼んだモデル / 応答ステータス / quotaId / 待機指示秒 / 所要時間」。緑=成功、橙=4xx、赤=5xx。これで「Flash が実際呼ばれているか」「Google が何を返したか」を確認できます。
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 space-y-1 text-[11px] font-mono bg-slate-50">
+          {recent.length === 0 && <div className="text-center text-slate-400 py-4">まだ通信履歴がありません。抽出実行後にここに表示されます。</div>}
+          {recent.map((e, i) => {
+            const statusColor = e.phase === 'pending' ? 'bg-blue-100 text-blue-800 border-blue-300'
+              : e.ok ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+              : e.status >= 500 ? 'bg-red-100 text-red-800 border-red-300'
+              : 'bg-amber-100 text-amber-800 border-amber-300';
+            return (
+              <div key={i} className={`border rounded p-1.5 ${statusColor}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-slate-500 font-mono w-16 flex-shrink-0">{fmtTime(e.ts)}</span>
+                  <span className="font-bold flex-shrink-0">{e.model}</span>
+                  <span className="font-mono">{e.phase === 'pending' ? '⏳実行中' : `${e.status} ${e.ok ? 'OK' : (e.kind || 'error')}`}</span>
+                  {e.durationMs > 0 && <span className="text-slate-500 text-[10px]">{(e.durationMs/1000).toFixed(1)}s</span>}
+                </div>
+                {(e.quotaId || e.retryAfterSec > 0) && (
+                  <div className="mt-1 text-[10px] text-slate-700 ml-16 break-all">
+                    {e.quotaId && <div>📛 quotaId: <b>{e.quotaId}</b></div>}
+                    {e.retryAfterSec > 0 && <div>⏰ Google指示待機: <b>{e.retryAfterSec}秒</b></div>}
+                    {e.error && <div className="text-red-700">⚠️ {e.error.substring(0, 150)}</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StageIndicator({ currentStage, progress, message }) {
   const stages = [
     { id: 'stage1', label: 'PDF準備', icon: FileText },
@@ -2336,6 +2443,8 @@ function ExtractorPage({ apiKeys, model: initialModel, onBack }) {
   const [model, setModel] = useState(initialModel);
   // 抽出中のモデル変更を次のステージから即反映するためのref
   const modelRef = useRef(initialModel);
+  // API診断パネルの開閉
+  const [showDiag, setShowDiag] = useState(false);
   useEffect(() => { modelRef.current = model; }, [model]);
   const handleModelChange = (newModel) => {
     if (!GEMINI_MODELS.find(m => m.id === newModel)) return;
@@ -2644,10 +2753,17 @@ ${pdfText.substring(0, 30000)}`;
                 <span className="text-blue-700 text-[10px] font-mono bg-blue-100 px-1 rounded flex-shrink-0">×{apiKeys.length}キー</span>
               )}
             </div>
+            {/* API診断ボタン: DevTools 不要で全API通信を確認 */}
+            <button onClick={() => setShowDiag(true)} title="全API通信ログを表示（DevTools不要）"
+              className="text-[10px] bg-slate-800 hover:bg-slate-900 text-white px-2 py-1 rounded flex items-center gap-1 font-bold transition-colors">
+              <Activity size={12}/>診断
+            </button>
             {result && <button onClick={saveSession} className="text-[10px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-medium text-slate-600 transition-colors"><SaveIcon size={12}/>保存</button>}
           </div>
         </div>
       </header>
+
+      {showDiag && <ApiDiagPanel onClose={() => setShowDiag(false)}/>}
 
       <main className={`flex-1 flex flex-col min-h-0 w-full overflow-hidden ${status==='complete'?'p-1.5 sm:p-3':''}`}>
         {status !== 'complete' && (
