@@ -367,7 +367,67 @@ actualOutcomeName に必ずパターンを明記:
 notes に必ず以下のいずれかを付与:
   "[術前]" / "[術後]" / "[変化量 post-pre]" / "[変化量 pre-post]" / "[群間差MD]" / "[ANCOVA調整]"
 
-論文に複数パターンが併記されているのに1パターンしか抽出しないのは情報損失。**見つかった全パターンを必ず独立レコードで保持**。`;
+論文に複数パターンが併記されているのに1パターンしか抽出しないのは情報損失。**見つかった全パターンを必ず独立レコードで保持**。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【📖 PDF 精読プロセス（数字を拾う前に「意味」を必ず確認）】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+数字だけを抜くと高確率で誤抽出。必ず以下の順で「数字の意味を定義する場所」を先に確認すること:
+
+■ Step A: Methods で outcome 定義・分母・スケールを先に把握
+- outcome 正式名称・測定時点・スケール（VAS 0-10 vs 0-100）と方向（higher=worse/better）
+- analysis population の定義: ITT / mITT / PP / safety / FAS / available case / complete case
+- 統計モデル: ANCOVA / Cox / mixed model / LS mean / 調整因子 / 欠測処理（LOCF/MI）
+これらを把握してから Results の数字を読む。
+
+■ Step B: CONSORT Flow Diagram で n の種類を区別（最重要）
+- randomized n → ITT分母候補（研究記述用）
+- allocated → 群ごとの割付数
+- received → safety population 候補
+- analysed (per outcome) → そのアウトカムの解析分母 ★これを最優先
+- excluded / lost to follow-up → 欠測リスク
+⚠ baseline table の n を outcome 分母として**自動流用禁止**（多くの場合異なる）。
+
+■ Step C: 表の脚注は必ず読む（SD/SE 判別はここで決定）
+- "Data are mean ± SD" → そのまま使用
+- "Data are mean ± SE" / "± SEM" → SD = SE × √n に変換し notes に式を記録
+- "Values are median (IQR)" → mean/SD として扱わない（変換要検討）
+- "based on available data" / "patients with available outcome" → 分母 ≠ randomized
+- "Safety population" → 有害事象用、効果アウトカムと混ぜない
+- "LS mean" / "adjusted for baseline" → 群別 mean/SD ではなく ANCOVA調整値
+- "Error bars indicate SEM/SD/95%CI" → エラーバーの種類確認
+- "Higher scores indicate worse/better" → スケール方向確認
+
+■ Step D: 分母単位の確認（per-patient vs per-tooth/lesion）
+歯科・眼科・整形・両側臓器・複数病変・複数治療サイクルでは「20 patients / 40 teeth」のように分母単位が違う。
+ランダム化単位（通常 patient）と一致しない場合は notes に "[分母単位: teeth / lesions / cycles 等]" を必ず明記。
+
+■ Step E: KM 曲線の罠
+"number at risk" は **リスク集合残存数であってイベント数ではない**（絶対混同しない）。
+HR は KM 曲線の図中・図脚注・Cox table・本文に小さく記載されることが多い（必ず探す）。
+HR の reference group（intervention vs control の向き）を必ず確認、逆なら反転。
+
+■ Step F: 論文内で n が違う場合は全部記録
+Abstract / flow / baseline / outcome table で n が異なるのは意味が違うから:
+- randomized / analysed / safety / PP の区別を意識
+- 統一せず、各レコードに適切な n を選択
+- 不一致を notes に "[n不一致: randomized=120 / analysed=110 / safety=118]" として記録
+
+■ Step G: Supplementary / Appendix を必ず確認
+secondary outcomes 詳細・各時点 mean/SD・subgroup・sensitivity analysis・PP 結果・有害事象詳細・調整/非調整両方は Supplement に集約されることが多い。
+sourceLocation に "Supplementary Table SX" / "eTable Y" / "Appendix Table" を明記。
+
+■ 検索キーワードのヒント
+- 解析集団: intention / ITT / modified / per protocol / safety / full analysis / complete case
+- 連続量: mean / SD / SE / SEM / median / IQR / change from baseline / ANCOVA / LS mean / adjusted
+- 二値: n (%) / events / proportion / response / success / failure / complication / adverse
+- HR: hazard / Cox / Kaplan / log-rank / number at risk / censored / progression
+- 図脚注: Error bars indicate / Data are mean ± / Higher scores indicate
+
+■ 抽出時の鉄則
+**「どのアウトカム / どの時点 / どの解析集団 / どの分母 / どの統計量」を数字とセットで必ず記録**。
+これらが揃っていない単独の数字は抽出しない（または confidence="low" + notes に欠落項目を明記）。`;
 
 const SYSTEM_PROMPT_CRITIC = `あなたは医学メタ分析データ抽出の監査役（Critic）です。Cochrane EPOCの Risk-of-bias 評価者として活動してきた世界有数の専門家です。
 
@@ -2715,7 +2775,20 @@ evidenceText には選択された原文（${type === 'image' ? '画像から読
 - 例: "[術後値も併記: 介入群 25.3±12.1 / 対照群 38.7±14.5 (Table X)]"
 - 例: "[術前値も併記: 介入群 38.5±11.2 / 対照群 39.1±10.8]"
 - actualOutcomeName に必ずパターンを明記: "[術後値]" / "[変化量 post-pre]" / "[群間差MD]" / "[ANCOVA調整]" 等
-- 利用者が後で別パターンを抽出できるよう、併記された値は必ず notes に転記する`;
+- 利用者が後で別パターンを抽出できるよう、併記された値は必ず notes に転記する
+
+【📖 数字の意味を必ず確認（脚注・凡例の精読）】
+選択範囲または周辺画像内に脚注・凡例があれば必ず読む:
+- "Data are mean ± SD/SE/SEM" → SD/SE/SEM の判別（SE/SEM なら SD = SE × √n に変換、notes に式記録）
+- "Values are median (IQR)" → mean/SD と扱わない
+- "based on available data" / "Safety population" → 分母が randomized でない
+- "LS mean" / "adjusted for baseline" → ANCOVA調整値（群別 mean/SD と混ぜない）
+- "Error bars indicate SEM/SD/95%CI" → エラーバーの種類確認
+- "Higher scores indicate worse/better" → スケール方向（必要なら符号反転）
+- "n=X" の分母単位（patients / teeth / lesions / cycles）を確認、ランダム化単位と違えば notes に "[分母単位: 〜]"
+- KM曲線の "number at risk" はイベント数ではない（混同厳禁）
+
+【鉄則】「どのアウトカム / どの時点 / どの解析集団（ITT/PP/safety等）/ どの分母 / どの統計量」を数字とセットで必ず記録。揃わない単独の数字は confidence="low" + notes に欠落項目を明記。`;
 
       const userPrompt = type === 'text'
         ? `【論文の選択箇所（${pageNum ? `P.${pageNum}` : 'ページ不明'}）】\n${text}\n\n上記から1個のアウトカム（actualOutcomeName, interventionGroup/comparisonGroup の数値, effectEstimate, evidenceText, evidenceTextJa, sourceLocation, pageNumber=${pageNum||0}, confidence）を抽出。`
