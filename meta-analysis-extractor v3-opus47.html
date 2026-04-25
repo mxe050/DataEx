@@ -2915,6 +2915,59 @@ ${text}
         showToast(`📌 ${targetModel} → ${actualModelUsed} に自動切替して成功`, 'info');
       }
 
+      // === 2群抽出の安全ネット ===
+      // 条件: evidenceText に「n=X」が 2 個以上ある + 介入群は埋まっている + 対照群が空
+      // → 再抽出と同じ補完プロンプトを 1 回だけ呼んで対照群を埋める
+      try {
+        const evidence = newOutcome.evidenceText || '';
+        const nMatchCount = (evidence.match(/n\s*=\s*\d+/gi) || []).length;
+        const blank = (v) => !v || ['', '不明', '未抽出', '-'].includes(String(v).trim());
+        const interventionFilled = !blank(newOutcome.interventionGroup?.n_total);
+        const comparisonEmpty = blank(newOutcome.comparisonGroup?.n_total);
+        if (nMatchCount >= 2 && interventionFilled && comparisonEmpty) {
+          showToast('🔄 対照群が未抽出のため自動補完を試行中...', 'info');
+          const completionPrompt = `以下の根拠原文には、2 群（介入群と対照群）の数値が記載されています。
+既に介入群: n=${newOutcome.interventionGroup.n_total}, events/mean=${newOutcome.interventionGroup.events_or_mean || '不明'} は抽出済み。
+**対照群（comparisonGroup）の n_total と events_or_mean** を補完してください。
+
+【根拠原文】
+${evidence}
+
+【ルール】
+- 原文に 2 セットの (n=X) があるなら、介入群と異なる方を comparisonGroup として抽出
+- 不明な値は "不明"、該当なしは "-" を記載（空欄禁止）
+- フィールドを空のままにしない
+
+以下の JSON 形式だけで返答（マークダウン不要）:
+{
+  "comparisonGroup": { "n_total": "...", "events_or_mean": "...", "sd_or_se": "..." },
+  "effectEstimate": { "measureType": "...", "value": "...", "ci95": "...", "pValue": "..." }
+}`;
+          try {
+            const completion = await callGemini({
+              rotator,
+              model: targetModel,
+              systemPrompt: "数値抽出に特化した分析専門家として、要求された JSON だけを出力してください。",
+              userText: completionPrompt,
+              thinkingBudget: 0,
+              onNotice: () => {},
+            });
+            if (completion?.comparisonGroup && !blank(completion.comparisonGroup.n_total)) {
+              newOutcome.comparisonGroup = { ...(newOutcome.comparisonGroup || {}), ...completion.comparisonGroup };
+              if (completion.effectEstimate && blank(newOutcome.effectEstimate?.value)) {
+                newOutcome.effectEstimate = { ...(newOutcome.effectEstimate || {}), ...completion.effectEstimate };
+              }
+              newOutcome.notes = (newOutcome.notes || '') + ' [対照群を自動補完済み]';
+              showToast('✅ 対照群を自動補完しました', 'success');
+            }
+          } catch (compErr) {
+            console.warn('対照群自動補完失敗:', compErr);
+          }
+        }
+      } catch (autoErr) {
+        console.warn('自動補完判定エラー:', autoErr);
+      }
+
       setResult(prev => {
         const base = prev || { extractedOutcomes: [], paperPICO: {}, statisticalMethods: [], unclearItems: [] };
         const nr = { ...base };
