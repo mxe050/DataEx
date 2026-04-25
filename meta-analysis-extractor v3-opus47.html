@@ -805,10 +805,11 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
     }
     const body = JSON.stringify(requestBody);
 
-    // 各モデルで最大試行回数。最終モデル時は短期 429 を粘るため多め（5回）。
-    // 上記の throw 条件で attempt >= 4 で諦めるので、5 で十分余裕がある。
+    // 各モデルで最大試行回数。
+    // 最終モデル: 短期 429 を粘るため多め（5回）
+    // それ以外: 短期バースト用に 4回（旧バージョンの粘り強さを再現）
     const isLastInChain = mIdx >= modelChain.length - 1;
-    const maxAttempts = isLastInChain ? Math.max(5, keys.length * 2) : Math.max(3, keys.length * 2);
+    const maxAttempts = isLastInChain ? Math.max(5, keys.length * 2) : Math.max(4, keys.length * 2);
     let kIdx = 0;
     let consecutiveOverload = 0;
     let consecutiveAuth = 0;
@@ -883,19 +884,21 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
         }
 
         // ★ 短期バースト制限（PerDay ラベルだが retry-after 短期）
-        // → Google 指示通り待って **同モデルで再試行** する（フォールバックも同プロジェクト枠を共有するため切替えても効かない）
+        // → Google 指示通り待って **同モデルで粘り強く再試行** する
+        // → フォールバックも同プロジェクト枠を共有するため、切替えても効かない
         if (isShortBurst) {
-          // 1回だけ待ってリトライ。それでもダメなら throw
-          if (attempt >= 1) {
-            failureLog.push({ model: tryModel, reason: `短期バースト制限継続 (${r.retryAfterSec}秒)`, recoverable: 'wait' });
+          // 旧バージョンのように粘り強く: 最大3回まで待ってリトライ（合計待機 ≈100〜120秒）
+          // ユーザーが「放置していたら急に動いた」と感じる挙動を実現
+          if (attempt >= 3) {
+            failureLog.push({ model: tryModel, reason: `短期バースト制限が3回連続継続 (${r.retryAfterSec}秒待機指示)`, recoverable: 'wait' });
             const sec = r.retryAfterSec;
             throw new Error(`⏰ Google が短期スロットリング中（quotaId=${r.quotaId}）\n\n` +
-              `${tryModel} は ${sec}秒待機を指示しています。\n${attempt+1}回試行後も継続。\n\n` +
-              `💡 対処:\n・**${sec + 10}秒〜1分待ってから** 抽出を再実行してください\n` +
+              `${tryModel} は ${sec}秒待機を指示しています。\n${attempt+1}回試行後も継続（合計約${(attempt+1)*sec}秒待機済み）。\n\n` +
+              `💡 対処:\n・**1〜2分さらに待ってから** 抽出を再実行してください\n` +
               `・両モデルとも同じプロジェクトの無料枠を共有しているため、別モデルへの切替えは無効\n` +
               `・別プロジェクトのキーを追加 or 課金有効化で根本回避`);
           }
-          notice(`⏰ ${tryModel} 短期バースト制限 → Google指示の${r.retryAfterSec}秒待機後に同モデルで再試行（フォールバックは同枠共有で無効）`);
+          notice(`⏰ ${tryModel} 短期バースト制限 [${attempt+1}/${4}回目] → Google指示の${r.retryAfterSec}秒待機後に同モデルで再試行（フォールバックは同枠共有で無効）`);
           // wait + retry セクションへ進む（同モデル再試行）
         } else if (hasRealQuotaError && !isLastModel) {
           // ★ その他の本物クォータエラー（TPM/RPM など）→ 即フォールバック
