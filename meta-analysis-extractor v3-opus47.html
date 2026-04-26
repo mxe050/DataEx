@@ -1734,6 +1734,263 @@ function baselineRow(b) {
     b.pValue||"-", b.sourceLocation||"-", b.pageNumber||"-"];
 }
 
+// RevMan XML 風 (.rm5 互換ライト版) 出力
+// 完全な RevMan 5 XML スキーマではないが、RevMan Web の Import で取り込める
+// study + comparison + outcome + dichotomous_data / continuous_data 構造
+function toRevManXml(outcomes, paperPICO, fileName, studyIdOverride) {
+  const studyId = deriveStudyId(paperPICO, fileName, studyIdOverride);
+  const ts = new Date().toISOString();
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<!-- DataEx auto-generated RevMan-compatible XML -->\n`;
+  xml += `<!-- Vivekanantha 2026 dual-LLM framework / generated ${ts} -->\n`;
+  xml += `<COCHRANE_REVIEW>\n`;
+  xml += `  <REVIEW_INFO><TITLE>DataEx Auto-export: ${escapeXml(paperPICO?.studyDesign || studyId)}</TITLE></REVIEW_INFO>\n`;
+  xml += `  <STUDIES_AND_REFERENCES>\n`;
+  xml += `    <STUDY ID="${escapeXml(studyId)}">\n`;
+  xml += `      <REFERENCE>\n`;
+  xml += `        <REF_TY_VALUES><TY>Trial</TY></REF_TY_VALUES>\n`;
+  xml += `        <T1>${escapeXml(fileName || studyId)}</T1>\n`;
+  xml += `        <RW>${escapeXml(paperPICO?.studyDesign || '-')}</RW>\n`;
+  xml += `      </REFERENCE>\n`;
+  xml += `    </STUDY>\n`;
+  xml += `  </STUDIES_AND_REFERENCES>\n`;
+  xml += `  <ANALYSES_AND_DATA>\n`;
+  xml += `    <COMPARISON ID="cmp_1" NO="1">\n`;
+  xml += `      <NAME>${escapeXml(paperPICO?.I || '介入')} vs ${escapeXml(paperPICO?.C || '対照')}</NAME>\n`;
+  let outcomeNo = 1;
+  outcomes.forEach(o => {
+    if (_isBinary(o)) {
+      const row = _binaryRow(o, studyId);
+      const ev_i = row.events_intervention, n_i = row.total_intervention, ev_c = row.events_control, n_c = row.total_control;
+      if (!ev_i && !ev_c) return; // 数値なし → スキップ
+      xml += `      <DICH_OUTCOME ID="o_${outcomeNo}" NO="${outcomeNo}" EFFECT_MEASURE="${row.reported_RR ? 'RR' : row.reported_OR ? 'OR' : row.reported_HR ? 'HR' : 'OR'}">\n`;
+      xml += `        <NAME>${escapeXml(o.actualOutcomeName)} (${escapeXml(o.timePoint || '-')})</NAME>\n`;
+      xml += `        <DICH_DATA STUDY_ID="${escapeXml(studyId)}" EVENTS_1="${ev_i || ''}" TOTAL_1="${n_i || ''}" EVENTS_2="${ev_c || ''}" TOTAL_2="${n_c || ''}"/>\n`;
+      xml += `      </DICH_OUTCOME>\n`;
+      outcomeNo++;
+    } else if (_isContinuous(o)) {
+      const row = _continuousRow(o, studyId);
+      if (!row.mean_intervention && !row.mean_control) return;
+      xml += `      <CONT_OUTCOME ID="o_${outcomeNo}" NO="${outcomeNo}" EFFECT_MEASURE="MD">\n`;
+      xml += `        <NAME>${escapeXml(o.actualOutcomeName)} (${escapeXml(o.timePoint || '-')})</NAME>\n`;
+      xml += `        <CONT_DATA STUDY_ID="${escapeXml(studyId)}" MEAN_1="${row.mean_intervention || ''}" SD_1="${row.sd_intervention || ''}" TOTAL_1="${row.n_intervention || ''}" MEAN_2="${row.mean_control || ''}" SD_2="${row.sd_control || ''}" TOTAL_2="${row.n_control || ''}"/>\n`;
+      xml += `      </CONT_OUTCOME>\n`;
+      outcomeNo++;
+    }
+  });
+  xml += `    </COMPARISON>\n`;
+  xml += `  </ANALYSES_AND_DATA>\n`;
+  xml += `</COCHRANE_REVIEW>\n`;
+  return xml;
+}
+function escapeXml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// R metafor 二値: 完全な escalc + rma 解析セクション込み
+function toRMetaforBinaryFullScript(outcomes, paperPICO, fileName, studyIdOverride) {
+  const base = toRMetaforBinaryScript(outcomes, paperPICO, fileName, studyIdOverride);
+  const analysis = `\n\n# === 解析パイプライン (escalc + rma + forest plot) ===\n` +
+`# OR メタ分析 (random-effects):\n` +
+`if (sum(!is.na(dat_binary$events_intervention) & !is.na(dat_binary$total_intervention)) >= 1) {\n` +
+`  res_or <- escalc(measure="OR",\n` +
+`                   ai=events_intervention, n1i=total_intervention,\n` +
+`                   ci=events_control,      n2i=total_control,\n` +
+`                   data=dat_binary)\n` +
+`  rma_or <- rma(yi, vi, data=res_or, method="REML")\n` +
+`  print(rma_or)\n` +
+`  forest(rma_or, atransf=exp, slab=paste(dat_binary$study, dat_binary$timepoint, sep=" - "))\n` +
+`}\n\n` +
+`# RR メタ分析 (random-effects):\n` +
+`if (sum(!is.na(dat_binary$events_intervention)) >= 1) {\n` +
+`  res_rr <- escalc(measure="RR", ai=events_intervention, n1i=total_intervention,\n` +
+`                                  ci=events_control,      n2i=total_control, data=dat_binary)\n` +
+`  rma_rr <- rma(yi, vi, data=res_rr, method="REML")\n` +
+`  print(rma_rr)\n` +
+`}\n\n` +
+`# HR (generic inverse variance) メタ分析:\n` +
+`if (sum(!is.na(dat_binary$log_HR)) >= 1) {\n` +
+`  rma_hr <- rma(yi=log_HR, sei=SE_log_HR, data=dat_binary[!is.na(dat_binary$log_HR),], method="REML")\n` +
+`  print(rma_hr); forest(rma_hr, atransf=exp)\n` +
+`}\n\n` +
+`# 不均一性検査 (Higgins I^2):\n` +
+`# I^2 が exists("rma_or") なら print(confint(rma_or)) で詳細\n`;
+  return { script: base.script + analysis, count: base.count };
+}
+
+function toRMetaforContinuousFullScript(outcomes, paperPICO, fileName, studyIdOverride) {
+  const base = toRMetaforContinuousScript(outcomes, paperPICO, fileName, studyIdOverride);
+  const analysis = `\n\n# === 解析パイプライン (escalc + rma + forest plot, metric別) ===\n` +
+`# 1. 術後値 MD メタ分析:\n` +
+`dat_post <- subset(dat_continuous, metric == "post-value" & !is.na(mean_intervention) & !is.na(sd_intervention))\n` +
+`if (nrow(dat_post) >= 1) {\n` +
+`  res_post <- escalc(measure="MD", m1i=mean_intervention, sd1i=sd_intervention, n1i=n_intervention,\n` +
+`                                    m2i=mean_control,      sd2i=sd_control,      n2i=n_control, data=dat_post)\n` +
+`  rma_post <- rma(yi, vi, data=res_post, method="REML")\n` +
+`  print(rma_post); forest(rma_post)\n` +
+`}\n\n` +
+`# 2. 変化量 (change-from-baseline) MD メタ分析:\n` +
+`dat_change <- subset(dat_continuous, metric == "change-from-baseline" & !is.na(mean_intervention) & !is.na(sd_intervention))\n` +
+`if (nrow(dat_change) >= 1) {\n` +
+`  res_chg <- escalc(measure="MD", m1i=mean_intervention, sd1i=sd_intervention, n1i=n_intervention,\n` +
+`                                    m2i=mean_control,      sd2i=sd_control,      n2i=n_control, data=dat_change)\n` +
+`  rma_chg <- rma(yi, vi, data=res_chg, method="REML")\n` +
+`  print(rma_chg); forest(rma_chg)\n` +
+`}\n\n` +
+`# 3. SMD (異なるスケール統合用):\n` +
+`if (nrow(dat_post) >= 1) {\n` +
+`  res_smd <- escalc(measure="SMD", m1i=mean_intervention, sd1i=sd_intervention, n1i=n_intervention,\n` +
+`                                    m2i=mean_control,      sd2i=sd_control,      n2i=n_control, data=dat_post)\n` +
+`  rma_smd <- rma(yi, vi, data=res_smd, method="REML")\n` +
+`  print(rma_smd)\n` +
+`}\n\n` +
+`# 4. ANCOVA 調整済み (generic inverse variance):\n` +
+`dat_adj <- subset(dat_continuous, metric == "adjusted-difference" & !is.na(reported_AdjMD) & !is.na(SE_from_CI))\n` +
+`if (nrow(dat_adj) >= 1) {\n` +
+`  rma_adj <- rma(yi=reported_AdjMD, sei=SE_from_CI, data=dat_adj, method="REML")\n` +
+`  print(rma_adj); forest(rma_adj)\n` +
+`}\n`;
+  return { script: base.script + analysis, count: base.count };
+}
+
+// HTML プリント可能レポート出力
+function generateHtmlReport(result, pico, pdfFileName) {
+  const ocs = result?.extractedOutcomes || [];
+  const audit = result?._dualLLM?.summary;
+  const ts = new Date().toLocaleString('ja-JP');
+  let html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>DataEx 抽出レポート - ${pdfFileName}</title>\n`;
+  html += `<style>body{font-family:'Noto Sans JP',sans-serif;margin:20px;color:#0f172a;line-height:1.6}h1,h2,h3{color:#7c3aed}\n`;
+  html += `table{border-collapse:collapse;width:100%;margin:10px 0;font-size:11px}th,td{border:1px solid #cbd5e1;padding:4px 8px;text-align:left}\n`;
+  html += `th{background:#f1f5f9;font-weight:bold}.warning{background:#fef3c7}.critical{background:#fee2e2}.empty{color:#dc2626;font-style:italic}\n`;
+  html += `.summary{background:#f3e8ff;padding:10px;border-left:4px solid #7c3aed;margin:10px 0}\n`;
+  html += `.outcome{margin:15px 0;padding:10px;border:1px solid #e2e8f0;border-radius:4px}\n`;
+  html += `.evidence{background:#fffbeb;padding:8px;font-style:italic;border-left:3px solid #f59e0b;margin:5px 0}\n`;
+  html += `@media print{body{margin:10mm}.no-print{display:none}}</style></head><body>\n`;
+  html += `<h1>📋 DataEx 抽出レポート</h1>\n`;
+  html += `<div class="summary"><b>論文:</b> ${escapeXml(pdfFileName)}<br><b>生成日時:</b> ${ts}<br>`;
+  html += `<b>PICO:</b> P=${escapeXml(pico.p)} / I=${escapeXml(pico.i)} / C=${escapeXml(pico.c)}<br>`;
+  html += `<b>抽出件数:</b> ${ocs.length}件</div>\n`;
+  if (audit) {
+    html += `<h2>dual-MODEL サマリー</h2>\n<ul>`;
+    html += `<li>両モデル一致正解: ${audit.bothCorrect} (${audit.bothCorrectPct}%)</li>`;
+    html += `<li>少なくとも片方正解: ${audit.atLeastOneCorrectPct}%</li>`;
+    html += `<li>致命フラグ: ${audit.flagsCritical} / 警告: ${audit.flagsWarning}</li></ul>\n`;
+  }
+  html += `<h2>抽出アウトカム一覧</h2>\n`;
+  ocs.forEach((o, i) => {
+    const flagClass = (o._flags || []).some(f => f.severity === 'critical') ? 'critical' : (o._flags || []).length ? 'warning' : '';
+    html += `<div class="outcome ${flagClass}"><h3>${i+1}. ${escapeXml(o.actualOutcomeName || '')}</h3>\n`;
+    html += `<p>時点: <b>${escapeXml(o.timePoint || '-')}</b> / 集団: <b>${escapeXml(o.populationType || '-')}</b> / 型: <b>${escapeXml(o.variableType || '-')}</b> / P${o.pageNumber || '-'} / 信頼度: ${o.confidence || '-'}</p>\n`;
+    html += `<table><tr><th>群</th><th>N</th><th>イベント/平均</th><th>SD/SE</th></tr>`;
+    html += `<tr><td>介入</td><td>${escapeXml(o.interventionGroup?.n_total || '')}</td><td>${escapeXml(o.interventionGroup?.events_or_mean || '')}</td><td>${escapeXml(o.interventionGroup?.sd_or_se || '')}</td></tr>`;
+    html += `<tr><td>対照</td><td>${escapeXml(o.comparisonGroup?.n_total || '')}</td><td>${escapeXml(o.comparisonGroup?.events_or_mean || '')}</td><td>${escapeXml(o.comparisonGroup?.sd_or_se || '')}</td></tr></table>\n`;
+    if (o.effectEstimate?.value) {
+      html += `<p><b>効果量:</b> ${escapeXml(o.effectEstimate.measureType || '')} ${escapeXml(o.effectEstimate.value)} (95%CI ${escapeXml(o.effectEstimate.ci95 || '')}, p=${escapeXml(o.effectEstimate.pValue || '')})</p>\n`;
+    }
+    if (o.evidenceText) html += `<div class="evidence">${escapeXml(o.evidenceText)}</div>\n`;
+    if (o._flags && o._flags.length > 0) {
+      html += `<ul>` + o._flags.map(f => `<li>${escapeXml(f.msg)}</li>`).join('') + `</ul>\n`;
+    }
+    if (o.notes) html += `<p><b>注記:</b> ${escapeXml(o.notes)}</p>\n`;
+    html += `</div>\n`;
+  });
+  html += `<button class="no-print" onclick="window.print()" style="position:fixed;bottom:20px;right:20px;padding:10px 20px;background:#7c3aed;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:bold;font-size:14px">🖨 印刷 / PDF保存</button>\n`;
+  html += `</body></html>`;
+  return html;
+}
+
+// 複数論文セッション保存 (LS_KEY_SESSIONS) — 集約用
+const LS_SESSIONS = "meta-extractor-v3-sessions";
+function loadSessions() {
+  try { return JSON.parse(localStorage.getItem(LS_SESSIONS) || '[]'); } catch (e) { return []; }
+}
+function saveSession(name, result, metadata) {
+  const list = loadSessions();
+  const compact = { name, savedAt: new Date().toISOString(), metadata, result: { extractedOutcomes: result.extractedOutcomes, paperPICO: result.paperPICO, _dualLLM: result._dualLLM } };
+  const filtered = list.filter(s => s.name !== name);
+  filtered.unshift(compact);
+  try { localStorage.setItem(LS_SESSIONS, JSON.stringify(filtered.slice(0, 30))); } catch (e) { /* quota */ }
+}
+function deleteSession(name) {
+  const list = loadSessions().filter(s => s.name !== name);
+  localStorage.setItem(LS_SESSIONS, JSON.stringify(list));
+}
+// 全セッションから集約TSV (multi-study meta-analysis 用)
+function aggregateSessionsBinaryTSV(sessions) {
+  const allRows = [];
+  sessions.forEach(s => {
+    const ocs = s.result?.extractedOutcomes || [];
+    const studyId = (s.metadata?.studyId) || deriveStudyId(s.result?.paperPICO, s.metadata?.pdfName, '');
+    ocs.filter(_isBinary).forEach(o => allRows.push(_binaryRow(o, studyId)));
+  });
+  return rowsToTSV(REVMAN_BINARY_COLS, allRows);
+}
+function aggregateSessionsContinuousTSV(sessions) {
+  const allRows = [];
+  sessions.forEach(s => {
+    const ocs = s.result?.extractedOutcomes || [];
+    const studyId = (s.metadata?.studyId) || deriveStudyId(s.result?.paperPICO, s.metadata?.pdfName, '');
+    ocs.filter(_isContinuous).forEach(o => allRows.push(_continuousRow(o, studyId)));
+  });
+  return rowsToTSV(REVMAN_CONTINUOUS_COLS, allRows);
+}
+
+// 抽出ログ CSV: 各outcome 1行で Stage1〜6 通過状況 + フラグ集計
+function buildStageLogCSV(result) {
+  const ocs = result?.extractedOutcomes || [];
+  const cols = [
+    'outcome','timepoint','population','variableType',
+    'completeness%','quoteValidated','agreement','flagsCritical','flagsWarning',
+    'percentOnlyWarn','nTotalI','eventsI','eventsExceedTotal','reExtracted','stage6Audit'
+  ];
+  const lines = [cols.join(',')];
+  ocs.forEach(o => {
+    const score = _completenessScore(o);
+    const flags = o._flags || [];
+    const eventsI = parseFloat(extractEventsCount(o.interventionGroup?.events_or_mean, o.interventionGroup?.n_total)) || 0;
+    const totalI = parseFloat(extractNumber(o.interventionGroup?.n_total)) || 0;
+    const exceeds = !isNaN(eventsI) && !isNaN(totalI) && totalI > 0 && eventsI > totalI ? 'YES' : '';
+    const stage6 = (o.notes || '').includes('Stage6監査') ? 'YES' : '';
+    const reExtracted = o._reExtracted ? 'YES' : '';
+    const row = [
+      `"${(o.actualOutcomeName || '').replace(/"/g, '""')}"`,
+      `"${o.timePoint || ''}"`,
+      `"${o.populationType || ''}"`,
+      `"${o.variableType || ''}"`,
+      Math.round(score * 100),
+      o._quoteValidated === true ? 'YES' : o._quoteValidated === false ? 'NO' : '',
+      o._agreement?.tier || '',
+      flags.filter(f => f.severity === 'critical').length,
+      flags.filter(f => f.severity === 'warning').length,
+      flags.some(f => f.code === 'percent-only-no-count') ? 'YES' : '',
+      totalI || '',
+      eventsI || '',
+      exceeds,
+      reExtracted,
+      stage6
+    ];
+    lines.push(row.join(','));
+  });
+  return lines.join('\n');
+}
+
+// evidenceText のキーワードを HTML 段でハイライト (display only)
+// 数字 / p= / SD / SE / IQR / 95% / mean / median / range / n= 等
+function highlightEvidenceKeywords(text) {
+  if (!text) return '';
+  const escaped = String(text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // 強調パターン: 数値・p値・SD/SE/IQR/95%CI・mean/median 等
+  return escaped
+    .replace(/\b(p\s*[<>=≤≥]\s*0?\.\d+(?:\d+)?)\b/gi, '<span style="background:#fee2e2;color:#991b1b;font-weight:bold;padding:0 2px;border-radius:2px">$1</span>')
+    .replace(/\b((?:95\s*%?\s*CI|95%CI)\s*:?\s*-?\d+\.?\d*\s*[-–to,]+\s*-?\d+\.?\d*)/gi, '<span style="background:#dbeafe;color:#1e3a8a;padding:0 2px;border-radius:2px">$1</span>')
+    .replace(/\b(SD|SE|SEM|IQR|range)\b/gi, '<span style="background:#fef3c7;color:#78350f;font-weight:bold;padding:0 2px;border-radius:2px">$1</span>')
+    .replace(/\b(mean|median|平均|中央値)\b/gi, '<span style="background:#e0e7ff;color:#3730a3;padding:0 2px;border-radius:2px">$1</span>')
+    .replace(/(\d+\.?\d*\s*%)/g, '<span style="background:#dcfce7;color:#14532d;font-weight:bold;padding:0 2px;border-radius:2px">$1</span>')
+    .replace(/\b(n\s*=\s*\d+)\b/gi, '<span style="background:#fce7f3;color:#831843;font-weight:bold;padding:0 2px;border-radius:2px">$1</span>')
+    .replace(/(?<![p<>=≤≥])\b(\d+(?:\.\d+)?)\b(?!\s*%)/g, '<span style="color:#1e40af;font-weight:600">$1</span>');
+}
+
 // Tag Table 構築 (Nested Knowledge 方式: outcome × arm × timepoint pivot)
 // 同じ outcomeName + 同じ timepoint で arm を介入/対照に展開した行表現
 // extractedOutcomes が「outcome × arm × timepoint」のセルになっているので、これを縦持ち
@@ -1859,9 +2116,31 @@ function validateQuoteAgainstPdf(evidenceText, pdfTextLower) {
 function postProcessExtraction(result, pdfTextLower) {
   if (!result || !Array.isArray(result.extractedOutcomes)) return result;
   const normalized = JSON.parse(JSON.stringify(result));
-  let nFmtChanges = 0, nQuoteFails = 0, nPercentOnlyWarn = 0;
+  let nFmtChanges = 0, nQuoteFails = 0, nPercentOnlyWarn = 0, nTotalFilled = 0;
+  // CONSORT flow から推定可能な n_total
+  // analyzed > randomized > allocated の優先順位
+  const consort = result.consortFlow || {};
+  const consortN = {
+    intervention: extractNumber(consort.analyzedITT_intervention) || extractNumber(consort.allocatedIntervention) || extractNumber(consort.analyzedPP_intervention),
+    comparison:   extractNumber(consort.analyzedITT_comparison)   || extractNumber(consort.allocatedComparison)   || extractNumber(consort.analyzedPP_comparison),
+    third:        extractNumber(consort.allocatedThird)
+  };
+
   normalized.extractedOutcomes = normalized.extractedOutcomes.map(o => {
     const out = { ...o };
+    // 0. n_total が不明で events が % のみ → CONSORT から推定
+    ['interventionGroup', 'comparisonGroup', 'thirdGroup'].forEach(g => {
+      if (!out[g]) return;
+      const totalNow = extractNumber(out[g].n_total);
+      const ev = out[g].events_or_mean;
+      if ((!totalNow || totalNow === '') && ev && /binary|二値/i.test(o.variableType || '')) {
+        const consortKey = g === 'interventionGroup' ? 'intervention' : g === 'comparisonGroup' ? 'comparison' : 'third';
+        if (consortN[consortKey]) {
+          out[g] = { ...out[g], n_total: `${consortN[consortKey]} [CONSORT推定]` };
+          nTotalFilled++;
+        }
+      }
+    });
     // 1. 二値アウトカムの events_or_mean を n(%) 形式に正規化
     if (/binary|二値/i.test(o.variableType || '')) {
       ['interventionGroup', 'comparisonGroup', 'thirdGroup'].forEach(g => {
@@ -1900,7 +2179,8 @@ function postProcessExtraction(result, pdfTextLower) {
     nPercentNormalizations: nFmtChanges,
     quoteValidations: pdfTextLower ? normalized.extractedOutcomes.length : 0,
     quoteFails: nQuoteFails,
-    percentOnlyWarnings: nPercentOnlyWarn
+    percentOnlyWarnings: nPercentOnlyWarn,
+    nTotalAutoFilled: nTotalFilled
   };
   return normalized;
 }
@@ -2524,6 +2804,31 @@ function classifyOutcomePair(ocA, ocB) {
   };
 }
 
+// 連続変数フォーマットの整合性検査
+// "mean (SD): X (Y) units" を期待。X 単独・Y 単独・単位なし → 警告
+// 戻り値: {hasMean, hasSD, hasUnits, raw, parsed: {mean, sd, units}}
+function parseContinuousFormat(eventsOrMean, sdOrSe) {
+  const s = String(eventsOrMean || '').trim();
+  if (!s) return { hasMean: false, hasSD: false, hasUnits: false };
+  // "mean (SD): X (Y) units" or "median (IQR): X (A-B) units" or "X (Y) units"
+  let m = s.match(/(mean|median|平均|中央値)?\s*\(?(SD|SE|IQR|range)?\)?\s*[:：]?\s*(-?\d+(?:\.\d+)?)\s*\(?(-?\d+(?:\.\d+)?(?:\s*[-–]\s*-?\d+(?:\.\d+)?)?)?\)?\s*([a-zA-Zぁ-ん一-龯%]+)?/i);
+  if (m) {
+    return {
+      hasMean: !!m[3],
+      hasSD: !!m[4],
+      hasUnits: !!m[5],
+      parsed: { mean: m[3], sd: m[4], units: m[5], variance: m[2] }
+    };
+  }
+  // sd_or_se 単独で SD/SE があるかも
+  const sdSeStr = String(sdOrSe || '').trim();
+  return {
+    hasMean: /\d/.test(s),
+    hasSD: /\d/.test(sdSeStr) && sdSeStr !== '-' && sdSeStr !== '不明',
+    hasUnits: /[a-zA-Z%]/.test(s)
+  };
+}
+
 // Vivekanantha §6 のエラーパターン後処理
 // 各outcomeに対してフラグ配列を返す
 function detectExtractionErrors(o) {
@@ -2590,6 +2895,51 @@ function detectExtractionErrors(o) {
   const score = _completenessScore(o);
   if (score === 0) {
     flags.push({ code: 'complete-failure', severity: 'critical', msg: '⚠ 全フィールド空 — 完全抽出失敗 (incorrect / hallucination の可能性)' });
+  }
+
+  // 6-6. events vs n_total の整合性チェック (新)
+  // events > n_total → 物理的にあり得ない (% を events に誤入力した可能性が高い)
+  if (isBinary) {
+    ['interventionGroup', 'comparisonGroup', 'thirdGroup'].forEach(g => {
+      if (!o[g]) return;
+      const events = parseFloat(extractEventsCount(o[g].events_or_mean, o[g].n_total));
+      const total = parseFloat(extractNumber(o[g].n_total));
+      if (!isNaN(events) && !isNaN(total) && total > 0) {
+        if (events > total) {
+          flags.push({
+            code: 'events-exceed-total',
+            severity: 'critical',
+            msg: `⚠ ${g === 'interventionGroup' ? '介入群' : g === 'comparisonGroup' ? '対照群' : '第3群'}: イベント数 (${events}) > 総数 (${total}) — 物理的に不可能。% を events に誤入力した可能性`
+          });
+        }
+        if (events < 0) {
+          flags.push({ code: 'events-negative', severity: 'critical', msg: `⚠ ${g}: イベント数が負値 (${events})` });
+        }
+      }
+    });
+  }
+
+  // 6-7. 連続変数フォーマット検査 (新)
+  if (isContinuous) {
+    ['interventionGroup', 'comparisonGroup'].forEach(g => {
+      if (!o[g]?.events_or_mean) return;
+      const fmt = parseContinuousFormat(o[g].events_or_mean, o[g].sd_or_se);
+      if (fmt.hasMean && !fmt.hasSD) {
+        // 既に variance-missing で検出済みなのでスキップ (重複防止)
+      }
+      if (fmt.hasMean && !fmt.hasUnits) {
+        // 既に unit-missing で検出済みなのでスキップ (重複防止)
+      }
+    });
+  }
+
+  // 6-8. p値の妥当性 (新): pValue が "<0.001" 等の妥当な形式か
+  const pv = String(o.effectEstimate?.pValue || '').trim();
+  if (pv && pv !== '-' && pv !== '不明') {
+    const pNum = parseFloat(pv.replace(/^[<>≤≥]/, ''));
+    if (!isNaN(pNum) && (pNum < 0 || pNum > 1)) {
+      flags.push({ code: 'invalid-p-value', severity: 'warning', msg: `⚠ P値 "${pv}" が範囲外 (0-1 の範囲外) — 表記ミス疑い` });
+    }
   }
 
   // ハルシネーション疑いチェック: evidenceText が短すぎる、または数値が含まれていない
@@ -3328,6 +3678,90 @@ async function runDualExtractionPipeline({ apiKeys, modelA, modelB, pdfFile, pic
 }
 
 // ============================================================
+// FIGURE-ONLY EXTRACTION PASS (Moonlight / Gemini 3.0 方式)
+// PDF 各ページを画像のみでLLMに送り、表・KMカーブ・棒グラフから数値抽出に特化
+// ============================================================
+async function runFigureOnlyExtraction({ apiKeys, model, pdfFile, pico, onProgress, onNotice }) {
+  if (!pdfFile) throw new Error('PDF未指定');
+  const rotator = makeKeyRotator(apiKeys);
+  if (rotator.size === 0) throw new Error('APIキー未設定');
+  const modelInfo = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[0];
+  if (modelInfo.textOnly) throw new Error('図表抽出はマルチモーダルモデルが必要');
+
+  onProgress('stage1', '図表抽出: PDFを高解像度画像に変換中...', 5);
+  const images = await extractPdfImages(pdfFile, m => onProgress('stage1', m, 15), 4.0);
+  onProgress('stage2', `図表抽出: ${images.length}ページ分の画像を LLM に送信...`, 30);
+
+  const figurePrompt = `あなたは医学論文の **図表専門アナリスト** です。
+提供されたPDF画像 (各ページ) の **図 (Figure)・表 (Table)・グラフ・KMカーブ・棒グラフ・boxplot** からのみ数値を抽出してください。
+
+【最優先タスク】
+1. **Table** (Table 1, 2, 3...): 全行・全列を網羅的に読み取り、各セルの数値を抽出
+2. **Kaplan-Meier カーブ**: 各群の特定時点 (6ヶ月/12ヶ月/最終フォロー) の生存率、median survival、at-risk数 (カーブ下のテーブル)、HR/95%CI/log-rank P値
+3. **Forest plot** (メタ分析論文内): 各サブグループの効果量・CI を抽出
+4. **Bar chart / Line chart**: Y軸目盛り読み取り、各バー/点の値を近似
+5. **Boxplot**: median, IQR, range を box とヒゲから読取り
+
+【PICO設定】 P: ${pico.p} / I: ${pico.i} / C: ${pico.c}
+${pico.cohortFilter ? `\n【コホートフィルタ】\n${pico.cohortFilter.trim()}\n` : ''}
+
+【出力】 各図表 1要素 1 outcome として、après 拙形式で:
+{
+  "figureExtractedOutcomes": [
+    {
+      "actualOutcomeName": "アウトカム名",
+      "timePoint": "...",
+      "variableType": "Binary | Continuous | TimeToEvent",
+      "populationType": "ITT | PP | safety | 不明",
+      "interventionGroup": { "n_total": "..", "events_or_mean": "..", "sd_or_se": ".." },
+      "comparisonGroup": { "n_total": "..", "events_or_mean": "..", "sd_or_se": ".." },
+      "effectEstimate": { "measureType": "..", "value": "..", "ci95": "..", "pValue": ".." },
+      "evidenceText": "図表からの読み取り: '...'",
+      "evidenceTextJa": "日本語訳",
+      "sourceLocation": "Figure X / Table Y",
+      "pageNumber": 数字,
+      "confidence": "low | medium",
+      "figureType": "Table | BarChart | LineChart | KaplanMeier | ForestPlot | Boxplot | FlowDiagram",
+      "notes": "[図表からの目視抽出 - 軸目盛り読取り誤差ありうる]"
+    }
+  ]
+}
+
+⚠ 必ず confidence は "low" または "medium" にし、notes に "[図表からの目視抽出]" を明記してください。`;
+
+  const figureSchema = toGeminiSchema({
+    type: 'object',
+    properties: {
+      figureExtractedOutcomes: {
+        type: 'array',
+        items: EXTRACT_SCHEMA_JSON.properties.extractedOutcomes.items
+      }
+    }
+  });
+
+  const figResp = await callGemini({
+    rotator, model: modelInfo.id,
+    systemPrompt: '図表専門アナリスト。画像から数値を読取り、JSONで返答。',
+    userText: figurePrompt,
+    images,
+    schema: figureSchema,
+    thinkingBudget: modelInfo.thinking ? 6000 : 0,
+    onNotice: (m) => onNotice && onNotice(`[図表] ${m}`)
+  });
+
+  onProgress('complete', `図表抽出完了`, 100);
+  const figs = figResp?.figureExtractedOutcomes || [];
+  return {
+    figureOnly: true,
+    extractedOutcomes: figs.map(o => ({ ...o, _figureOnly: true, notes: (o.notes || '') + ' [図表専用パス]' })),
+    paperPICO: { P: pico.p, I: pico.i, C: pico.c },
+    statisticalMethods: [],
+    unclearItems: [],
+    _sources: [`図表専用抽出: ${modelInfo.name.replace(/\s*\(.+/, '')} (${images.length}ページ画像)`]
+  };
+}
+
+// ============================================================
 // SECTION 10.5: AUDIT LOG SUMMARY (Vivekanantha [1 Table 3] 互換)
 // ============================================================
 // __apiLog に蓄積された API 呼び出しを集計し、モデル別にトークン+所要時間+
@@ -3395,7 +3829,7 @@ function ErrorFlagsBadge({ flags }) {
   );
 }
 
-function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight, onSendToSearch, onReVerify, fontSize, isNew }) {
+function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight, onSendToSearch, onReVerify, fontSize, isNew, highlightKw }) {
   const isAuto = oc.requestedOutcomeName?.includes("未指定") || oc.requestedOutcomeName?.includes("自動");
   const has3rd = !!(oc.thirdGroup || oc.thirdGroupName);
   const EditCell = ({ group, field, cls = "" }) => {
@@ -3566,7 +4000,9 @@ function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight,
               className="orig-block break-words whitespace-pre-wrap"
               style={{fontSize:`${Math.max(11,sz*0.95)}px`,lineHeight:1.55}}>
               <span className="text-[10px] font-bold text-amber-700 mr-1.5 not-italic">📄 原文:</span>
-              "{oc.evidenceText}"
+              {highlightKw
+                ? <span dangerouslySetInnerHTML={{__html: '"' + highlightEvidenceKeywords(oc.evidenceText) + '"'}}/>
+                : `"${oc.evidenceText}"`}
             </blockquote>
             {oc.evidenceTextJa && (
               <blockquote
@@ -3575,7 +4011,9 @@ function OutcomeCard({ oc, idx, pico, onEdit, onCopyTSV, onCopyCSV, onHighlight,
                 className="ja-block break-words whitespace-pre-wrap"
                 style={{fontSize:`${Math.max(11,sz*0.95)}px`,lineHeight:1.55}}>
                 <span className="text-[10px] font-bold text-blue-700 mr-1.5">🇯🇵 訳:</span>
-                {oc.evidenceTextJa}
+                {highlightKw
+                  ? <span dangerouslySetInnerHTML={{__html: highlightEvidenceKeywords(oc.evidenceTextJa)}}/>
+                  : oc.evidenceTextJa}
               </blockquote>
             )}
           </div>
@@ -4857,11 +5295,34 @@ ${pdfText.substring(0, 30000)}`;
   const [studyIdOverride, setStudyIdOverride] = useState(''); // ユーザーが論文識別子を上書き可能
   // Tag Table ビュー (Nested Knowledge 方式 — outcome × arm × timepoint pivot)
   const [showTagTable, setShowTagTable] = useState(false);
-  // Templates / Living review / 3-run stability
+  // Templates / Living review / 3-run stability / 結果フィルター
   const [templates, setTemplates] = useState(() => loadTemplates());
   const [showTemplatesPanel, setShowTemplatesPanel] = useState(false);
   const [stabilityRuns, setStabilityRuns] = useState(null); // {runs:[...], summary:{...}}
   const [livingDiff, setLivingDiff] = useState(null);
+  // 結果フィルター/ソート/ハイライト
+  const [resultFilter, setResultFilter] = useState({ severity: 'all', sortBy: 'order', highlightKw: true });
+  const [showSessions, setShowSessions] = useState(false);  // 複数論文集約ビュー
+  // 結果ペインの outcomes をフィルター/ソート (UI 表示用)
+  const filteredOutcomes = useMemo(() => {
+    if (!result?.extractedOutcomes) return [];
+    let list = [...result.extractedOutcomes];
+    // severity filter
+    if (resultFilter.severity === 'critical') {
+      list = list.filter(o => (o._flags || []).some(f => f.severity === 'critical'));
+    } else if (resultFilter.severity === 'warning') {
+      list = list.filter(o => (o._flags || []).some(f => f.severity === 'warning' || f.severity === 'critical'));
+    } else if (resultFilter.severity === 'partial') {
+      list = list.filter(o => o._agreement?.tier === 'partial' || o._agreement?.tier === 'incorrect');
+    }
+    // sort
+    if (resultFilter.sortBy === 'flags') {
+      list.sort((a, b) => ((b._flags?.length || 0) - (a._flags?.length || 0)));
+    } else if (resultFilter.sortBy === 'completeness') {
+      list.sort((a, b) => _completenessScore(a) - _completenessScore(b));
+    }
+    return list;
+  }, [result?.extractedOutcomes, resultFilter]);
 
   // Templates handlers
   const saveCurrentAsTemplate = () => {
@@ -4923,6 +5384,37 @@ ${pdfText.substring(0, 30000)}`;
     }
   };
 
+  // 図表専用抽出パス (Moonlight / Gemini 3.0 方式)
+  const runFigureOnlyPass = async () => {
+    if (!pdfFile) { showToast("PDFをアップロードしてください", "error"); return; }
+    if (!apiKeys?.length) { showToast("APIキーが必要", "error"); return; }
+    const modelInfo = GEMINI_MODELS.find(m => m.id === model);
+    if (modelInfo?.textOnly) { showToast("図表抽出にはマルチモーダルモデル(Flash Lite/Flash)を選択してください", "error"); return; }
+    setStatus("running");
+    setErrMsg("");
+    try {
+      showToast("📊 図表専用抽出パス開始 — 全ページの図表を画像として精査...", 'info');
+      const figRes = await runFigureOnlyExtraction({
+        apiKeys, model, pdfFile, pico,
+        onProgress: (stage, msg, pct) => { setCurrentStage(stage); setStatusMsg(msg); setProgress(pct); },
+        onNotice: (m) => showToast(m, 'info')
+      });
+      // 既存の result があれば figure-only 抽出を追加、なければ単独表示
+      if (result) {
+        setResult(prev => ({ ...prev, extractedOutcomes: [...(prev.extractedOutcomes || []), ...figRes.extractedOutcomes], _figureOnlyAdded: figRes.extractedOutcomes.length }));
+        showToast(`✅ 図表専用抽出: ${figRes.extractedOutcomes.length}件を既存結果に追加`, 'success');
+      } else {
+        setResult(figRes);
+        showToast(`✅ 図表専用抽出完了: ${figRes.extractedOutcomes.length}件`, 'success');
+      }
+      setStatus("complete");
+    } catch (e) {
+      setStatus("error");
+      setErrMsg(`図表抽出失敗: ${e.message}`);
+      showToast(`❌ ${e.message}`, 'error');
+    }
+  };
+
   // Living review: 直近の抽出結果と現在の差分を計算
   const computeLivingDiff = () => {
     if (!result) { showToast("現在の抽出結果がありません", "error"); return; }
@@ -4960,7 +5452,94 @@ ${pdfText.substring(0, 30000)}`;
       const rows = buildContinuousRows(ocs, result.paperPICO, fileName, studyIdOverride);
       const r = toRMetaforContinuousScript(ocs, result.paperPICO, fileName, studyIdOverride);
       setMetaExportPreview({ type, label: 'R metafor 連続スクリプト', rows, cols: REVMAN_CONTINUOUS_COLS, text: r.script, count: r.count, total: rows.length, format: 'r' });
+    } else if (type === 'r-binary-full') {
+      const rows = buildBinaryRows(ocs, result.paperPICO, fileName, studyIdOverride);
+      const r = toRMetaforBinaryFullScript(ocs, result.paperPICO, fileName, studyIdOverride);
+      setMetaExportPreview({ type, label: 'R metafor 二値 + 解析パイプライン', rows, cols: REVMAN_BINARY_COLS, text: r.script, count: r.count, total: rows.length, format: 'r' });
+    } else if (type === 'r-continuous-full') {
+      const rows = buildContinuousRows(ocs, result.paperPICO, fileName, studyIdOverride);
+      const r = toRMetaforContinuousFullScript(ocs, result.paperPICO, fileName, studyIdOverride);
+      setMetaExportPreview({ type, label: 'R metafor 連続 + 解析パイプライン', rows, cols: REVMAN_CONTINUOUS_COLS, text: r.script, count: r.count, total: rows.length, format: 'r' });
+    } else if (type === 'revman-xml') {
+      const xml = toRevManXml(ocs, result.paperPICO, fileName, studyIdOverride);
+      const allRows = buildBinaryRows(ocs, result.paperPICO, fileName, studyIdOverride).concat(buildContinuousRows(ocs, result.paperPICO, fileName, studyIdOverride));
+      setMetaExportPreview({ type, label: 'RevMan XML (.rm5互換)', rows: allRows, cols: [], text: xml, count: allRows.length, total: ocs.length, format: 'xml' });
+    } else if (type === 'stage-log') {
+      const csv = buildStageLogCSV(result);
+      setMetaExportPreview({ type, label: '抽出ログ CSV (Stage1-6 + フラグ集計)', rows: [], cols: [], text: csv, count: ocs.length, total: ocs.length, format: 'csv' });
+    } else if (type === 'html-report') {
+      const html = generateHtmlReport(result, pico, fileName);
+      setMetaExportPreview({ type, label: 'HTML プリント可能レポート', rows: [], cols: [], text: html, count: ocs.length, total: ocs.length, format: 'html' });
     }
+  };
+
+  // セッション保存/読込 (複数論文 集約用)
+  const [sessions, setSessions] = useState(() => loadSessions());
+  const saveCurrentSession = () => {
+    if (!result) return;
+    const defaultName = `${pdfFile?.name || 'session'}-${new Date().toISOString().slice(0,10)}`;
+    const name = window.prompt('セッション名 (集約画面で識別):', defaultName);
+    if (!name) return;
+    saveSession(name.trim(), result, { pdfName: pdfFile?.name, runAt: new Date().toISOString(), studyId: studyIdOverride || deriveStudyId(result.paperPICO, pdfFile?.name, '') });
+    setSessions(loadSessions());
+    showToast(`💾 セッション "${name}" を保存`, 'success');
+  };
+  const removeSession = (name) => {
+    if (!window.confirm(`セッション "${name}" を削除しますか?`)) return;
+    deleteSession(name);
+    setSessions(loadSessions());
+  };
+
+  // HTML レポートダウンロード (印刷可能)
+  const downloadHtmlReport = () => {
+    if (!result) return;
+    const html = generateHtmlReport(result, pico, pdfFile?.name || 'session');
+    const b = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `dataex-report-${Date.now()}.html`;
+    a.click();
+    showToast('📄 HTML レポートをダウンロード (ブラウザで開いて印刷可能)', 'success');
+  };
+
+  // 設定 JSON エクスポート (Templates + 現在の PICO/outcomes/cohort filter)
+  const exportSettings = () => {
+    const data = {
+      version: 'DataEx v3.6',
+      exportedAt: new Date().toISOString(),
+      currentPico: pico,
+      currentOutcomes: outcomes.map(o => ({ name: o.name, definition: o.definition })),
+      templates: loadTemplates()
+    };
+    const b = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `dataex-settings-${Date.now()}.json`;
+    a.click();
+    showToast('📤 設定とテンプレートを JSON にエクスポート', 'success');
+  };
+  // 設定 JSON インポート (他端末から)
+  const settingsFileRef = useRef(null);
+  const importSettings = (file) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.currentPico) setPico({ p: data.currentPico.p || '', i: data.currentPico.i || '', c: data.currentPico.c || '', cohortFilter: data.currentPico.cohortFilter || '' });
+        if (data.currentOutcomes) setOutcomes(data.currentOutcomes.map((o, i) => ({ id: Date.now() + i, name: o.name || '', definition: o.definition || '' })));
+        if (data.templates && Array.isArray(data.templates)) {
+          // 既存と統合
+          const existing = loadTemplates();
+          const merged = [...data.templates, ...existing.filter(e => !data.templates.find(t => t.name === e.name))];
+          localStorage.setItem(LS_TEMPLATES, JSON.stringify(merged.slice(0, 30)));
+          setTemplates(loadTemplates());
+        }
+        showToast(`📥 設定をインポート (テンプレート ${data.templates?.length || 0}件)`, 'success');
+      } catch (err) {
+        showToast(`❌ インポート失敗: ${err.message}`, 'error');
+      }
+    };
+    reader.readAsText(file);
   };
   const copyMetaExport = () => {
     if (!metaExportPreview) return;
@@ -5061,6 +5640,27 @@ ${pdfText.substring(0, 30000)}`;
               className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 font-bold border-2 ${showTemplatesPanel ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600' : 'bg-white hover:bg-amber-50 text-amber-700 border-amber-300'}`}>
               <SaveIcon size={10}/>📋 Templates
             </button>
+            {/* Sessions ボタン (複数論文集約) */}
+            <button
+              onClick={() => setShowSessions(s => !s)}
+              title="保存済みセッション一覧 (複数論文をまとめてメタ分析テーブル化)"
+              className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 font-bold border-2 ${showSessions ? 'bg-rose-500 hover:bg-rose-600 text-white border-rose-600' : 'bg-white hover:bg-rose-50 text-rose-700 border-rose-300'}`}>
+              📚 Sessions{sessions.length > 0 && <span className="bg-white text-rose-700 text-[8px] font-mono px-1 rounded">{sessions.length}</span>}
+            </button>
+            {/* Settings I/O ボタン */}
+            <button
+              onClick={exportSettings}
+              title="設定+テンプレートを JSON にエクスポート (他端末と共有可能)"
+              className="text-[10px] bg-white hover:bg-slate-50 text-slate-600 border-2 border-slate-300 px-2 py-1 rounded flex items-center gap-1 font-bold">
+              ⤓
+            </button>
+            <button
+              onClick={() => settingsFileRef.current?.click()}
+              title="JSON 設定ファイルをインポート"
+              className="text-[10px] bg-white hover:bg-slate-50 text-slate-600 border-2 border-slate-300 px-2 py-1 rounded flex items-center gap-1 font-bold">
+              ⤒
+            </button>
+            <input ref={settingsFileRef} type="file" accept="application/json,.json" className="hidden" onChange={e => { if (e.target.files[0]) importSettings(e.target.files[0]); e.target.value = ''; }}/>
             {/* 3-run stability ボタン (PDFアップ済みのときのみ) */}
             {pdfFile && status !== 'running' && (
               <button
@@ -5068,6 +5668,15 @@ ${pdfText.substring(0, 30000)}`;
                 title="同じ設定で3回連続実行 → 安定性スコア表示 (Vivekanantha 2026 推奨の再現性検証 / 9 APIコール消費)"
                 className="text-[10px] bg-cyan-600 hover:bg-cyan-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold border-2 border-cyan-700">
                 🔁 3run
+              </button>
+            )}
+            {/* 図表専用抽出ボタン (Moonlight 方式) */}
+            {pdfFile && status !== 'running' && (
+              <button
+                onClick={runFigureOnlyPass}
+                title="図・表・KMカーブ・棒グラフからのみ画像で抽出 (Moonlight / Gemini 3.0 方式)"
+                className="text-[10px] bg-orange-600 hover:bg-orange-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold border-2 border-orange-700">
+                📊 図表
               </button>
             )}
             {/* Living review diff ボタン (結果あるとき) */}
@@ -5107,6 +5716,63 @@ ${pdfText.substring(0, 30000)}`;
       </header>
 
       {showDiag && <ApiDiagPanel onClose={() => setShowDiag(false)}/>}
+
+      {/* Sessions (複数論文集約) パネル */}
+      {showSessions && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowSessions(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-rose-600 text-white px-4 py-3 flex items-center justify-between">
+              <h3 className="font-bold flex items-center gap-2">📚 保存済みセッション ({sessions.length}件)</h3>
+              <div className="flex items-center gap-2">
+                {sessions.length >= 2 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        const tsv = aggregateSessionsBinaryTSV(sessions);
+                        clipCopy(tsv) && showToast(`📊 全セッション (${sessions.length}件) の二値TSV をコピー`, 'success');
+                      }}
+                      className="text-[10px] bg-white text-rose-700 hover:bg-rose-50 font-bold px-2 py-1 rounded">
+                      <CopyIcon size={9} className="inline mr-0.5"/>集約二値TSV
+                    </button>
+                    <button
+                      onClick={() => {
+                        const tsv = aggregateSessionsContinuousTSV(sessions);
+                        clipCopy(tsv) && showToast(`📈 全セッション (${sessions.length}件) の連続TSV をコピー`, 'success');
+                      }}
+                      className="text-[10px] bg-white text-rose-700 hover:bg-rose-50 font-bold px-2 py-1 rounded">
+                      <CopyIcon size={9} className="inline mr-0.5"/>集約連続TSV
+                    </button>
+                  </>
+                )}
+                <button onClick={() => setShowSessions(false)} className="text-white/80 hover:text-white"><XCircle size={18}/></button>
+              </div>
+            </div>
+            <div className="p-4 space-y-2 overflow-y-auto">
+              <div className="bg-rose-50 border border-rose-200 rounded p-2 text-[11px] text-rose-900">
+                💡 各論文の抽出結果を保存し、まとめてメタ分析用 TSV にエクスポートできます。「💾📚保存」ボタンで現在のセッションを追加してください。
+              </div>
+              {sessions.length === 0 && <div className="text-center text-slate-400 text-sm py-6">まだセッションが保存されていません</div>}
+              <div className="space-y-1.5">
+                {sessions.map((s, i) => {
+                  const ocs = s.result?.extractedOutcomes || [];
+                  const binCount = ocs.filter(_isBinary).length;
+                  const contCount = ocs.filter(_isContinuous).length;
+                  return (
+                    <div key={s.name} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded p-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-xs text-slate-800 truncate">{s.name}</div>
+                        <div className="text-[10px] text-slate-500">論文: {s.metadata?.pdfName || '-'} / studyId: <span className="font-mono">{s.metadata?.studyId || '-'}</span></div>
+                        <div className="text-[10px] text-slate-500">アウトカム: {ocs.length} (二値 {binCount} / 連続 {contCount}) / {new Date(s.savedAt).toLocaleString('ja-JP')}</div>
+                      </div>
+                      <button onClick={() => removeSession(s.name)} className="text-slate-400 hover:text-red-600 flex-shrink-0"><Trash2 size={12}/></button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Templates パネル */}
       {showTemplatesPanel && (
@@ -5355,16 +6021,29 @@ ${pdfText.substring(0, 30000)}`;
                   <button onClick={copyAllTSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold"><CopyIcon size={10}/>TSV</button>
                   <button onClick={copyAllCSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold"><CopyIcon size={10}/>CSV</button>
                   <select
-                    title="メタ分析ソフト用エクスポート (RevMan / R metafor)。選択後、プレビューが下部に表示され、確認後にコピー可能"
+                    title="メタ分析ソフト用エクスポート (RevMan / R metafor / HTML / ログ)。選択後、プレビューが下部に表示され、確認後にコピー可能"
                     value=""
                     onChange={e => { if (e.target.value) { buildMetaExport(e.target.value); e.target.value = ''; } }}
                     className="text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded font-bold cursor-pointer border-2 border-emerald-700">
                     <option value="">📊 メタ分析用 ▼</option>
-                    <option value="revman-binary">RevMan用 二値TSV (events/total)</option>
-                    <option value="revman-continuous">RevMan用 連続TSV (mean/SD/MD・全パターン)</option>
-                    <option value="r-binary">R metafor 二値スクリプト</option>
-                    <option value="r-continuous">R metafor 連続スクリプト</option>
+                    <optgroup label="RevMan">
+                      <option value="revman-binary">RevMan TSV - 二値 (events/total)</option>
+                      <option value="revman-continuous">RevMan TSV - 連続 (全パターン)</option>
+                      <option value="revman-xml">RevMan XML (.rm5互換)</option>
+                    </optgroup>
+                    <optgroup label="R metafor">
+                      <option value="r-binary">R 二値 - data.frameのみ</option>
+                      <option value="r-continuous">R 連続 - data.frameのみ</option>
+                      <option value="r-binary-full">R 二値 + 解析パイプライン (escalc/rma/forest)</option>
+                      <option value="r-continuous-full">R 連続 + 解析パイプライン (metric別 escalc/rma)</option>
+                    </optgroup>
+                    <optgroup label="その他">
+                      <option value="stage-log">抽出ログ CSV (Stage1-6 + フラグ集計)</option>
+                      <option value="html-report">HTML プリント可能レポート</option>
+                    </optgroup>
                   </select>
+                  <button onClick={downloadHtmlReport} title="HTML レポートをダウンロード (ブラウザで開いて印刷/PDF保存可能)" className="text-[9px] bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold"><FileText size={10}/>HTML</button>
+                  <button onClick={saveCurrentSession} title="このセッションを localStorage に保存 (📚 セッションでまとめてアクセス可能)" className="text-[9px] bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold"><SaveIcon size={10}/>📚保存</button>
                   <button onClick={copyConsortAIMethods} title="CONSORT-AI / STARD-AI 準拠 Methods 欄テキストをクリップボードに" className="text-[9px] bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold"><FileText size={10}/>Methods</button>
                   <button onClick={exportAuditLog} title="Vivekanantha [1 Table 3] 互換 audit log を JSON で保存" className="text-[9px] bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded flex items-center gap-1 font-bold"><SaveIcon size={10}/>Audit</button>
                 </div>
@@ -5780,16 +6459,50 @@ ${pdfText.substring(0, 30000)}`;
                   );
                 })()}
 
+                {/* フィルター/ソート/ハイライトバー */}
+                {!showTagTable && result.extractedOutcomes?.length > 0 && (
+                  <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2" style={{fontSize:`${Math.max(10,leftFontSize*0.85)}px`}}>
+                    <span className="font-bold text-slate-700">🔎 フィルター:</span>
+                    <select value={resultFilter.severity} onChange={e => setResultFilter({...resultFilter, severity: e.target.value})}
+                      className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[11px]">
+                      <option value="all">全件 ({result.extractedOutcomes.length})</option>
+                      <option value="critical">致命フラグのみ</option>
+                      <option value="warning">警告以上</option>
+                      <option value="partial">不一致/部分</option>
+                    </select>
+                    <span className="font-bold text-slate-700 ml-2">⇅ ソート:</span>
+                    <select value={resultFilter.sortBy} onChange={e => setResultFilter({...resultFilter, sortBy: e.target.value})}
+                      className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[11px]">
+                      <option value="order">抽出順</option>
+                      <option value="flags">フラグ多い順</option>
+                      <option value="completeness">完成度低い順</option>
+                    </select>
+                    <label className="ml-2 flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={resultFilter.highlightKw} onChange={e => setResultFilter({...resultFilter, highlightKw: e.target.checked})} className="w-3 h-3 accent-purple-600"/>
+                      <span className="text-slate-700">数値・p値・SD/SE等を色付け</span>
+                    </label>
+                    <span className="ml-auto text-slate-500">表示中: <b className="text-purple-700">{filteredOutcomes.length}</b> / {result.extractedOutcomes.length}</span>
+                  </div>
+                )}
+
                 <div className={`space-y-3 ${showTagTable ? 'hidden' : ''}`}>
-                  {result.extractedOutcomes?.map((oc, idx) => (
-                    <OutcomeCard key={idx} oc={oc} idx={idx} pico={pico} onEdit={editOutcome}
-                      onCopyTSV={copyOneTSV} onCopyCSV={copyOneCSV} fontSize={leftFontSize}
-                      onHighlight={(o) => { setHlQuery(o.evidenceText); setHlPage(o.pageNumber); setPdfSearchText(o.evidenceText || ""); }}
-                      onSendToSearch={sendToSearch}
-                      onReVerify={apiKeys?.length ? reVerifyOutcome : null}
-                      isNew={highlightNewIdx === idx}/>
-                  ))}
+                  {filteredOutcomes.map((oc, idx) => {
+                    // 元のインデックスを取得 (editOutcome に渡すため)
+                    const origIdx = result.extractedOutcomes.indexOf(oc);
+                    return (
+                      <OutcomeCard key={origIdx} oc={oc} idx={origIdx} pico={pico} onEdit={editOutcome}
+                        onCopyTSV={copyOneTSV} onCopyCSV={copyOneCSV} fontSize={leftFontSize}
+                        onHighlight={(o) => { setHlQuery(o.evidenceText); setHlPage(o.pageNumber); setPdfSearchText(o.evidenceText || ""); }}
+                        onSendToSearch={sendToSearch}
+                        onReVerify={apiKeys?.length ? reVerifyOutcome : null}
+                        isNew={highlightNewIdx === origIdx}
+                        highlightKw={resultFilter.highlightKw}/>
+                    );
+                  })}
                   {(!result.extractedOutcomes?.length) && <div className="text-center py-6 text-slate-500">データなし</div>}
+                  {result.extractedOutcomes?.length > 0 && filteredOutcomes.length === 0 && (
+                    <div className="text-center py-6 text-slate-500">フィルター条件に一致するアウトカムがありません</div>
+                  )}
                 </div>
 
                 {result.expertCommentary && (
