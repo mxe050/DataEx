@@ -1518,6 +1518,311 @@ function baselineRow(b) {
 }
 
 /* ============================================================
+   SECTION 9.4: META-ANALYSIS SOFT EXPORT (RevMan / R metafor)
+   既存の TSV/CSV エクスポートには一切触れない。
+   全て純粋関数で副作用なし。抽出できなかった値は必ず空白。
+   ============================================================ */
+
+// 文字列から先頭の数値を抽出。抽出できなければ空白
+function extractNumber(s) {
+  if (s === null || s === undefined) return '';
+  const str = String(s).trim();
+  if (!str || str === '不明' || str === '-' || str === '未抽出' || str === 'N/A' || str === 'NA') return '';
+  // "91 (80%)" / "n=114" / "0.38" / "<0.001" / "0.23-0.63" 先頭の数値だけを取る
+  const m = str.match(/-?\d+(?:\.\d+)?/);
+  return m ? m[0] : '';
+}
+
+// "0.23-0.63" / "0.23 to 0.63" / "0.23, 0.63" / "(0.23, 0.63)" → {lower, upper} (取れなければ空白)
+function extractCI(ci) {
+  if (!ci) return { lower: '', upper: '' };
+  const s = String(ci).replace(/\s/g, '').replace(/[()\[\]]/g, '');
+  // 区切り: "to", "-", ","
+  const m = s.match(/(-?\d+(?:\.\d+)?)\s*(?:to|–|—|-|,)\s*(-?\d+(?:\.\d+)?)/i);
+  if (!m) return { lower: '', upper: '' };
+  return { lower: m[1], upper: m[2] };
+}
+
+// log_HR と SE_log_HR を計算 (数値が揃うときのみ)
+function computeLogHR(hrStr, ciLowerStr, ciUpperStr) {
+  const hr = parseFloat(hrStr);
+  const lo = parseFloat(ciLowerStr);
+  const hi = parseFloat(ciUpperStr);
+  if (!hrStr || !ciLowerStr || !ciUpperStr) return { logHR: '', se: '' };
+  if (isNaN(hr) || isNaN(lo) || isNaN(hi) || hr <= 0 || lo <= 0 || hi <= 0) return { logHR: '', se: '' };
+  const logHR = Math.log(hr);
+  const se = (Math.log(hi) - Math.log(lo)) / 3.92;
+  return { logHR: logHR.toFixed(4), se: se.toFixed(4) };
+}
+
+// SE from CI (連続変数 MD/AdjMD用): (upper - lower) / 3.92
+function computeSEFromCI(ciLowerStr, ciUpperStr) {
+  const lo = parseFloat(ciLowerStr);
+  const hi = parseFloat(ciUpperStr);
+  if (!ciLowerStr || !ciUpperStr || isNaN(lo) || isNaN(hi)) return '';
+  return ((hi - lo) / 3.92).toFixed(4);
+}
+
+// 論文識別子の自動生成: paperPICO + 抽出元から派生 ("Maltz2017" / "Study_1" などに落とす)
+// ユーザーがUIで上書き可能になるよう外部から studyIdOverride を渡せる
+function deriveStudyId(paperPICO, fileName, override) {
+  if (override && String(override).trim()) return String(override).trim();
+  // PICOのstudyDesign/sampleSizeから推測しないで、まずファイル名を試す
+  if (fileName) {
+    const stem = String(fileName).replace(/\.[a-zA-Z]+$/, '');
+    // "Smith2020" / "Maltz_2017_..." パターン
+    const m1 = stem.match(/([A-Za-z][A-Za-z\-]{2,})[\s_\-]*(?:et\s*al)?[\s_\-]*(\d{4})/);
+    if (m1) return `${m1[1]}${m1[2]}`;
+    // 数字始まりは除外、基本ファイル名最初の単語
+    const cleaned = stem.replace(/[^A-Za-z0-9_\-]/g, '_').replace(/_+/g, '_').slice(0, 32);
+    if (cleaned && /[A-Za-z]/.test(cleaned)) return cleaned;
+  }
+  return 'Study_1';
+}
+
+// 二値アウトカム判定
+function _isBinary(o) {
+  return /binary|二値|time.?to.?event|tte/i.test(o.variableType || '');
+}
+// 連続アウトカム判定
+function _isContinuous(o) {
+  return /continuous|連続/i.test(o.variableType || '');
+}
+
+// metric の自動推定 (連続変数用): notes/actualOutcomeName から拾う
+function _detectMetric(o) {
+  const t = `${o.actualOutcomeName || ''} ${o.notes || ''} ${o.calculationMethod || ''}`.toLowerCase();
+  if (/ancova|adjusted|ls\s*mean|adjmd|調整/i.test(t)) return 'adjusted-difference';
+  if (/change|変化量|post.?pre|pre.?post|改善量/i.test(t)) return 'change-from-baseline';
+  if (/baseline|術前|pre.?op|pre.?treatment/i.test(t)) return 'baseline-value';
+  if (/post|術後|follow.?up|終了時/i.test(t)) return 'post-value';
+  return 'post-value'; // デフォルト
+}
+
+// SD/SE ラベルの正規化
+function _sdSeLabel(o) {
+  const v = String(o.sdOrSe || '').toLowerCase();
+  if (v.includes('se')) return 'SE記載(SD変換要)';
+  if (v.includes('sd')) return 'SD明記';
+  if (/median|iqr|中央値/i.test(o.notes || '')) return 'median/IQR記載';
+  return '';
+}
+
+// 二値アウトカム1行を生成 (column => value マップ)
+function _binaryRow(o, studyId) {
+  const measureType = String(o.effectEstimate?.measureType || '').toUpperCase();
+  const ci = extractCI(o.effectEstimate?.ci95);
+  const reportedRR = measureType === 'RR' ? extractNumber(o.effectEstimate?.value) : '';
+  const reportedOR = measureType === 'OR' ? extractNumber(o.effectEstimate?.value) : '';
+  const reportedHR = measureType === 'HR' ? extractNumber(o.effectEstimate?.value) : '';
+  const reportedRD = measureType === 'RD' ? extractNumber(o.effectEstimate?.value) : '';
+  const { logHR, se: seLogHR } = computeLogHR(reportedHR, ci.lower, ci.upper);
+  return {
+    outcome: o.actualOutcomeName || '',
+    study: studyId,
+    timepoint: o.timePoint || '',
+    population: o.populationType || '',
+    events_intervention: extractNumber(o.interventionGroup?.events_or_mean),
+    total_intervention: extractNumber(o.interventionGroup?.n_total),
+    events_control: extractNumber(o.comparisonGroup?.events_or_mean),
+    total_control: extractNumber(o.comparisonGroup?.n_total),
+    reported_RR: reportedRR,
+    reported_OR: reportedOR,
+    reported_HR: reportedHR,
+    reported_RD: reportedRD,
+    ci95_lower: ci.lower,
+    ci95_upper: ci.upper,
+    log_HR: logHR,
+    SE_log_HR: seLogHR,
+    p_value: o.effectEstimate?.pValue || '',
+    sourceLocation: o.sourceLocation || '',
+    pageNumber: o.pageNumber || '',
+    confidence: o.confidence || '',
+    notes: (o.notes || '').replace(/[\t\r\n]/g, ' ')
+  };
+}
+
+// 連続アウトカム1行を生成
+function _continuousRow(o, studyId) {
+  const measureType = String(o.effectEstimate?.measureType || '').toUpperCase();
+  const ci = extractCI(o.effectEstimate?.ci95);
+  const sdSeLabel = _sdSeLabel(o);
+  const isSE = sdSeLabel === 'SE記載(SD変換要)';
+  const reportedMD = measureType === 'MD' ? extractNumber(o.effectEstimate?.value) : '';
+  const reportedSMD = measureType === 'SMD' ? extractNumber(o.effectEstimate?.value) : '';
+  // ANCOVA調整済み MD は notes/calculationMethod で判定
+  const isAdj = /ancova|adjusted|ls\s*mean|調整/i.test(`${o.actualOutcomeName||''} ${o.notes||''} ${o.calculationMethod||''}`);
+  const reportedAdjMD = (isAdj && (measureType === 'MD' || !measureType)) ? extractNumber(o.effectEstimate?.value) : '';
+  // SE分離: sdOrSe="SE" のときだけ SE 列に値を入れ、SD 列は空白
+  const sdInt = isSE ? '' : extractNumber(o.interventionGroup?.sd_or_se);
+  const seInt = isSE ? extractNumber(o.interventionGroup?.sd_or_se) : '';
+  const sdCtl = isSE ? '' : extractNumber(o.comparisonGroup?.sd_or_se);
+  const seCtl = isSE ? extractNumber(o.comparisonGroup?.sd_or_se) : '';
+  return {
+    outcome: o.actualOutcomeName || '',
+    study: studyId,
+    timepoint: o.timePoint || '',
+    population: o.populationType || '',
+    metric: _detectMetric(o),
+    scaleInfo: '',  // PICO設定にscale情報がないため空、ユーザーが必要なら notes 欄から手動補完
+    n_intervention: extractNumber(o.interventionGroup?.n_total),
+    mean_intervention: extractNumber(o.interventionGroup?.events_or_mean),
+    sd_intervention: sdInt,
+    se_intervention: seInt,
+    n_control: extractNumber(o.comparisonGroup?.n_total),
+    mean_control: extractNumber(o.comparisonGroup?.events_or_mean),
+    sd_control: sdCtl,
+    se_control: seCtl,
+    reported_MD: isAdj ? '' : reportedMD,
+    reported_SMD: reportedSMD,
+    reported_AdjMD: reportedAdjMD,
+    ci95_lower: ci.lower,
+    ci95_upper: ci.upper,
+    SE_from_CI: computeSEFromCI(ci.lower, ci.upper),
+    p_value: o.effectEstimate?.pValue || '',
+    sd_or_se_label: sdSeLabel,
+    sourceLocation: o.sourceLocation || '',
+    pageNumber: o.pageNumber || '',
+    confidence: o.confidence || '',
+    notes: (o.notes || '').replace(/[\t\r\n]/g, ' ')
+  };
+}
+
+const REVMAN_BINARY_COLS = [
+  'outcome','study','timepoint','population',
+  'events_intervention','total_intervention','events_control','total_control',
+  'reported_RR','reported_OR','reported_HR','reported_RD',
+  'ci95_lower','ci95_upper','log_HR','SE_log_HR','p_value',
+  'sourceLocation','pageNumber','confidence','notes'
+];
+const REVMAN_CONTINUOUS_COLS = [
+  'outcome','study','timepoint','population','metric','scaleInfo',
+  'n_intervention','mean_intervention','sd_intervention','se_intervention',
+  'n_control','mean_control','sd_control','se_control',
+  'reported_MD','reported_SMD','reported_AdjMD',
+  'ci95_lower','ci95_upper','SE_from_CI','p_value','sd_or_se_label',
+  'sourceLocation','pageNumber','confidence','notes'
+];
+
+// 二値アウトカムの行リストを生成 (UI プレビューと export 両方で使用)
+function buildBinaryRows(outcomes, paperPICO, fileName, studyIdOverride) {
+  const studyId = deriveStudyId(paperPICO, fileName, studyIdOverride);
+  const rows = (outcomes || []).filter(_isBinary).map(o => _binaryRow(o, studyId));
+  return rows;
+}
+function buildContinuousRows(outcomes, paperPICO, fileName, studyIdOverride) {
+  const studyId = deriveStudyId(paperPICO, fileName, studyIdOverride);
+  const rows = (outcomes || []).filter(_isContinuous).map(o => _continuousRow(o, studyId));
+  return rows;
+}
+
+// 行リスト → TSV (タブ区切り、空白セルはそのまま空白)
+function rowsToTSV(cols, rows) {
+  const head = cols.join('\t');
+  const body = rows.map(r => cols.map(c => {
+    const v = r[c];
+    if (v === null || v === undefined || v === '') return '';
+    return String(v).replace(/[\t\r\n]/g, ' ');
+  }).join('\t')).join('\n');
+  return rows.length ? `${head}\n${body}\n` : `${head}\n`;
+}
+
+// 行リスト → R data.frame スクリプト (NA で欠損表現)
+function rowsToRDataFrame(varName, cols, rows, numericCols) {
+  const numSet = new Set(numericCols || []);
+  const quote = (v, isNum) => {
+    if (v === null || v === undefined || v === '') return 'NA';
+    if (isNum) {
+      const n = parseFloat(v);
+      return isNaN(n) ? 'NA' : String(n);
+    }
+    return `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  };
+  if (rows.length === 0) {
+    const empty = cols.map(c => `  ${c.padEnd(20)} = ${numSet.has(c) ? 'numeric(0)' : 'character(0)'}`).join(',\n');
+    return `${varName} <- data.frame(\n${empty},\n  stringsAsFactors = FALSE\n)\n`;
+  }
+  const cells = cols.map(c => {
+    const isNum = numSet.has(c);
+    const vals = rows.map(r => quote(r[c], isNum)).join(', ');
+    return `  ${c.padEnd(20)} = c(${vals})`;
+  }).join(',\n');
+  return `${varName} <- data.frame(\n${cells},\n  stringsAsFactors = FALSE\n)\n`;
+}
+
+// RevMan用 二値アウトカム TSV 生成
+function toRevManBinaryTSV(outcomes, paperPICO, fileName, studyIdOverride) {
+  const rows = buildBinaryRows(outcomes, paperPICO, fileName, studyIdOverride);
+  return { tsv: rowsToTSV(REVMAN_BINARY_COLS, rows), count: rows.length, total: (outcomes || []).filter(_isBinary).length };
+}
+
+// RevMan用 連続アウトカム TSV 生成
+function toRevManContinuousTSV(outcomes, paperPICO, fileName, studyIdOverride) {
+  const rows = buildContinuousRows(outcomes, paperPICO, fileName, studyIdOverride);
+  return { tsv: rowsToTSV(REVMAN_CONTINUOUS_COLS, rows), count: rows.length, total: (outcomes || []).filter(_isContinuous).length };
+}
+
+// R metafor 二値スクリプト
+function toRMetaforBinaryScript(outcomes, paperPICO, fileName, studyIdOverride) {
+  const rows = buildBinaryRows(outcomes, paperPICO, fileName, studyIdOverride);
+  const numericCols = ['events_intervention','total_intervention','events_control','total_control',
+                       'reported_RR','reported_OR','reported_HR','reported_RD',
+                       'ci95_lower','ci95_upper','log_HR','SE_log_HR','pageNumber'];
+  const df = rowsToRDataFrame('dat_binary', REVMAN_BINARY_COLS, rows, numericCols);
+  const ts = new Date().toISOString().replace('T',' ').slice(0, 19);
+  let script = `# DataEx自動生成 - メタ分析用 R スクリプト (二値アウトカム)\n`;
+  script += `# 生成日時: ${ts}\n`;
+  script += `# 抽出件数: ${rows.length} 件\n`;
+  script += `# Vivekanantha 2026 (KSA 70412) dual-LLM フレームワーク準拠\n\n`;
+  script += `library(metafor)\n\n`;
+  script += df;
+  script += `\n# 効果量計算の例:\n`;
+  script += `# OR メタ分析:\n`;
+  script += `# escalc(measure="OR", ai=events_intervention, n1i=total_intervention,\n`;
+  script += `#                       ci=events_control,      n2i=total_control, data=dat_binary)\n`;
+  script += `#\n# RR メタ分析:\n`;
+  script += `# escalc(measure="RR", ai=events_intervention, n1i=total_intervention,\n`;
+  script += `#                       ci=events_control,      n2i=total_control, data=dat_binary)\n`;
+  script += `#\n# HR の generic inverse variance メタ分析:\n`;
+  script += `# rma(yi=log_HR, sei=SE_log_HR, data=dat_binary[!is.na(dat_binary$log_HR),])\n`;
+  return { script, count: rows.length };
+}
+
+// R metafor 連続スクリプト
+function toRMetaforContinuousScript(outcomes, paperPICO, fileName, studyIdOverride) {
+  const rows = buildContinuousRows(outcomes, paperPICO, fileName, studyIdOverride);
+  const numericCols = ['n_intervention','mean_intervention','sd_intervention','se_intervention',
+                       'n_control','mean_control','sd_control','se_control',
+                       'reported_MD','reported_SMD','reported_AdjMD',
+                       'ci95_lower','ci95_upper','SE_from_CI','pageNumber'];
+  const df = rowsToRDataFrame('dat_continuous', REVMAN_CONTINUOUS_COLS, rows, numericCols);
+  const ts = new Date().toISOString().replace('T',' ').slice(0, 19);
+  let script = `# DataEx自動生成 - メタ分析用 R スクリプト (連続アウトカム)\n`;
+  script += `# 生成日時: ${ts}\n`;
+  script += `# 抽出件数: ${rows.length} 件 (metric 列で post-value/change-from-baseline/adjusted-difference を識別)\n`;
+  script += `# Vivekanantha 2026 (KSA 70412) dual-LLM フレームワーク準拠\n\n`;
+  script += `library(metafor)\n\n`;
+  script += df;
+  script += `\n# 解析の例 (metric でフィルタしてから escalc):\n`;
+  script += `# 術後値で MD メタ分析:\n`;
+  script += `# dat_post <- subset(dat_continuous, metric == "post-value")\n`;
+  script += `# escalc(measure="MD", m1i=mean_intervention, sd1i=sd_intervention, n1i=n_intervention,\n`;
+  script += `#                       m2i=mean_control,      sd2i=sd_control,      n2i=n_control, data=dat_post)\n`;
+  script += `#\n# 変化量で MD メタ分析:\n`;
+  script += `# dat_change <- subset(dat_continuous, metric == "change-from-baseline")\n`;
+  script += `# escalc(measure="MD", ..., data=dat_change)\n`;
+  script += `#\n# ANCOVA 調整済みは generic inverse variance:\n`;
+  script += `# dat_adj <- subset(dat_continuous, metric == "adjusted-difference")\n`;
+  script += `# rma(yi=reported_AdjMD, sei=SE_from_CI, data=dat_adj[!is.na(dat_adj$reported_AdjMD),])\n`;
+  script += `#\n# SE記載のものは sd_or_se_label == "SE記載(SD変換要)" なので SD = SE × √n に変換要:\n`;
+  script += `# dat_continuous$sd_intervention <- ifelse(\n`;
+  script += `#   dat_continuous$sd_or_se_label == "SE記載(SD変換要)" & !is.na(dat_continuous$se_intervention),\n`;
+  script += `#   dat_continuous$se_intervention * sqrt(dat_continuous$n_intervention),\n`;
+  script += `#   dat_continuous$sd_intervention)\n`;
+  return { script, count: rows.length };
+}
+
+/* ============================================================
    SECTION 9.5: DUAL-MODEL AGREEMENT CLASSIFIER + ERROR DETECTOR
    (Vivekanantha 2026 KSA 70412 のdual-LLM枠組みをGemini内で再現)
    ============================================================ */
@@ -3801,6 +4106,51 @@ ${pdfText.substring(0, 30000)}`;
   };
   const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
 
+  // メタ分析ソフト連携: 変換結果プレビュー & クリップボードコピー
+  // 仕様書 Section 5: 既存 TSV/CSV を残しつつ、ドロップダウンで4種類の変換を提供
+  const [metaExportPreview, setMetaExportPreview] = useState(null); // {type, rows, cols, text, count, total}
+  const [studyIdOverride, setStudyIdOverride] = useState(''); // ユーザーが論文識別子を上書き可能
+
+  const buildMetaExport = (type) => {
+    if (!result) return;
+    const fileName = pdfFile?.name || '';
+    const ocs = result.extractedOutcomes || [];
+    if (type === 'revman-binary') {
+      const rows = buildBinaryRows(ocs, result.paperPICO, fileName, studyIdOverride);
+      const r = toRevManBinaryTSV(ocs, result.paperPICO, fileName, studyIdOverride);
+      setMetaExportPreview({ type, label: 'RevMan用 二値アウトカム TSV', rows, cols: REVMAN_BINARY_COLS, text: r.tsv, count: r.count, total: r.total, format: 'tsv' });
+    } else if (type === 'revman-continuous') {
+      const rows = buildContinuousRows(ocs, result.paperPICO, fileName, studyIdOverride);
+      const r = toRevManContinuousTSV(ocs, result.paperPICO, fileName, studyIdOverride);
+      setMetaExportPreview({ type, label: 'RevMan用 連続アウトカム TSV', rows, cols: REVMAN_CONTINUOUS_COLS, text: r.tsv, count: r.count, total: r.total, format: 'tsv' });
+    } else if (type === 'r-binary') {
+      const rows = buildBinaryRows(ocs, result.paperPICO, fileName, studyIdOverride);
+      const r = toRMetaforBinaryScript(ocs, result.paperPICO, fileName, studyIdOverride);
+      setMetaExportPreview({ type, label: 'R metafor 二値スクリプト', rows, cols: REVMAN_BINARY_COLS, text: r.script, count: r.count, total: rows.length, format: 'r' });
+    } else if (type === 'r-continuous') {
+      const rows = buildContinuousRows(ocs, result.paperPICO, fileName, studyIdOverride);
+      const r = toRMetaforContinuousScript(ocs, result.paperPICO, fileName, studyIdOverride);
+      setMetaExportPreview({ type, label: 'R metafor 連続スクリプト', rows, cols: REVMAN_CONTINUOUS_COLS, text: r.script, count: r.count, total: rows.length, format: 'r' });
+    }
+  };
+  const copyMetaExport = () => {
+    if (!metaExportPreview) return;
+    if (metaExportPreview.count === 0) {
+      showToast(`❌ 該当アウトカム0件 — エクスポート対象なし`, 'error');
+      return;
+    }
+    if (clipCopy(metaExportPreview.text)) {
+      // 抽出できなかったセルをカウント
+      const allCells = metaExportPreview.rows.length * metaExportPreview.cols.length;
+      const filledCells = metaExportPreview.rows.reduce((s, r) => s + metaExportPreview.cols.filter(c => r[c] !== '' && r[c] !== null && r[c] !== undefined).length, 0);
+      const emptyCells = allCells - filledCells;
+      const partialMsg = emptyCells > 0 ? ` (${emptyCells}/${allCells}セルは数値不足のため空白)` : '';
+      showToast(`✅ ${metaExportPreview.label} をコピー (${metaExportPreview.count}件${partialMsg})`, emptyCells > 0 ? 'info' : 'success');
+    } else {
+      showToast(`❌ クリップボードコピー失敗`, 'error');
+    }
+  };
+
   // CONSORT-AI / STARD-AI 準拠 Methods テキスト生成 (Vivekanantha §5-5 / Laignelot Discussion)
   const copyConsortAIMethods = () => {
     if (!result) return;
@@ -3994,6 +4344,17 @@ ${pdfText.substring(0, 30000)}`;
                   </div>
                   <button onClick={copyAllTSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold"><CopyIcon size={10}/>TSV</button>
                   <button onClick={copyAllCSV} className="text-[9px] bg-white border border-slate-300 hover:bg-slate-50 px-2 py-1 rounded flex items-center gap-1 font-bold"><CopyIcon size={10}/>CSV</button>
+                  <select
+                    title="メタ分析ソフト用エクスポート (RevMan / R metafor)。選択後、プレビューが下部に表示され、確認後にコピー可能"
+                    value=""
+                    onChange={e => { if (e.target.value) { buildMetaExport(e.target.value); e.target.value = ''; } }}
+                    className="text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded font-bold cursor-pointer border-2 border-emerald-700">
+                    <option value="">📊 メタ分析用 ▼</option>
+                    <option value="revman-binary">RevMan用 二値TSV (events/total)</option>
+                    <option value="revman-continuous">RevMan用 連続TSV (mean/SD/MD・全パターン)</option>
+                    <option value="r-binary">R metafor 二値スクリプト</option>
+                    <option value="r-continuous">R metafor 連続スクリプト</option>
+                  </select>
                   <button onClick={copyConsortAIMethods} title="CONSORT-AI / STARD-AI 準拠 Methods 欄テキストをクリップボードに" className="text-[9px] bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold"><FileText size={10}/>Methods</button>
                   <button onClick={exportAuditLog} title="Vivekanantha [1 Table 3] 互換 audit log を JSON で保存" className="text-[9px] bg-slate-700 hover:bg-slate-800 text-white px-2 py-1 rounded flex items-center gap-1 font-bold"><SaveIcon size={10}/>Audit</button>
                 </div>
@@ -4035,6 +4396,94 @@ ${pdfText.substring(0, 30000)}`;
                       {result._errors?.length > 0 && <div className="mt-1 text-amber-800"><b>部分エラー:</b> {result._errors.join(' / ')}</div>}
                     </div>
                   </div>
+                )}
+
+                {/* メタ分析ソフト連携 変換結果プレビュー
+                    全アウトカムを1行ずつ表形式で表示 → ユーザーが確認 → コピーで RevMan/R に投入 */}
+                {metaExportPreview && (
+                  <section className="bg-white border-2 border-emerald-300 rounded-lg overflow-hidden shadow-md" style={{fontSize:`${Math.max(11,leftFontSize*0.9)}px`}}>
+                    <div className="bg-emerald-600 text-white px-3 py-2 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Database size={16}/>
+                        <span className="font-bold truncate">📊 {metaExportPreview.label} プレビュー</span>
+                        <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-mono">{metaExportPreview.count} 件</span>
+                        {metaExportPreview.count !== metaExportPreview.total && (
+                          <span className="text-[10px] bg-amber-300 text-amber-900 px-2 py-0.5 rounded font-bold">⚠ 抽出元 {metaExportPreview.total}件中 {metaExportPreview.count}件のみ</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <label className="text-[10px] text-white/90">論文ID:</label>
+                        <input
+                          type="text"
+                          value={studyIdOverride}
+                          onChange={e => { setStudyIdOverride(e.target.value); setTimeout(() => buildMetaExport(metaExportPreview.type), 30); }}
+                          placeholder={deriveStudyId(result?.paperPICO, pdfFile?.name, '')}
+                          title="論文識別子 (空白なら自動生成)"
+                          className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded font-mono w-28 outline-none border border-emerald-300"
+                        />
+                        <button onClick={copyMetaExport} className="text-[10px] bg-white text-emerald-700 hover:bg-emerald-50 font-bold px-2 py-1 rounded flex items-center gap-1 border border-emerald-200">
+                          <CopyIcon size={10}/>クリップボードへ
+                        </button>
+                        <button onClick={() => setMetaExportPreview(null)} title="プレビューを閉じる" className="text-white/80 hover:text-white px-1"><XCircle size={14}/></button>
+                      </div>
+                    </div>
+
+                    {/* 表形式プレビュー (TSV系のみ) */}
+                    {metaExportPreview.format === 'tsv' && metaExportPreview.rows.length > 0 && (
+                      <div className="overflow-x-auto max-h-[42vh] border-b border-slate-200">
+                        <table className="text-[10px] whitespace-nowrap border-collapse" style={{minWidth:'100%'}}>
+                          <thead className="bg-slate-100 sticky top-0 shadow-sm z-10">
+                            <tr>
+                              {metaExportPreview.cols.map((c, i) => (
+                                <th key={c} className={`px-2 py-1.5 text-left border-r border-b border-slate-300 font-bold text-slate-700 ${i < 4 ? 'bg-emerald-50' : i < 8 ? 'bg-blue-50/60' : ''}`}>{c}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {metaExportPreview.rows.map((row, idx) => (
+                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                {metaExportPreview.cols.map((c, ci) => {
+                                  const v = row[c];
+                                  const empty = v === '' || v === null || v === undefined;
+                                  const isOutcomeName = c === 'outcome';
+                                  const isStudy = c === 'study';
+                                  const isNumeric = /^(events_|total_|reported_|ci95|log_HR|SE_|n_|mean_|sd_|se_|p_value|pageNumber)/.test(c);
+                                  return (
+                                    <td
+                                      key={c}
+                                      className={`px-2 py-1 border-r border-slate-200 ${empty ? 'bg-red-50/70 text-red-400 italic' : ''} ${isOutcomeName ? 'font-bold text-slate-900 sticky left-0 bg-white shadow-sm' : ''} ${isStudy ? 'font-mono text-purple-700' : ''} ${isNumeric && !empty ? 'font-mono text-blue-900 text-right' : ''}`}
+                                      title={empty ? '空白: 抽出できなかったため (推測値は入れません)' : String(v)}
+                                    >
+                                      {empty ? '—' : String(v)}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* R スクリプトプレビュー */}
+                    {metaExportPreview.format === 'r' && (
+                      <div className="bg-slate-900 text-emerald-300 font-mono text-[10px] p-3 overflow-x-auto max-h-[42vh] leading-relaxed">
+                        <pre className="whitespace-pre">{metaExportPreview.text}</pre>
+                      </div>
+                    )}
+
+                    {metaExportPreview.count === 0 && (
+                      <div className="bg-amber-50 border-t border-amber-200 px-3 py-2 text-amber-800">
+                        <AlertCircle size={12} className="inline mr-1"/>
+                        該当する{metaExportPreview.type.includes('binary') ? '二値' : '連続'}アウトカムが見つかりませんでした。各 outcome の variableType を確認してください。
+                      </div>
+                    )}
+
+                    <div className="bg-emerald-50 border-t border-emerald-200 px-3 py-1.5 text-[10px] text-emerald-800 flex items-center gap-2 flex-wrap">
+                      <InfoIcon size={11} className="text-emerald-600 flex-shrink-0"/>
+                      <span><b>赤背景セル「—」</b>は抽出できなかった項目（推測値は入れず空白で出力）。<b>左4列</b>=識別 / <b>群データ</b>=青系 / <b>派生計算</b>=log_HR・SE_from_CI 等</span>
+                    </div>
+                  </section>
                 )}
 
                 {/* dual-LLM 抽出サマリー (Vivekanantha 2026 [1 Results] 形式) */}
