@@ -44,14 +44,12 @@
 
 <main class="max-w-5xl mx-auto px-6 py-12">
   <section class="text-center mb-12 fade-in">
-    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3 Gemini Edition · 完全無料で動く</div>
+    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3.5 dual-MODEL Gemini Edition · Vivekanantha 2026 方式</div>
     <h2 class="text-4xl sm:text-5xl font-extrabold text-slate-800 mb-4">
-      RCT論文から<br class="sm:hidden"/><span class="gradient-text">メタ分析データを自動抽出</span>
+      RCT論文から<br class="sm:hidden"/><span class="gradient-text">メタ分析データを最適化抽出</span>
     </h2>
     <p class="text-slate-600 max-w-2xl mx-auto">
-      <b>Google AI Studio の無料APIキー</b>を貼り付けるだけ。クレジットカード登録不要。
-      503 過負荷を自動回避するスマートリトライ + 複数キー対応で、無料枠でも安定動作。
-      ブラウザのみで動作、サーバ不要。
+      <b>Google AI Studio の無料APIキー</b>1個で動作。<b>dual-MODEL モード</b>では同じPDFを Flash Lite + Flash で独立並列抽出し、Vivekanantha 2026 (KSA 70412) の 9カテゴリ判定で不一致フィールドを自動検出。クレジットカード登録不要・サーバ不要・ブラウザのみで完結。
     </p>
   </section>
 
@@ -60,16 +58,18 @@
       <div class="gradient-bg text-white px-6 py-5 flex items-center justify-between">
         <div>
           <div class="text-[11px] font-bold opacity-80">LATEST / RECOMMENDED</div>
-          <div class="text-xl font-bold">v3 Gemini Edition</div>
+          <div class="text-xl font-bold">v3.5 dual-MODEL Edition</div>
         </div>
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
       </div>
       <div class="p-6">
         <ul class="text-sm text-slate-700 space-y-2 mb-4">
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>Google AI Studio 無料APIキーで動作（CC登録不要）</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>503 過負荷時に Pro→Flash→Flash Lite 自動フォールバック</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>複数APIキー対応で無料枠を実質拡張・自動ローテーション</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>3段階抽出（Critic + 個別検証）+ 6セクションの使い方ガイド内蔵</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>🔬 <b>dual-MODEL モード</b>: 2つのGeminiモデルで独立並列抽出 (Vivekanantha 2026 方式)</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📊 <b>9カテゴリ判定</b>: 各フィールドを「両一致 / 部分一致 / 要確認」に自動分類</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>⚠ <b>§6 エラーパターン自動検出</b>: 分散値欠落・アームスワップ・単位欠落・SE/SD混同</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📋 <b>CONSORT-AI / STARD-AI 準拠 Methods 自動生成</b> + 完全 Audit Log export</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>Google AI Studio 無料APIキーで動作（CC登録不要）・複数キーで枠拡張</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>503 過負荷時に Flash Lite ↔ Flash 自動フォールバック</li>
         </ul>
         <div class="gradient-bg text-white font-bold py-3 rounded-xl text-center">起動する →</div>
       </div>
@@ -82,6 +82,18 @@
       主な機能
     </h3>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+      <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+        <div class="font-bold text-purple-900 mb-1">🔬 dual-MODEL 並列抽出</div>
+        <div class="text-xs text-purple-800">2モデル独立実行 + 9カテゴリ判定 (Vivekanantha 2026)</div>
+      </div>
+      <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+        <div class="font-bold text-purple-900 mb-1">⚠ §6 エラー検出</div>
+        <div class="text-xs text-purple-800">分散値欠落・アームスワップ・単位欠落を自動フラグ</div>
+      </div>
+      <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+        <div class="font-bold text-purple-900 mb-1">📋 CONSORT-AI Methods</div>
+        <div class="text-xs text-purple-800">論文Methods欄に貼れるテキストを自動生成</div>
+      </div>
       <div class="bg-slate-50 p-4 rounded-lg">
         <div class="font-bold text-slate-800 mb-1">📊 全アウトカム網羅</div>
         <div class="text-xs text-slate-600">指定外アウトカムも自動抽出。ITT/PP/mITT集団を分離して保持</div>
@@ -103,10 +115,21 @@
         <div class="text-xs text-slate-600">Flow diagram から自動でN数を抽出</div>
       </div>
       <div class="bg-slate-50 p-4 rounded-lg">
-        <div class="font-bold text-slate-800 mb-1">💾 TSV/CSV出力</div>
-        <div class="text-xs text-slate-600">RevMan・R等へのコピペ対応形式で出力</div>
+        <div class="font-bold text-slate-800 mb-1">💾 TSV/CSV/Audit出力</div>
+        <div class="text-xs text-slate-600">RevMan・R対応 + 完全audit log JSON export</div>
       </div>
     </div>
+  </section>
+
+  <section class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border border-purple-200 shadow-sm p-6 mb-8 fade-in fade-d4">
+    <h3 class="text-lg font-bold text-purple-900 mb-3 flex items-center gap-2">
+      📚 エビデンスベース設計
+    </h3>
+    <p class="text-xs text-slate-700 leading-relaxed mb-3">本アプリは以下2つのpeer-reviewed論文の知見に基づき、データ抽出を最適化:</p>
+    <ul class="text-xs text-slate-700 space-y-2 list-disc pl-5">
+      <li><b>Vivekanantha P, et al.</b> Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. <i>Knee Surg Sports Traumatol Arthrosc.</i> 2026;1-19. doi:10.1002/ksa.70412 — 384データ点中 95.1% で少なくとも一方のモデルが正解</li>
+      <li><b>Laignelot F, et al.</b> Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. <i>J Clin Epidemiol.</i> 2026;194:112221. doi:10.1016/j.jclinepi.2026.112221 — 63研究148評価のシステマティックレビュー、データ抽出 accuracy 0.36–1.00 中央値0.95</li>
+    </ul>
   </section>
 
   <section class="bg-rose-50 border border-rose-200 rounded-xl p-5 mb-8 fade-in fade-d4">
