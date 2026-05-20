@@ -154,6 +154,62 @@ const REFERENCE_LIBRARY = [
     summary: 'Survey of retrieval-augmented generation architectures and evaluation, highlighting grounding and external-evidence workflows.',
     summaryJa: 'RAGの体系的レビュー。外部根拠に基づいて生成を接地し、評価する設計思想を整理している。',
     dataexUse: 'evidenceText原文引用、PDF物理突合、ハルシネーション検出の思想に反映。'
+  },
+  {
+    id: 'Gartlehner 2024',
+    citation: 'Gartlehner G, Kahwati L, Hilscher R, et al. Res Synth Methods. 2024;15(4):576-589.',
+    link: 'https://doi.org/10.1002/jrsm.1710',
+    summary: 'Proof-of-concept study comparing LLM-assisted extraction with human systematic-review extraction; high accuracy was possible, with missed items as a key error type.',
+    summaryJa: 'SRデータ抽出にLLMを使う概念実証。高精度の可能性を示す一方、見落としが主要なエラー型として残ることを示した。',
+    dataexUse: '漏れ検出、human-in-the-loop、未報告値を推測しない設計に反映。'
+  },
+  {
+    id: 'Lieberum 2025',
+    citation: 'Lieberum JL, Toews M, Metzendorf MI, et al. J Clin Epidemiol. 2025;181:111746.',
+    link: 'https://doi.org/10.1016/j.jclinepi.2025.111746',
+    summary: 'Scoping review of LLMs for systematic-review conduct; applications are increasing, but fully validated workflows remain limited.',
+    summaryJa: 'SR作成におけるLLM利用のスコーピングレビュー。利用は増えているが、完全に検証済みのワークフローはまだ限られる。',
+    dataexUse: '自動抽出を最終判断にせず、検証ログと人間照合を必須にする根拠。'
+  },
+  {
+    id: 'Yun 2024',
+    citation: 'Yun HS, Pogrebitskiy D, Marshall IJ, Wallace BC. arXiv:2405.01686.',
+    link: 'https://arxiv.org/abs/2405.01686',
+    summary: 'Benchmark on numerical-result extraction from RCT reports; binary outcomes were more tractable, while complex outcome measures and inference-heavy extraction remained difficult.',
+    summaryJa: 'RCTから数値結果を抽出するLLMベンチマーク。二値アウトカムは比較的扱いやすいが、複雑なアウトカムや推論を要する抽出は弱い。',
+    dataexUse: '二値/連続/Time-to-event別の厳格チェック、分母・群方向・効果量方向の検証に反映。'
+  },
+  {
+    id: 'Daraqel 2025',
+    citation: 'Daraqel B, Owayda A, Khan H, Koletsi D, Mheissen S. J Dent. 2025;160:105846.',
+    link: 'https://doi.org/10.1016/j.jdent.2025.105846',
+    summary: 'Pilot study evaluating AI as a data-extraction tool against manual extraction, emphasizing that AI extraction is not fully reliable on its own.',
+    summaryJa: '手動抽出とAI抽出を比較したパイロット研究。AI抽出だけでは完全には信頼できないことを示す。',
+    dataexUse: '低確信・根拠不足・図のみ抽出を human-check/manual-only として残す設計に反映。'
+  },
+  {
+    id: 'Cao 2025',
+    citation: 'Cao C, Arora R, Cento P, et al. Automation of Systematic Reviews with Large Language Models. medRxiv 2025.06.13.25329541.',
+    link: 'https://doi.org/10.1101/2025.06.13.25329541',
+    summary: 'Preprint describing an agentic SR workflow with strong reported screening and extraction performance, while still using adjudicated human review for discrepancies.',
+    summaryJa: 'SRワークフロー自動化のpreprint。高い性能を報告するが、不一致や評価には人間の裁定を組み込んでいる。',
+    dataexUse: 'PDF→Markdown、抽出エージェント、差分優先レビュー、監査ログの考え方に反映。'
+  },
+  {
+    id: 'Li 2025',
+    citation: 'Li L, Mathrani A, Susnjak T. arXiv:2507.15152.',
+    link: 'https://arxiv.org/abs/2507.15152',
+    summary: 'Meta-analysis extraction benchmark showing high precision but poor recall from omitted information, and proposing three automation tiers by task complexity and risk.',
+    summaryJa: 'メタ分析データ抽出ベンチマーク。精度は高くても重要情報の漏れで再現率が下がること、リスク別の3段階自動化指針を示す。',
+    dataexUse: '抽出前後の漏れスキャン、Automation tier、タスク別の人間確認優先度に反映。'
+  },
+  {
+    id: 'Gartlehner 2025',
+    citation: 'Gartlehner G, Kugley S, Crotty K, et al. Ann Intern Med. 2025;178(12):1763-1771.',
+    link: 'https://doi.org/10.7326/ANNALS-25-00739',
+    summary: 'Study within reviews comparing AI-assisted extraction plus human verification with human-only extraction across six systematic reviews.',
+    summaryJa: '6件のSR内で、AI支援+人間確認と人間のみの抽出を比較した研究。AI支援は効率化しうるが、確認者の役割は残る。',
+    dataexUse: 'AI初稿を人間レビューに渡す設計、見落としを主要エラー型として扱う設計に反映。'
   }
 ];
 
@@ -242,6 +298,32 @@ const SYSTEM_PROMPT_EXTRACT = `あなたは世界最高水準の医学システ�
 - Excel等に渡す場合は PMID に PubMed URL (https://pubmed.ncbi.nlm.nih.gov/{PMID}/) を付与できる形で保持
 - Significance は Sig=緑、NS=赤、Borderline=黄に色分けできるよう、Sig/NS/Borderline のいずれかで明記
 - PPTX等に渡す場合、表やKey Takeawaysには抄録/本文で確認済みの具体的数値のみを使い、引用は Author, Journal, Year + PubMedリンク形式にできる情報を残す
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【🧠 2024-2025 Evidence Synthesis Automation Safety Layer】
+※ Gartlehner 2024 / Lieberum 2025 / Yun 2024 / Daraqel 2025 / Li 2025 / Gartlehner 2025 の知見を、既存の高精度抽出に「追加」する安全層
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+LLM抽出は「初稿作成と漏れ発見の支援」であり、単独の最終判定ではない。自信が高くても human verification を前提に、以下を必ず notes / expertCommentary / missingOutcomes に反映する。
+
+■ Omission scan（漏れ検出）: 最終JSONの前に、以下6バケットで「見落としがないか」を自己点検する
+1. SC = Study Characteristics: 研究名、国、施設数、登録期間、追跡期間、解析集団
+2. PC = Participants/Cohort: randomized/enrolled/analyzed、ITT/mITT/PP/safety、除外・脱落
+3. IE = Intervention/Exposure: 介入名、用量/回数/期間、デバイス正式名、手技・併用治療
+4. CC = Comparator/Control: 対照内容、標準治療/プラセボ/通常ケア、群ラベルの向き
+5. OM = Outcome Measures/Results: primary/secondary、時点、分母、イベント/平均、SD/SE/IQR、効果量、p値
+6. SD = Study Design/Analysis: parallel/crossover/cluster/split-mouth、多群、調整解析、欠測処理、RoBに関わる情報
+
+■ Automation tier（自動化レベル）: 各 outcome の notes に必ず1つ付ける
+- "[Automation tier: auto-ready]" = 本文/表に明示値があり、両群・分母・分散または効果量・evidenceTextが揃う。人間確認後に利用可能。
+- "[Automation tier: human-check]" = percentのみ、図からの読み取り、計算/変換、Abstractと本文不一致、SD/SE曖昧、効果量の向きが要確認。
+- "[Automation tier: manual-only]" = 値が画像のみで読めない、分散/分母が欠落、群定義不明、原文根拠なし、抽出結果間で重大矛盾。
+
+■ RCT numerical extraction の追加注意
+- 二値アウトカムは events と denominator の両方、連続アウトカムは mean/SD/SE/IQR と単位、Time-to-event は HRの向き・CI・イベント数・at-riskとの違いを確認。
+- intervention/control の向き、effectEstimate の reference group、primary endpoint と secondary endpoint の区別を、必ず evidenceText と sourceLocation で根拠づける。
+- 高precisionでも recall低下（重要項目の省略）が起きるため、missingOutcomes には「本来ありそうだが未抽出の項目」を積極的に列挙する。
+- 根拠が不十分な値は埋めず、"不明" / "NR (not reported)" とし、notes に "[要人間確認: 理由]" を残す。
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【📐 Vivekanantha A2 出力フォーマット (events_or_mean / sd_or_se 列の書き方を厳密に)】
@@ -658,6 +740,15 @@ const SYSTEM_PROMPT_CRITIC = `あなたは医学メタ分析データ抽出の�
 - "control group" が先に出る文では、対照群値を interventionResult に入れない
 - CADe system は "computer-aided detection" の一般名だけでなく、抄録に正式デバイス名があればそれを記録
 - p<0.05 なのに NS、p>=0.05 なのに Sig とする矛盾は必ず修正
+
+【2024-2025 automation safety audit】
+- Gartlehner 2024 / Gartlehner 2025: missed data items が主要エラー型になりうるため、誤値だけでなく「未抽出」を重点監査する
+- Lieberum 2025 / Daraqel 2025: LLM単独利用を最終判断にしない。根拠が弱い項目は修正よりも human-check / manual-only に分類する
+- Yun 2024: RCT numerical results は outcome-comparator-intervention の結びつき、denominator、effect direction を特に確認する
+- Li 2025: high precision / low recall の罠を想定し、SC/PC/IE/CC/OM/SD の6バケットで omission scan を行う
+- 各outcomeの notes に [Automation tier: auto-ready] / [Automation tier: human-check] / [Automation tier: manual-only] のいずれかが無ければ追加を提案する
+- "human-check" または "manual-only" に該当する条件: percentのみ、分母不明、SD/SE曖昧、図のみ、HR/RR/ORの向き不明、Abstract/本文矛盾、evidenceTextが短い、表の行列対応が曖昧、群名が類似
+- missingOutcomes には、抽出済み値の修正だけでなく「存在しそうだが未抽出のprimary outcome / secondary outcome / adverse event / subgroup / time point」を列挙する
 
 【出力】
 correctionsにオブジェクトの配列として出力:
@@ -3010,6 +3101,9 @@ function detectExtractionErrors(o) {
   const isBinary = (o.variableType || '').toLowerCase().includes('bin');
   const ev = o.evidenceText || '';
   const evLow = ev.toLowerCase();
+  const notes = o.notes || '';
+  const notesLow = String(notes).toLowerCase();
+  const allEvidenceLow = `${evLow} ${notesLow} ${String(o.sourceLocation || '').toLowerCase()}`;
 
   const blank = (v) => !_normVal(v);
   const I = o.interventionGroup || {}, C = o.comparisonGroup || {};
@@ -3026,7 +3120,7 @@ function detectExtractionErrors(o) {
   }
 
   // 6-2. Primary/Revision (アーム) スワップ — actualOutcomeName が "primary" or "revision" を含み、かつ介入群と対照群の値が酷似
-  const nameLow = (o.actualOutcomeName || '').toLowerCase() + ' ' + (o.notes || '').toLowerCase();
+  const nameLow = (o.actualOutcomeName || '').toLowerCase() + ' ' + notesLow;
   if (/primary|baseline|pre-?op|revision|post-?op|secondary|follow/i.test(nameLow)) {
     if (!blank(I.events_or_mean) && !blank(C.events_or_mean)) {
       const eq = _equiv(I.events_or_mean, C.events_or_mean);
@@ -3113,6 +3207,45 @@ function detectExtractionErrors(o) {
     if (!isNaN(pNum) && (pNum < 0 || pNum > 1)) {
       flags.push({ code: 'invalid-p-value', severity: 'warning', msg: `⚠ P値 "${pv}" が範囲外 (0-1 の範囲外) — 表記ミス疑い` });
     }
+  }
+
+  // 6-9. Automation tier の明示 (Li 2025 の3段階自動化指針を反映)
+  if (!/automation tier|自動化レベル/i.test(notes)) {
+    flags.push({
+      code: 'automation-tier-missing',
+      severity: 'warning',
+      msg: '⚠ Automation tier 未記載 — notes に [Automation tier: auto-ready / human-check / manual-only] を追加してください (Li 2025)'
+    });
+  } else if (/automation tier:\s*(human-check|manual-only)|自動化レベル:\s*(要確認|手動)/i.test(notes)) {
+    flags.push({
+      code: 'human-check-required',
+      severity: 'warning',
+      msg: '⚠ human-check/manual-only 指定 — 最終利用前に原論文で人間照合が必要です'
+    });
+  }
+
+  // 6-10. Effect direction / reference group の欠落 (Yun 2024 のRCT数値抽出リスク)
+  const measure = String(o.effectEstimate?.measureType || '').toUpperCase();
+  const effVal = String(o.effectEstimate?.value || '').trim();
+  if (effVal && effVal !== '-' && effVal !== '不明' && /^(RR|OR|HR|IRR|MD|SMD|RD|ARR|NNT)$/.test(measure)) {
+    const hasDirectionCue = /intervention|control|comparison|placebo|reference|ref\.?|vs|versus|対照|介入|基準|向き|反転|higher|lower/i.test(allEvidenceLow);
+    if (!hasDirectionCue) {
+      flags.push({
+        code: 'effect-direction-missing',
+        severity: 'warning',
+        msg: '⚠ 効果量の向き/reference group が不明 — HR/RR/OR/MD等は介入 vs 対照の向きを notes に明記してください'
+      });
+    }
+  }
+
+  // 6-11. Omission-risk cue: 抽出に値はあるが出処/根拠が弱い
+  const hasWeakSource = /figure|fig\.|graph|plot|image|目視|推定|only|のみ|abstract|registry/i.test(`${o.sourceLocation || ''} ${notes}`);
+  if (hasWeakSource && !/automation tier:\s*(human-check|manual-only)/i.test(notes)) {
+    flags.push({
+      code: 'automation-tier-too-optimistic',
+      severity: 'warning',
+      msg: '⚠ 図・推定・Abstract/registry由来など弱い根拠の可能性 — human-check または manual-only への分類を検討してください'
+    });
   }
 
   // ハルシネーション疑いチェック: evidenceText が短すぎる、または数値が含まれていない
@@ -3243,6 +3376,7 @@ function generateConsortAIMethods(result, config) {
   txt += `- "You MAY perform simple counting and arithmetic when directly based on explicit values."\n`;
   txt += `- "If an article gives multiple metrics for the same variable, you MUST report ALL reported values."\n\n`;
   txt += `A PubMed/abstract-first safety layer extracted PMID, first author, journal, year, study name, analyzed N, design, intervention, explicitly labelled primary outcome, arm-level abstract results, p value/effect size, significance, and one-sentence key finding using only abstract-grounded values. Missing abstract values were recorded as NR rather than inferred.\n\n`;
+  txt += `A 2024-2025 automation safety layer was also applied. Before finalisation, outputs were checked across six omission-scan buckets (study characteristics, participants/cohort, intervention/exposure, comparator/control, outcome measures/results, and study design/analysis). Each outcome was assigned an automation tier in notes (auto-ready, human-check, or manual-only), reflecting the task-specific automation guidance and recall risks reported by recent evidence-synthesis extraction studies.\n\n`;
 
   if (dual?.enabled && summary) {
     txt += `### Inter-model agreement (Vivekanantha 9-category framework)\n`;
@@ -3256,7 +3390,7 @@ function generateConsortAIMethods(result, config) {
   }
 
   txt += `### Post-processing error detection (Vivekanantha 2026 §6 patterns)\n`;
-  txt += `Rule-based detectors were applied to flag (a) missing variance values, (b) primary/revision arm swaps, (c) missing units, (d) SE/SD confusion, (e) denominator-missing for binary variables, (f) hallucination suspects (numeric value without supporting text), and (g) abstract-level primary/secondary, arm-direction, analyzed-N, and p-value/significance inconsistencies.\n`;
+  txt += `Rule-based detectors were applied to flag (a) missing variance values, (b) primary/revision arm swaps, (c) missing units, (d) SE/SD confusion, (e) denominator-missing for binary variables, (f) hallucination suspects (numeric value without supporting text), (g) abstract-level primary/secondary, arm-direction, analyzed-N, and p-value/significance inconsistencies, (h) missing automation-tier labels, (i) human-check/manual-only records, and (j) missing effect-direction/reference-group notes.\n`;
   if (summary) {
     txt += `Detector hits: ${summary.flagsCritical} critical, ${summary.flagsWarning} warning.\n\n`;
   } else {
@@ -3264,7 +3398,7 @@ function generateConsortAIMethods(result, config) {
   }
 
   txt += `### Human verification (mandatory)\n`;
-  txt += `All extracted fields were reviewed and verified against the source PDF by a human reviewer. ${dual?.enabled ? 'Disagreement fields between the two models were prioritised (per Vivekanantha 2026).' : 'Outputs were not accepted without human review (per Laignelot 2026 [2]: data extraction accuracy varies 0.36–1.00).'}\n\n`;
+  txt += `All extracted fields were reviewed and verified against the source PDF by a human reviewer. ${dual?.enabled ? 'Disagreement fields between the two models were prioritised (per Vivekanantha 2026).' : 'Outputs were not accepted without human review (per Laignelot 2026 [2] and Lieberum 2025 [7]).'} Omission risk, weak evidence sources, and automation-tier labels were used to prioritise human checking, consistent with Gartlehner 2024/2025 and Li 2025.\n\n`;
 
   txt += `### Reporting\n`;
   txt += `Reporting follows CONSORT-AI [Liu 2020] and STARD-AI [Sounderajah 2025] guidelines. Source-grounded prompting (Gao 2024) requires the model to cite verbatim PDF text for every numeric value, which was automatically validated against the PDF text layer.\n\n`;
@@ -4942,7 +5076,7 @@ function SetupPage({ onComplete, initialConfig }) {
   const [model, setModel] = useState(initialModel);
   const [verifyState, setVerifyState] = useState({});
   const [saveKeys, setSaveKeys] = useState(initialConfig.saveKeys !== false);
-  const [showReferencesPanel, setShowReferencesPanel] = useState(() => typeof window !== 'undefined' && window.location.hash === '#references');
+  const [showReferencesPanel, setShowReferencesPanel] = useState(false);
   // dual-MODEL モード (Vivekanantha 2026): 同じPDFを2つのGeminiモデルで独立並列抽出
   const [dualMode, setDualMode] = useState(!!initialConfig.dualMode);
   const [modelB, setModelB] = useState(() => {
@@ -4961,7 +5095,7 @@ function SetupPage({ onComplete, initialConfig }) {
   }, [model, modelB]);
   useEffect(() => {
     const onHash = () => {
-      if (window.location.hash === '#references') setShowReferencesPanel(true);
+      if (window.location.hash === '#references') window.location.href = 'references.html';
     };
     onHash();
     window.addEventListener('hashchange', onHash);
@@ -4970,16 +5104,10 @@ function SetupPage({ onComplete, initialConfig }) {
 
   const validKeys = apiKeys.filter(k => k && k.trim());
   const openReferences = () => {
-    setShowReferencesPanel(true);
-    if (window.location.hash !== '#references') {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#references`);
-    }
+    window.open('references.html', '_blank', 'noopener,noreferrer');
   };
   const closeReferences = () => {
     setShowReferencesPanel(false);
-    if (window.location.hash === '#references') {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-    }
   };
 
   const verifyAll = async () => {
@@ -5024,13 +5152,13 @@ function SetupPage({ onComplete, initialConfig }) {
           <div className="flex items-center gap-3 min-w-0">
             <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg"><Sparkles size={22}/></div>
             <div className="min-w-0">
-              <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3.8 / Abstract Safety</span></h1>
+              <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3.9 / Automation Safety</span></h1>
               <p className="text-xs text-slate-500">Google AI Studio の無料APIキーで動く RCT データ抽出ツール</p>
             </div>
           </div>
-          <button onClick={openReferences} className="text-[11px] bg-white hover:bg-blue-50 text-blue-700 border-2 border-blue-300 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold flex-shrink-0">
+          <a href="references.html" target="_blank" rel="noopener noreferrer" className="text-[11px] bg-white hover:bg-blue-50 text-blue-700 border-2 border-blue-300 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold flex-shrink-0">
             <FileSearch size={12}/>参考文献
-          </button>
+          </a>
         </div>
       </header>
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
@@ -5042,7 +5170,7 @@ function SetupPage({ onComplete, initialConfig }) {
         <div className="bg-gradient-to-r from-purple-50 via-blue-50 to-cyan-50 border border-purple-200 rounded-xl p-4 mb-6 fade-in-up fade-d1">
           <h3 className="font-bold text-purple-900 mb-2 flex items-center gap-2 text-sm">
             <Sparkles size={18}/>Vivekanantha 2026 dual-LLM 方式に基づくデータ抽出最適化
-            <span className="text-[9px] bg-purple-600 text-white px-1.5 py-0.5 rounded font-bold">v3.8</span>
+            <span className="text-[9px] bg-purple-600 text-white px-1.5 py-0.5 rounded font-bold">v3.9</span>
           </h3>
           <div className="text-xs text-purple-900 leading-relaxed space-y-2">
             <div className="bg-white/70 border border-purple-200 rounded p-2">
@@ -5065,7 +5193,8 @@ function SetupPage({ onComplete, initialConfig }) {
               <li><b>決定論的設定</b>: temperature=0.0, randomness fixed (Vivekanantha [1]: model temperature and randomness parameters were fixed to ensure reproducibility)</li>
               <li><b>3パス精度最大化パイプライン</b>: ① 核心抽出 → ② 補完抽出 → ③ Critic監査（原文照合で誤りと欠損を補正）</li>
               <li><b>抄録ファースト安全策</b>: PubMed/抄録14フィールド、N(analyzed)、primary endpoint、介入/対照の向き、p値と有意性を自己検証</li>
-              <li><b>参考文献タブ</b>: 実装根拠の英語/日本語サマリーとリンクをアプリ内で確認</li>
+              <li><b>Automation Safety Layer</b>: SC/PC/IE/CC/OM/SD の6バケット漏れ確認、Automation tier、effect direction/reference group確認を追加</li>
+              <li><b>参考文献ページ</b>: 実装根拠の英語/日本語サマリーとリンクを別ページで確認</li>
               <li><b>CONSORT-AI / STARD-AI 準拠 Methods 自動生成</b>: 論文Methods欄にそのまま貼れるテキストを出力 (Laignelot 2026 [2] Discussion 推奨)</li>
               <li><b>完全 Audit Log</b>: モデル名・バージョン・トークン数・所要時間を JSON で export 可能 (Vivekanantha [1 Table 3] 互換)</li>
               <li><b>503/429 自動回避</b>: Flash Lite ↔ Flash 自動フォールバック + 複数キー自動ローテーション</li>
@@ -5233,7 +5362,7 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
   const [showReferencesPanel, setShowReferencesPanel] = useState(false);
   useEffect(() => {
     const onHash = () => {
-      if (window.location.hash === '#references') setShowReferencesPanel(true);
+      if (window.location.hash === '#references') window.location.href = 'references.html';
     };
     onHash();
     window.addEventListener('hashchange', onHash);
@@ -5241,16 +5370,10 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
   }, []);
   useEffect(() => { modelRef.current = model; }, [model]);
   const openReferences = () => {
-    setShowReferencesPanel(true);
-    if (window.location.hash !== '#references') {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#references`);
-    }
+    window.open('references.html', '_blank', 'noopener,noreferrer');
   };
   const closeReferences = () => {
     setShowReferencesPanel(false);
-    if (window.location.hash === '#references') {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-    }
   };
   const handleModelChange = (newModel) => {
     if (!GEMINI_MODELS.find(m => m.id === newModel)) return;
@@ -6047,7 +6170,7 @@ ${pdfText.substring(0, 30000)}`;
           <div className="flex items-center gap-2">
             <button onClick={onBack} className="text-slate-400 hover:text-purple-600 p-0.5 transition-colors"><ChevronLeft size={20}/></button>
             <BrainIcon size={20} className="text-purple-700"/>
-            <h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3.8 Abstract Safety</span></h1>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3.9 Automation Safety</span></h1>
           </div>
           <div className="flex items-center gap-2">
             {/* モデル切替（結果画面からでも変更可能） */}
@@ -6066,12 +6189,14 @@ ${pdfText.substring(0, 30000)}`;
                 <span className="text-blue-700 text-[10px] font-mono bg-blue-100 px-1 rounded flex-shrink-0">×{apiKeys.length}キー</span>
               )}
             </div>
-            <button
-              onClick={openReferences}
+            <a
+              href="references.html"
+              target="_blank"
+              rel="noopener noreferrer"
               title="参考文献とDataExへの実装根拠を表示"
               className="text-[10px] bg-white hover:bg-blue-50 text-blue-700 border-2 border-blue-300 px-2 py-1 rounded flex items-center gap-1 font-bold">
               <FileSearch size={10}/>参考文献
-            </button>
+            </a>
             {/* Templates ボタン */}
             <button
               onClick={() => setShowTemplatesPanel(s => !s)}
