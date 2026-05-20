@@ -4942,6 +4942,7 @@ function SetupPage({ onComplete, initialConfig }) {
   const [model, setModel] = useState(initialModel);
   const [verifyState, setVerifyState] = useState({});
   const [saveKeys, setSaveKeys] = useState(initialConfig.saveKeys !== false);
+  const [showReferencesPanel, setShowReferencesPanel] = useState(() => typeof window !== 'undefined' && window.location.hash === '#references');
   // dual-MODEL モード (Vivekanantha 2026): 同じPDFを2つのGeminiモデルで独立並列抽出
   const [dualMode, setDualMode] = useState(!!initialConfig.dualMode);
   const [modelB, setModelB] = useState(() => {
@@ -4958,8 +4959,28 @@ function SetupPage({ onComplete, initialConfig }) {
       if (other) setModelB(other.id);
     }
   }, [model, modelB]);
+  useEffect(() => {
+    const onHash = () => {
+      if (window.location.hash === '#references') setShowReferencesPanel(true);
+    };
+    onHash();
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   const validKeys = apiKeys.filter(k => k && k.trim());
+  const openReferences = () => {
+    setShowReferencesPanel(true);
+    if (window.location.hash !== '#references') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#references`);
+    }
+  };
+  const closeReferences = () => {
+    setShowReferencesPanel(false);
+    if (window.location.hash === '#references') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+  };
 
   const verifyAll = async () => {
     setVerifyState({ verifying: true });
@@ -4997,13 +5018,19 @@ function SetupPage({ onComplete, initialConfig }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/20 flex flex-col overflow-auto">
+      {showReferencesPanel && <ReferencesPanel onClose={closeReferences}/>}
       <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/80 py-4 px-6 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg"><Sparkles size={22}/></div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3.8 / Abstract Safety</span></h1>
-            <p className="text-xs text-slate-500">Google AI Studio の無料APIキーで動く RCT データ抽出ツール</p>
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg"><Sparkles size={22}/></div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3.8 / Abstract Safety</span></h1>
+              <p className="text-xs text-slate-500">Google AI Studio の無料APIキーで動く RCT データ抽出ツール</p>
+            </div>
           </div>
+          <button onClick={openReferences} className="text-[11px] bg-white hover:bg-blue-50 text-blue-700 border-2 border-blue-300 px-3 py-1.5 rounded-lg flex items-center gap-1 font-bold flex-shrink-0">
+            <FileSearch size={12}/>参考文献
+          </button>
         </div>
       </header>
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
@@ -5204,7 +5231,27 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
   // API診断パネルの開閉
   const [showDiag, setShowDiag] = useState(false);
   const [showReferencesPanel, setShowReferencesPanel] = useState(false);
+  useEffect(() => {
+    const onHash = () => {
+      if (window.location.hash === '#references') setShowReferencesPanel(true);
+    };
+    onHash();
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   useEffect(() => { modelRef.current = model; }, [model]);
+  const openReferences = () => {
+    setShowReferencesPanel(true);
+    if (window.location.hash !== '#references') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#references`);
+    }
+  };
+  const closeReferences = () => {
+    setShowReferencesPanel(false);
+    if (window.location.hash === '#references') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+  };
   const handleModelChange = (newModel) => {
     if (!GEMINI_MODELS.find(m => m.id === newModel)) return;
     setModel(newModel);
@@ -6020,7 +6067,7 @@ ${pdfText.substring(0, 30000)}`;
               )}
             </div>
             <button
-              onClick={() => setShowReferencesPanel(true)}
+              onClick={openReferences}
               title="参考文献とDataExへの実装根拠を表示"
               className="text-[10px] bg-white hover:bg-blue-50 text-blue-700 border-2 border-blue-300 px-2 py-1 rounded flex items-center gap-1 font-bold">
               <FileSearch size={10}/>参考文献
@@ -6108,7 +6155,7 @@ ${pdfText.substring(0, 30000)}`;
       </header>
 
       {showDiag && <ApiDiagPanel onClose={() => setShowDiag(false)}/>}
-      {showReferencesPanel && <ReferencesPanel onClose={() => setShowReferencesPanel(false)}/>}
+      {showReferencesPanel && <ReferencesPanel onClose={closeReferences}/>}
 
       {/* Sessions (複数論文集約) パネル */}
       {showSessions && (
