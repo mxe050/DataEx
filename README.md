@@ -131,11 +131,22 @@ Google Cloud の無料枠は **プロジェクト単位** で計上されます�
 
 ## エビデンスベース (本アプリの理論的根拠)
 
-本アプリは以下2つのpeer-reviewed論文の知見に基づく:
+本アプリは、dual-LLM 抽出研究、LLM systematic review、AI報告ガイドライン、根拠接地型生成の知見を組み合わせて設計しています。
 
 [1] **Vivekanantha P, Kahlon H, Balogun OT, et al.** Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. *Knee Surg Sports Traumatol Arthrosc.* 2026;1-19. doi:[10.1002/ksa.70412](https://doi.org/10.1002/ksa.70412)
+根拠: dual-MODEL、9カテゴリ判定、不一致フィールド優先レビュー、§6エラー検出。384データ点中、少なくとも一方のモデルが正解した割合95.1%。
 
 [2] **Laignelot F, Martin GL, Ossman M, et al.** Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. *J Clin Epidemiol.* 2026;194:112221. doi:[10.1016/j.jclinepi.2026.112221](https://doi.org/10.1016/j.jclinepi.2026.112221)
+根拠: LLM抽出は有望だが精度に幅があるため、ヒト最終照合、3-run安定性検証、Audit Logを必須にする。
+
+[3] **Liu X, Cruz Rivera S, Moher D, et al.** Reporting guidelines for clinical trial reports for interventions involving artificial intelligence: the CONSORT-AI extension. *Nat Med.* 2020;26:1364-1374. PMID:[32908283](https://pubmed.ncbi.nlm.nih.gov/32908283/)
+根拠: AI利用時のモデル・設定・介入内容・評価手順を透明に報告するため、Methods自動生成に反映。
+
+[4] **Sounderajah V, Ashrafian H, Golub RM, Shetty S, De Fauw J, Hooft L, et al.** Developing STARD-AI: an extension to the STARD statement for AI-centred diagnostic accuracy studies. *Nat Med.* 2025;31:3283-3289. doi:[10.1038/s41591-025-03953-8](https://doi.org/10.1038/s41591-025-03953-8)
+根拠: データ源、AIシステム、評価・検証フローを監査可能に残す設計に反映。
+
+[5] **Gao Y, Xiong Y, Gao X, et al.** Retrieval-Augmented Generation for Large Language Models: A Survey. arXiv:2312.10997. [https://arxiv.org/abs/2312.10997](https://arxiv.org/abs/2312.10997)
+根拠: evidenceText原文引用、PDF物理突合、ハルシネーション検出、PubMed/抄録14フィールドの根拠接地型チェックに反映。
 
 設計仕様の詳細根拠は `Dataex仕様書.md` を参照してください。
 

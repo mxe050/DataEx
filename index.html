@@ -131,15 +131,37 @@
     </div>
   </section>
 
-  <section class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border border-purple-200 shadow-sm p-6 mb-8 fade-in fade-d4">
-    <h3 class="text-lg font-bold text-purple-900 mb-3 flex items-center gap-2">
-      📚 エビデンスベース設計
-    </h3>
-    <p class="text-xs text-slate-700 leading-relaxed mb-3">本アプリは以下2つのpeer-reviewed論文の知見に基づき、データ抽出を最適化:</p>
-    <ul class="text-xs text-slate-700 space-y-2 list-disc pl-5">
-      <li><b>Vivekanantha P, et al.</b> Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. <i>Knee Surg Sports Traumatol Arthrosc.</i> 2026;1-19. doi:10.1002/ksa.70412 — 384データ点中 95.1% で少なくとも一方のモデルが正解</li>
-      <li><b>Laignelot F, et al.</b> Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. <i>J Clin Epidemiol.</i> 2026;194:112221. doi:10.1016/j.jclinepi.2026.112221 — 63研究148評価のシステマティックレビュー、データ抽出 accuracy 0.36–1.00 中央値0.95</li>
-    </ul>
+  <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-8 fade-in fade-d4">
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-4">
+      <div>
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+          📚 エビデンスベース設計
+        </h3>
+        <p class="text-xs text-slate-600 leading-relaxed mt-1">
+          DataEx は、dual-LLM 抽出研究、LLM systematic review、AI報告ガイドライン、根拠接地型生成の知見を組み合わせて設計しています。
+        </p>
+      </div>
+      <a href="meta-analysis-extractor%20v3-opus47.html" class="text-[11px] font-bold text-blue-700 underline">アプリ内の参考文献タブで詳しく見る</a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+      <div class="bg-purple-50 border border-purple-200 rounded-lg p-3">
+        <div class="font-bold text-purple-900 mb-1">🔬 dual-MODEL / 9カテゴリ判定</div>
+        <p class="text-slate-700 leading-relaxed"><a href="https://doi.org/10.1002/ksa.70412" target="_blank" rel="noopener" class="text-blue-700 underline font-semibold">Vivekanantha P, et al. KSTA, 2026</a> — GPT-5.2 + Gemini 3 Pro の dual-LLM 方式で、384データ点中95.1%が少なくとも一方のモデルで正解。DataExでは Flash Lite + Flash の独立並列抽出、不一致フィールド優先レビュー、§6エラー検出に反映。</p>
+      </div>
+      <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div class="font-bold text-blue-900 mb-1">🛡 人間検証 / 再現性チェック</div>
+        <p class="text-slate-700 leading-relaxed"><a href="https://pubmed.ncbi.nlm.nih.gov/41831731/" target="_blank" rel="noopener" class="text-blue-700 underline font-semibold">Laignelot F, et al. J Clin Epidemiol, 2026</a> — 63研究148評価のレビューで、LLMのSR支援は有望だがデータ抽出精度に幅があると報告。DataExではヒト最終照合、3-run安定性検証、Audit Logに反映。</p>
+      </div>
+      <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+        <div class="font-bold text-emerald-900 mb-1">📋 透明なAI報告</div>
+        <p class="text-slate-700 leading-relaxed"><a href="https://pubmed.ncbi.nlm.nih.gov/32908283/" target="_blank" rel="noopener" class="text-blue-700 underline font-semibold">CONSORT-AI, Nat Med, 2020</a> と <a href="https://doi.org/10.1038/s41591-025-03953-8" target="_blank" rel="noopener" class="text-blue-700 underline font-semibold">STARD-AI, Nat Med, 2025</a> — AI利用時の透明な報告フレーム。DataExではモデル名、設定、プロンプト、検証手順を Methods / Audit JSON として出力。</p>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <div class="font-bold text-amber-900 mb-1">🧾 根拠接地 / 抄録ファースト安全策</div>
+        <p class="text-slate-700 leading-relaxed"><a href="https://arxiv.org/abs/2312.10997" target="_blank" rel="noopener" class="text-blue-700 underline font-semibold">Gao Y, et al. RAG Survey, arXiv</a> の根拠接地の考え方を、evidenceText引用、PDF物理突合、PubMed/抄録14フィールド、N(analyzed)・primary endpoint・群取り違えチェックに反映。</p>
+      </div>
+    </div>
   </section>
 
   <section class="bg-rose-50 border border-rose-200 rounded-xl p-5 mb-8 fade-in fade-d4">
