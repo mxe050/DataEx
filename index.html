@@ -44,7 +44,7 @@
 
 <main class="max-w-5xl mx-auto px-6 py-12">
   <section class="text-center mb-12 fade-in">
-    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3.7 Complete Edition · 図表専用抽出 + RevMan XML + R解析パイプライン + 複数論文集約 + HTMLレポート</div>
+    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3.8 Abstract Safety Edition · PubMed抄録14フィールド + 参考文献タブ + RevMan XML + R解析パイプライン</div>
     <h2 class="text-4xl sm:text-5xl font-extrabold text-slate-800 mb-4">
       RCT論文から<br class="sm:hidden"/><span class="gradient-text">メタ分析データを最適化抽出</span>
     </h2>
@@ -58,7 +58,7 @@
       <div class="gradient-bg text-white px-6 py-5 flex items-center justify-between">
         <div>
           <div class="text-[11px] font-bold opacity-80">LATEST / RECOMMENDED</div>
-          <div class="text-xl font-bold">v3.5 dual-MODEL Edition</div>
+          <div class="text-xl font-bold">v3.8 Abstract Safety + dual-MODEL Edition</div>
         </div>
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
       </div>
@@ -67,6 +67,8 @@
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>🔬 <b>dual-MODEL モード</b>: 2つのGeminiモデルで独立並列抽出 (Vivekanantha 2026 方式)</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📊 <b>9カテゴリ判定</b>: 各フィールドを「両一致 / 部分一致 / 要確認」に自動分類</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>⚠ <b>§6 エラーパターン自動検出</b>: 分散値欠落・アームスワップ・単位欠落・SE/SD混同</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>🧾 <b>PubMed/抄録14フィールド</b>: PMID・筆頭著者・N(analyzed)・primary endpoint・群別結果・有意性を自己検証付きで整理</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📚 <b>参考文献タブ</b>: 主要文献の英語/日本語サマリー、リンク、DataExへの実装根拠を一覧表示</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📋 <b>CONSORT-AI / STARD-AI 準拠 Methods 自動生成</b> + 完全 Audit Log export</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>Google AI Studio 無料APIキーで動作（CC登録不要）・複数キーで枠拡張</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>503 過負荷時に Flash Lite ↔ Flash 自動フォールバック</li>
@@ -93,6 +95,14 @@
       <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
         <div class="font-bold text-purple-900 mb-1">📋 CONSORT-AI Methods</div>
         <div class="text-xs text-purple-800">論文Methods欄に貼れるテキストを自動生成</div>
+      </div>
+      <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+        <div class="font-bold text-blue-900 mb-1">🧾 抄録ファースト安全策</div>
+        <div class="text-xs text-blue-800">PMID、N(analyzed)、Primary endpoint、群別結果、Sig/NSを抽出前後で確認</div>
+      </div>
+      <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+        <div class="font-bold text-blue-900 mb-1">📚 参考文献タブ</div>
+        <div class="text-xs text-blue-800">実装根拠の英語/日本語サマリーとリンクをアプリ内に整理</div>
       </div>
       <div class="bg-slate-50 p-4 rounded-lg">
         <div class="font-bold text-slate-800 mb-1">📊 全アウトカム網羅</div>

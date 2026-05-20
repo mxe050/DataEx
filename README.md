@@ -4,7 +4,9 @@ RCT（ランダム化比較試験）論文から、システマティックレ�
 
 > **エビデンスベース設計**: Vivekanantha 2026 (KSA 70412) が GPT-5.2 + Gemini 3 Pro の dual-LLM で 384 データ点中 95.1% の少なくとも一方正解率を達成した枠組みを、Gemini内 Flash Lite + Flash で再現しています。
 
-## 主な特徴 (v3.7 Complete Edition)
+## 主な特徴 (v3.8 Abstract Safety Edition)
+
+> **v3.8 追加**: PubMed/抄録14フィールド抽出 (PMID, 1st Author, Journal, Year, Study Name, N analyzed, Design, Intervention, Primary Outcome, Intervention/Control Result, P-value/Effect Size, Significance, Key Finding), 抄録ベース自己検証 (N analyzed優先、primary/secondary混同防止、介入/対照取り違え防止、p値-Sig/NS整合), 参考文献タブ (英語サマリー + 日本語サマリー + クリック可能リンク + DataEx実装根拠), CADe領域の実例ベースアンチパターンをCritic/Stage6監査に追加
 
 > **v3.7 追加**: events vs % 厳密分離 (RevMan安全), CONSORT から n_total 自動推定, events>n_total 整合性チェック, 結果フィルタ・ソート・キーワードハイライト, 抽出ログCSV, 図表専用抽出パス (Moonlight/Gemini 3.0方式), RevMan XML (.rm5互換), R metafor 解析パイプライン (escalc/rma/forest 自動生成), 複数論文集約セッション + 集約TSV, HTML プリント可能レポート, 設定 JSON エクスポート/インポート
 
@@ -33,6 +35,18 @@ RCT（ランダム化比較試験）論文から、システマティックレ�
 ### 🧪 Pilot mode (Elicit 方式)
 - 本実行前に「最初の2-3アウトカムだけ」テスト抽出 → プロンプト/コホートフィルタを調整 → 本実行
 - 無料枠とトークンを節約しつつ抽出戦略を最適化
+
+### 🧾 PubMed/抄録ファースト安全策
+- 抄録から `PMID`, `1st Author`, `Journal`, `Year`, `Study Name`, `N (analyzed)`, `Design`, `Intervention`, `Primary Outcome`, `Intervention Result`, `Control Result`, `P-value / Effect Size`, `Significance`, `Key Finding` を中間データとして抽出
+- 抄録に記載のない値は `NR (not reported)` と明記し、推測・記憶・外部知識で補完しない
+- `N (analyzed)` は enrolled/randomized ではなく final analysis / analyzed のNを優先
+- `Primary Outcome` は primary endpoint と明示された指標だけを採用し、secondary outcome の有意差と混同しない
+- control group が先に記載される抄録でも、介入群/対照群の向きを保持
+- p値と `Sig / NS / Borderline` の整合を自己検証
+
+### 📚 参考文献タブ
+- アプリ内ヘッダーの「参考文献」から、主要文献の英語サマリー・日本語サマリー・リンク・DataExでの実装根拠を一覧表示
+- CONSORT-AI / STARD-AI / RAG / dual-LLM / LLM systematic review の根拠を Methods 出力にも反映
 
 ### 📑 PDF→Markdown 変換 (HubMeta 方式)
 - pdf.js のテキスト座標から行/見出し/表構造を推定 → Markdown 形式で LLM に送信
@@ -76,9 +90,10 @@ RCT（ランダム化比較試験）論文から、システマティックレ�
 4. アプリの「APIキー」欄に貼り付け、「全キー接続テスト」で確認
 5. （任意）**🔬 dual-MODEL モード** を有効化 → モデルA(主) と モデルB(副) を選択
 6. PICO を入力、PDFをドラッグ＆ドロップ、「抽出実行」
-7. 結果画面で 9カテゴリ判定バッジと §6 エラーフラグを確認 → 不一致フィールドを優先的に検証
+7. 結果画面で抄録サマリー、9カテゴリ判定バッジ、§6 エラーフラグを確認 → N(analyzed)、primary endpoint、介入/対照の向き、不一致フィールドを優先的に検証
+8. 「参考文献」タブで実装根拠とリンクを確認
 
-詳細な手順は、アプリ内の「**使い方ガイド**」（6セクション）に記載があります。
+詳細な手順は、アプリ内の「**使い方ガイド**」（7セクション）に記載があります。
 
 ## 対応モデル（無料枠目安・2026年初頭時点）
 
@@ -159,7 +174,7 @@ Google Cloud の無料枠は **プロジェクト単位** で計上されます�
 
 ## バージョン
 
-- [`meta-analysis-extractor v3-opus47.html`](meta-analysis-extractor%20v3-opus47.html) — **最新版** (v3.5 dual-MODEL Edition / Vivekanantha 2026 方式 / §6 エラー検出 / CONSORT-AI Methods 出力)
+- [`meta-analysis-extractor v3-opus47.html`](meta-analysis-extractor%20v3-opus47.html) — **最新版** (v3.8 Abstract Safety + dual-MODEL Edition / PubMed抄録14フィールド / 参考文献タブ / §6 エラー検出 / CONSORT-AI Methods 出力)
 - [`meta-analysis-extractor v2ー1.html`](meta-analysis-extractor%20v2%E3%83%BC1.html) — 旧版（Gemini API単独・dual-MODEL 非対応）
 
 ## 技術スタック
