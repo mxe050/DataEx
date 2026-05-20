@@ -47,7 +47,7 @@
 
 <main class="max-w-5xl mx-auto px-6 py-12">
   <section class="text-center mb-12 fade-in">
-    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3.9 Automation Safety Edition · PubMed抄録14フィールド + 参考文献ページ + RevMan XML + R解析パイプライン</div>
+    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3.10 PubMed Workflow Safety Edition · PubMed抄録14フィールド + 参考文献ページ + RevMan XML + R解析パイプライン</div>
     <h2 class="text-4xl sm:text-5xl font-extrabold text-slate-800 mb-4">
       RCT論文から<br class="sm:hidden"/><span class="gradient-text">メタ分析データを最適化抽出</span>
     </h2>
@@ -61,7 +61,7 @@
       <div class="gradient-bg text-white px-6 py-5 flex items-center justify-between">
         <div>
           <div class="text-[11px] font-bold opacity-80">LATEST / RECOMMENDED</div>
-          <div class="text-xl font-bold">v3.9 Automation Safety + dual-MODEL Edition</div>
+          <div class="text-xl font-bold">v3.10 PubMed Workflow Safety + dual-MODEL Edition</div>
         </div>
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
       </div>
@@ -72,6 +72,7 @@
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>⚠ <b>§6 エラーパターン自動検出</b>: 分散値欠落・アームスワップ・単位欠落・SE/SD混同</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>🧾 <b>PubMed/抄録14フィールド</b>: PMID・筆頭著者・N(analyzed)・primary endpoint・群別結果・有意性を自己検証付きで整理</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>🧠 <b>Automation Safety</b>: 6バケット漏れ確認 + auto-ready / human-check / manual-only 判定</li>
+          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>🧾 <b>PubMed Workflow Safety</b>: batch切断リスク、get_full_abstract再取得、misallocation/omission監査</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📚 <b>参考文献ページ</b>: 主要文献の英語/日本語サマリー、リンク、DataExへの実装根拠を一覧表示</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📋 <b>CONSORT-AI / STARD-AI 準拠 Methods 自動生成</b> + 完全 Audit Log export</li>
           <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>Google AI Studio 無料APIキーで動作（CC登録不要）・複数キーで枠拡張</li>
@@ -107,6 +108,10 @@
       <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
         <div class="font-bold text-emerald-900 mb-1">🧠 Automation Safety</div>
         <div class="text-xs text-emerald-800">6バケット漏れ確認と自動化レベル判定で、人間確認すべき項目を優先表示</div>
+      </div>
+      <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
+        <div class="font-bold text-emerald-900 mb-1">🧾 PubMed Workflow Safety</div>
+        <div class="text-xs text-emerald-800">抄録batch切断・誤配置・見落としを検出し、再取得と中間JSON検証を促す</div>
       </div>
       <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
         <div class="font-bold text-blue-900 mb-1">📚 参考文献ページ</div>
