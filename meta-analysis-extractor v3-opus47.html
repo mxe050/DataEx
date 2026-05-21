@@ -5453,7 +5453,7 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
     [selectedAlgorithmRuns]
   );
   const speedupWarnings = useMemo(
-    () => getSpeedupWarnings({ speedOptions, selectedVariants: selectedAlgorithmVariants, dualMode, modelB, pico, outcomes }),
+    () => getSpeedupWarnings({ speedOptions: speedupOptions, selectedVariants: selectedAlgorithmVariants, dualMode, modelB, pico, outcomes }),
     [speedupOptions, selectedAlgorithmVariants, dualMode, modelB, pico, outcomes]
   );
   const toggleAlgorithmRun = (variantId) => {
