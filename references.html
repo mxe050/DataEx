@@ -17,10 +17,10 @@
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/20 min-h-screen text-slate-800">
   <header class="bg-white/80 backdrop-blur-sm border-b border-slate-200 py-5 px-6 sticky top-0 z-10">
-    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div>
         <h1 class="text-xl font-extrabold gradient-text">DataEx References</h1>
-        <p class="text-xs text-slate-500">データ抽出設計に関する参考文献</p>
+        <p class="text-xs text-slate-500">ここまで参照した文献・GitHub・公式ドキュメント</p>
       </div>
       <nav class="flex flex-wrap items-center gap-2 text-xs font-bold">
         <a href="index.html" class="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 px-3 py-2 rounded-lg">表紙</a>
@@ -30,11 +30,13 @@
     </div>
   </header>
 
-  <main class="max-w-5xl mx-auto px-6 py-10">
+  <main class="max-w-6xl mx-auto px-6 py-10">
     <section class="text-center mb-8">
       <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">References</div>
-      <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-800 mb-3">参考文献</h2>
-      <p class="text-sm text-slate-600 max-w-2xl mx-auto">DataExのデータ抽出設計に関連する主要文献です。</p>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-800 mb-3">参考文献・参考ページ</h2>
+      <p class="text-sm text-slate-600 max-w-3xl mx-auto">
+        DataExの設計検討で参照した論文、GitHub、公式ドキュメントの一覧です。現在アプリのアルゴリズムへ実装済みとして扱っているものは2文献のみです。
+      </p>
     </section>
 
     <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -42,35 +44,120 @@
         <table class="min-w-full text-sm">
           <thead class="bg-slate-100 text-slate-700">
             <tr>
-              <th class="text-left px-5 py-3 w-1/2">文献</th>
-              <th class="text-left px-5 py-3">サマリー</th>
-              <th class="text-left px-5 py-3 w-32">リンク</th>
+              <th class="text-left px-4 py-3 w-32">状態</th>
+              <th class="text-left px-4 py-3 min-w-80">文献・ページ</th>
+              <th class="text-left px-4 py-3 min-w-96">短い解説</th>
+              <th class="text-left px-4 py-3 w-40">リンク</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200 align-top">
             <tr>
-              <td class="px-5 py-5 leading-relaxed">
-                <b>Vivekanantha P, et al.</b> Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. <i>Knee Surg Sports Traumatol Arthrosc.</i> 2026;1-19. doi:10.1002/ksa.70412 — 384データ点中 95.1% で少なくとも一方のモデルが正解
-              </td>
-              <td class="px-5 py-5 leading-relaxed text-slate-700">
-                システマティックレビューのデータ抽出におけるdual-LLM方式の有用性を評価した研究。384データ点のうち95.1%で少なくとも一方のモデルが正解したと報告しています。
-              </td>
-              <td class="px-5 py-5 whitespace-nowrap">
-                <a class="paper-link font-semibold" href="https://doi.org/10.1002/ksa.70412" target="_blank" rel="noopener">DOI</a><br/>
-                <a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/42015569/" target="_blank" rel="noopener">PubMed</a>
-              </td>
+              <td class="px-4 py-4"><span class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-1 rounded-full text-xs font-bold">実装済み</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Vivekanantha P, et al.</b> Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. <i>Knee Surg Sports Traumatol Arthrosc.</i> 2026;1-19. doi:10.1002/ksa.70412</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">dual-LLM方式によるシステマティックレビュー用データ抽出の研究。384データ点中95.1%で少なくとも一方のモデルが正解した点を、独立並列抽出と不一致レビューの設計根拠として参照しています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.1002/ksa.70412" target="_blank" rel="noopener">DOI</a><br/><a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/42015569/" target="_blank" rel="noopener">PubMed</a></td>
             </tr>
             <tr>
-              <td class="px-5 py-5 leading-relaxed">
-                <b>Laignelot F, et al.</b> Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. <i>J Clin Epidemiol.</i> 2026;194:112221. doi:10.1016/j.jclinepi.2026.112221 — 63研究148評価のシステマティックレビュー、データ抽出 accuracy 0.36–1.00 中央値0.95
-              </td>
-              <td class="px-5 py-5 leading-relaxed text-slate-700">
-                システマティックレビュー支援におけるLLMの性能を整理したレビュー。データ抽出精度は研究やタスクにより幅があり、慎重な実装と人間による確認が必要とされています。
-              </td>
-              <td class="px-5 py-5 whitespace-nowrap">
-                <a class="paper-link font-semibold" href="https://doi.org/10.1016/j.jclinepi.2026.112221" target="_blank" rel="noopener">DOI</a><br/>
-                <a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/41831731/" target="_blank" rel="noopener">PubMed</a>
-              </td>
+              <td class="px-4 py-4"><span class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-1 rounded-full text-xs font-bold">実装済み</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Laignelot F, et al.</b> Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. <i>J Clin Epidemiol.</i> 2026;194:112221. doi:10.1016/j.jclinepi.2026.112221</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">LLMによるシステマティックレビュー支援の性能を整理したレビュー。データ抽出精度に幅があるため、DataExでは人間による最終確認とAudit Logを前提にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.1016/j.jclinepi.2026.112221" target="_blank" rel="noopener">DOI</a><br/><a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/41831731/" target="_blank" rel="noopener">PubMed</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Fan S, et al.</b> Evaluating data extraction error by a large language model from randomised controlled trials: a large-scale empirical study. 2026. PMID: 42055792.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">RCTからのLLMデータ抽出エラーを大規模に調べた研究として参照。見落とし、誤配置、群やアウトカムの取り違えなど、抽出後チェックの重要性を補強します。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/42055792/" target="_blank" rel="noopener">PubMed</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Shokraneh F.</b> Classification of LLM Errors in Data Extraction for Systematic Reviews and Factors Affecting the LLM-Based Tool's Performance. Medium. 2026.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">LLM抽出エラーを分類し、発生しやすいパターンを整理した解説。未抽出、誤配置、誤解釈、二次引用などをチェック項目として考える際の参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://farhadinfo.medium.com/classification-of-llm-errors-in-data-extraction-for-systematic-reviews-and-factors-affecting-the-4549f5c68467" target="_blank" rel="noopener">Medium</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>masa-med-ai/pubmed-systematic-review.</b> PubMed Systematic Review — 正確な文献データ収集のためのワークフロー. GitHub. 2026.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">PubMed検索、PMID取得、full abstractの小分け取得、中間JSON検証、出力という安全な作業手順を提示するGitHubページ。PubMedベースの抽出ワークフローを検討する際に参照しました。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://github.com/masa-med-ai/pubmed-systematic-review" target="_blank" rel="noopener">GitHub</a><br/><a class="paper-link font-semibold" href="https://x.com/masa_ai_med/status/2057074876708778257" target="_blank" rel="noopener">Demo</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>mxe05064 note.</b> 20260520：データ抽出に関しての情報各種.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">今回の検討対象文献やリンクをまとめたnoteページ。DataExの参考文献整理と、どの情報をアプリ内に入れるかを判断するための入口として参照しました。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://note.com/mxe05064/n/n332de67c26ed?app_launch=false" target="_blank" rel="noopener">note</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Gartlehner G, et al.</b> Data extraction for evidence synthesis using a large language model: a proof-of-concept study. <i>Res Synth Methods.</i> 2024;15(4):576-589. doi:10.1002/jrsm.1710</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">LLMによるエビデンス統合向けデータ抽出の概念実証研究。抽出自動化の可能性と、見落とし確認・人間検証の必要性を考える参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.1002/jrsm.1710" target="_blank" rel="noopener">DOI</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Lieberum JL, et al.</b> Use and performance of large language models in systematic reviews: a scoping review. <i>J Clin Epidemiol.</i> 2025;181:111746. doi:10.1016/j.jclinepi.2025.111746</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">システマティックレビューでのLLM利用を広く整理したスコーピングレビュー。DataExでは、LLM抽出を最終判断にせず、検証可能な補助ツールとして扱う方針の参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.1016/j.jclinepi.2025.111746" target="_blank" rel="noopener">DOI</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Yun HS, et al.</b> Automatic extraction of numerical results from randomized controlled trials. arXiv:2405.01686. 2024.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">RCTから数値結果を抽出する課題を扱うベンチマークとして参照。events/denominator、平均/分散、効果量と比較方向を分けて扱う重要性を確認する材料です。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://arxiv.org/abs/2405.01686" target="_blank" rel="noopener">arXiv</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Daraqel B, et al.</b> Reliability of artificial intelligence assisted data extraction in evidence synthesis. <i>J Dent.</i> 2025;160:105846. doi:10.1016/j.jdent.2025.105846</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">AI支援抽出と手動抽出の一致を検討した研究として参照。AI抽出の効率化と、根拠不足・図表のみ・分散値欠落などを人間が確認する必要性を示します。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.1016/j.jdent.2025.105846" target="_blank" rel="noopener">DOI</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Cao C, et al.</b> Automated systematic review workflows using large language model agents. medRxiv. 2025. doi:10.1101/2025.06.13.25329541</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">LLMエージェントでSRワークフローを自動化する方向性を示したpreprint。PDF処理、抽出、差分確認、監査ログという構成を検討する参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.1101/2025.06.13.25329541" target="_blank" rel="noopener">DOI</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Li L, Mathrani A, Susnjak T.</b> Benchmarking large language models for data extraction in meta-analysis. arXiv:2507.15152. 2025.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">メタ分析向けデータ抽出でのLLM性能を評価するベンチマークとして参照。高いprecisionでも重要項目の省略が残りうるため、検証優先度を分ける発想につながります。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://arxiv.org/abs/2507.15152" target="_blank" rel="noopener">arXiv</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Gartlehner G, et al.</b> Artificial intelligence assisted data extraction in systematic reviews: a study within reviews. <i>Ann Intern Med.</i> 2025;178(12):1763-1771. doi:10.7326/ANNALS-25-00739</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">複数のレビュー内でAI支援抽出と人間のみの抽出を比較した研究。AIで初稿を作り、人間が確認・裁定する運用設計の参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.7326/ANNALS-25-00739" target="_blank" rel="noopener">DOI</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Liu X, et al.</b> Reporting guidelines for clinical trial reports for interventions involving artificial intelligence: the CONSORT-AI extension. <i>Nat Med.</i> 2020;26:1364-1374.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">AIを含む臨床試験報告の透明性を高めるための報告ガイドライン。モデル名、設定、検証手順などを明示する考え方を、Methods/Auditの参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/32908283/" target="_blank" rel="noopener">PubMed</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Sounderajah V, et al.</b> STARD-AI reporting guideline for diagnostic accuracy studies involving artificial intelligence. <i>Nat Med.</i> 2025. doi:10.1038/s41591-025-03953-8</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">AIを含む診断精度研究の報告透明性に関するガイドライン。AI利用時の再現性、モデル条件、検証手順を記録する考え方を参照しています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://doi.org/10.1038/s41591-025-03953-8" target="_blank" rel="noopener">DOI</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Gao Y, et al.</b> Retrieval-Augmented Generation for Large Language Models: A Survey. arXiv:2312.10997.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">RAGと根拠接地の考え方を整理したサーベイ。DataExでは、数値抽出時に根拠原文を残し、PDF上で照合できるようにする設計の参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://arxiv.org/abs/2312.10997" target="_blank" rel="noopener">arXiv</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">公式</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>Google AI for Developers.</b> Gemini API rate limits / models / AI Studio active rate limits.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">Gemini APIで利用可能なモデル、モデルID、レート制限の確認に使用した公式情報。アプリのモデル選択肢と、AI Studioのレート制限ページへの導線の参考にしています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener">Rate limits</a><br/><a class="paper-link font-semibold" href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener">Models</a><br/><a class="paper-link font-semibold" href="https://aistudio.google.com/rate-limit?timeRange=last-7-days" target="_blank" rel="noopener">AI Studio</a></td>
+            </tr>
+            <tr>
+              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">GitHub</span></td>
+              <td class="px-4 py-4 leading-relaxed"><b>mxe050/DataEx.</b> DataEx project repository and GitHub Pages.</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">DataEx本体のソースコードと公開ページ。今回の修正ではアルゴリズム本体を大きく変えず、参考文献ページ、PRISMA flow表示、モデル選択UIを中心に更新しています。</td>
+              <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://github.com/mxe050/DataEx/" target="_blank" rel="noopener">GitHub</a><br/><a class="paper-link font-semibold" href="https://mxe050.github.io/DataEx/" target="_blank" rel="noopener">Pages</a></td>
             </tr>
           </tbody>
         </table>

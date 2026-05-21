@@ -579,6 +579,29 @@ const EXTRACT_SCHEMA_JSON = {
         sourceLocation: { type: "string" }, pageNumber: { type: "integer" }
       }
     },
+    prismaFlow: {
+      type: "object",
+      description: "PRISMA flow diagram からの抽出（SR/メタ分析論文用）",
+      properties: {
+        recordsIdentified: { type: "string" },
+        recordsFromDatabases: { type: "string" },
+        recordsFromRegisters: { type: "string" },
+        recordsFromOtherSources: { type: "string" },
+        duplicatesRemoved: { type: "string" },
+        recordsScreened: { type: "string" },
+        recordsExcluded: { type: "string" },
+        reportsSoughtForRetrieval: { type: "string" },
+        reportsNotRetrieved: { type: "string" },
+        reportsAssessedForEligibility: { type: "string" },
+        reportsExcluded: { type: "string" },
+        studiesIncludedInReview: { type: "string" },
+        studiesIncludedInMetaAnalysis: { type: "string" },
+        evidenceText: { type: "string" },
+        sourceLocation: { type: "string" },
+        pageNumber: { type: "integer" },
+        notes: { type: "string" }
+      }
+    },
     statisticalMethods: { type: "array", items: { type: "string" } },
     baselineCharacteristics: {
       type: "array",
@@ -612,7 +635,7 @@ const EXTRACT_SCHEMA_JSON = {
           effectEstimate: { type: "object", properties: { measureType:{type:"string"}, value:{type:"string"}, ci95:{type:"string"}, pValue:{type:"string"} }},
           evidenceText: { type: "string", description: "原文の英語(または論文言語)を改変せず引用。表/図からの場合は表セル・軸ラベル等を文字起こし" },
           evidenceTextJa: { type: "string", description: "evidenceText の日本語訳（数値はそのまま、医学用語は適切に訳出）" },
-          figureType: { type: "string", description: "出典が図表の場合の種別: Table | BarChart | LineChart | KaplanMeier | ForestPlot | Boxplot | None" },
+          figureType: { type: "string", description: "出典が図表の場合の種別: Table | BarChart | LineChart | KaplanMeier | ForestPlot | Boxplot | FlowDiagram | PRISMAFlow | None" },
           sourceLocation: { type: "string" },
           notes: { type: "string" }, pageNumber: { type: "integer" },
           confidence: { type: "string" }, sdOrSe: { type: "string" }
@@ -657,11 +680,12 @@ const SLIM_EXTRACT_SCHEMA_JSON = {
 };
 const SLIM_EXTRACT_SCHEMA_GEMINI = toGeminiSchema(SLIM_EXTRACT_SCHEMA_JSON);
 
-// 補完用スキーマ：baseline + expertCommentary + paperQuality + consortFlow を別呼出で取得
+// 補完用スキーマ：baseline + expertCommentary + paperQuality + consortFlow/prismaFlow を別呼出で取得
 const SUPPLEMENT_SCHEMA_JSON = {
   type: "object",
   properties: {
     consortFlow: EXTRACT_SCHEMA_JSON.properties.consortFlow,
+    prismaFlow: EXTRACT_SCHEMA_JSON.properties.prismaFlow,
     baselineCharacteristics: EXTRACT_SCHEMA_JSON.properties.baselineCharacteristics,
     expertCommentary: EXTRACT_SCHEMA_JSON.properties.expertCommentary,
     paperQualityAssessment: EXTRACT_SCHEMA_JSON.properties.paperQualityAssessment
@@ -728,22 +752,32 @@ const CRITIC_SCHEMA = {
 /* ============================================================
    SECTION 4: GEMINI PROVIDER (Google AI Studio 専用)
    ============================================================ */
-// Google AI Studio で利用可能なモデル一覧（2026年4月時点の無料枠の実測値）
-// ※ Gemma は textOnly: PDFや画像入力非対応 → 抽出済みテキストのみで処理
-// ※ Gemini 2.5 Flash 系は RPD=20/日と厳しいが、マルチモーダル対応
-// ※ Gemini 2.5 Pro は無料枠なし（Billing 有効化必要）
-// 精度重視の構成：Flash Lite (推奨) と Flash の2モデルのみ
-// 各モデル無料枠 = 20 req/日。本アプリは 1論文 = 3 req（核心+補完+Critic監査）
-//   → 5論文/日が現実的な上限（残り 5 req は再抽出/選択範囲抽出のバッファ）
+// Google AI Studio / Gemini API で利用可能なテキスト出力モデル一覧
+// 2026-05時点の公式 Models / Rate limits を元に、DataExで使うPDF・画像入力 + JSON出力向けだけを表示
+// 実際のRPM/RPDはプロジェクトのtierで変わるため、AI Studio Rate limitsページで確認する
 const GEMINI_MODELS = [
-  { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite (推奨/精度重視)", thinking: false, supportsSchema: true, textOnly: false, rpm: 10, rpd: 20, tpm: 250000, maxOut: 64000, tag: "推奨", note: "JSON Schema厳守 + 3パス精度最大化。5論文/日想定。出力64K" },
-  { id: "gemini-2.5-flash",      name: "Gemini 2.5 Flash (思考モード/最高品質)", thinking: true,  supportsSchema: true, textOnly: false, rpm: 5,  rpd: 20, tpm: 250000, maxOut: 65536, tag: "最高品質", note: "思考トークン搭載で最高精度。RPM 5でやや詰まりやすい" }
+  { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite (既定/安定)", thinking: false, supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 64000, tag: "既定", note: "既定モデル。従来の抽出精度を維持するため、初期値は変更していません。" },
+  { id: "gemini-2.5-flash",      name: "Gemini 2.5 Flash (思考/高品質)", thinking: true,  supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 65536, tag: "高品質", note: "思考トークン対応。重要論文や図表の解釈で精度を優先したい時に選択。" },
+  { id: "gemini-2.5-pro",        name: "Gemini 2.5 Pro (高精度)", thinking: true,  supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 65536, tag: "Pro", note: "複雑な論文向け。利用可否と上限はAI Studio Rate limitsで確認してください。" },
+  { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash-Lite (高速)", thinking: true, supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 65536, tag: "高速", note: "公式Modelsに掲載の低遅延・低コストのマルチモーダルモデル。PDF/画像入力とStructured outputs対応。" },
+  { id: "gemini-3.5-flash",      name: "Gemini 3.5 Flash (現行Flash)", thinking: true, supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 65536, tag: "現行", note: "公式Modelsに掲載の現行Flash。PDF/画像入力、Structured outputs、Thinking対応。" },
+  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", thinking: true, supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 65536, tag: "Preview", note: "公式Modelsに掲載のPro Preview。Previewモデルは上限や可用性が変わりやすいのでAI Studioで確認してください。" },
+  { id: "gemini-3-flash-preview", name: "Gemini 3 Flash Preview", thinking: true, supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 65536, tag: "Preview", note: "gemini-3.5-flashページに記載のPreview系。使える場合のみ選択してください。" },
+  { id: "gemini-2.0-flash",      name: "Gemini 2.0 Flash (旧/互換)", thinking: false, supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 8192, tag: "旧", note: "旧世代モデル。公式では移行推奨のため、互換目的でのみ使用。" },
+  { id: "gemini-2.0-flash-lite", name: "Gemini 2.0 Flash-Lite (旧/互換)", thinking: false, supportsSchema: true, textOnly: false, rpm: "AI Studio", rpd: "AI Studio", tpm: "AI Studio", maxOut: 8192, tag: "旧", note: "旧世代の軽量モデル。公式では移行推奨のため、互換目的でのみ使用。" }
 ];
 
 // 503/429 で本モデルが詰まった時の自動フォールバック先
 const FALLBACK_CHAIN = {
-  "gemini-2.5-flash-lite": ["gemini-2.5-flash"],
-  "gemini-2.5-flash":      ["gemini-2.5-flash-lite"]
+  "gemini-2.5-flash-lite": ["gemini-2.5-flash", "gemini-3.1-flash-lite"],
+  "gemini-2.5-flash":      ["gemini-2.5-flash-lite", "gemini-3.5-flash"],
+  "gemini-2.5-pro":        ["gemini-2.5-flash", "gemini-2.5-flash-lite"],
+  "gemini-3.1-flash-lite": ["gemini-2.5-flash-lite", "gemini-3.5-flash"],
+  "gemini-3.5-flash":      ["gemini-3.1-flash-lite", "gemini-2.5-flash"],
+  "gemini-3.1-pro-preview": ["gemini-3.5-flash", "gemini-2.5-flash"],
+  "gemini-3-flash-preview": ["gemini-3.5-flash", "gemini-3.1-flash-lite"],
+  "gemini-2.0-flash":      ["gemini-2.5-flash-lite"],
+  "gemini-2.0-flash-lite": ["gemini-2.5-flash-lite"]
 };
 
 const GEMINI = {
@@ -752,8 +786,30 @@ const GEMINI = {
   defaultModel: "gemini-2.5-flash-lite",
   keyFormat: "AIza...",
   docsUrl: "https://aistudio.google.com/apikey",
+  rateLimitUrl: "https://aistudio.google.com/rate-limit?timeRange=last-7-days",
   signup: "https://aistudio.google.com/"
 };
+
+function isModelIdLike(value) {
+  return /^[a-z0-9][a-z0-9.-]{2,80}$/i.test(String(value || '').trim());
+}
+
+function getGeminiModelInfo(modelId) {
+  const id = String(modelId || '').trim();
+  return GEMINI_MODELS.find(m => m.id === id) || {
+    id,
+    name: `${id || GEMINI.defaultModel} (AI Studio指定)`,
+    thinking: /pro|flash|3\./i.test(id),
+    supportsSchema: true,
+    textOnly: false,
+    rpm: "AI Studio",
+    rpd: "AI Studio",
+    tpm: "AI Studio",
+    maxOut: 65536,
+    tag: "Custom",
+    note: "AI Studio Rate limitsページで表示されたモデルIDを直接指定しています。PDF/画像入力とStructured outputsに対応するモデルを選んでください。"
+  };
+}
 
 // 複数キーを順番に使うラウンドロビン（同プロジェクトのキーは枠を共有しますが、別プロジェクトのキーなら無料枠が掛け算で増えます）
 function makeKeyRotator(keys) {
@@ -992,14 +1048,14 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
   const rawChain = [model, ...(FALLBACK_CHAIN[model] || [])];
   const modelChain = rawChain.filter(mid => {
     if (mid === model) return true; // 指定モデルは必ず試す
-    const info = GEMINI_MODELS.find(x => x.id === mid);
+    const info = getGeminiModelInfo(mid);
     if (hasMedia && info?.textOnly) return false; // メディア含むコールでテキスト専用は除外
     return true;
   });
 
   for (let mIdx = 0; mIdx < modelChain.length; mIdx++) {
     const tryModel = modelChain[mIdx];
-    const modelInfo = GEMINI_MODELS.find(m => m.id === tryModel) || {};
+    const modelInfo = getGeminiModelInfo(tryModel);
     if (mIdx > 0) notice(`⚠️ あなたが選択した ${model} が利用不可 → 自動で ${tryModel} に切替`);
 
     // モデルごとにリクエストボディを構築
@@ -1164,7 +1220,7 @@ async function callGemini({ rotator, model, systemPrompt, userText, pdfBase64, i
           failureLog.push({ model: tryModel, reason: `${attempt+1}回連続短期レート制限`, recoverable: 'wait' });
           let errMsg = `❌ 抽出失敗（全モデル試行済）\n\n【試行履歴】\n`;
           errMsg += failureLog.map(f => `  ・${f.model}: ${f.reason}`).join('\n');
-          errMsg += `\n\n💡 対処:\n・1〜2分待ってから再試行（短期制限は1分で回復）\n・Google AI Studio ダッシュボードで RPD/TPM/RPM の使用率を確認\n・別プロジェクトのキーを追加して負荷分散\n・3パス精度パイプライン (核心+補完+Critic) は1論文=3コール → 5論文/日が上限`;
+          errMsg += `\n\n💡 対処:\n・1〜2分待ってから再試行（短期制限は1分で回復）\n・Google AI Studio Rate limitsで RPD/TPM/RPM の使用率を確認\n・別プロジェクトのキーを追加して負荷分散\n・本アプリは1論文=3コール以上を使うため、選択モデルのRPDに余裕を持って実行`;
           throw new Error(errMsg);
         }
       }
@@ -3026,6 +3082,8 @@ function buildDualLLMResult(resultA, resultB, modelAId, modelBId) {
     out.baselineCharacteristics = resultB.baselineCharacteristics;
   }
   if (resultB?.consortFlow && !out.consortFlow) out.consortFlow = resultB.consortFlow;
+  if (resultA?.prismaFlow) out.prismaFlow = resultA.prismaFlow;
+  if (resultB?.prismaFlow && !out.prismaFlow) out.prismaFlow = resultB.prismaFlow;
   if (resultB?.expertCommentary && (!out.expertCommentary || resultB.expertCommentary.length > out.expertCommentary.length * 1.3)) {
     out.expertCommentary = (out.expertCommentary || '') + (out.expertCommentary ? '\n\n【モデルB所見】\n' : '') + resultB.expertCommentary;
   }
@@ -3157,6 +3215,7 @@ function mergeResults(primary, secondary) {
 
   // CONSORT flow
   if (secondary.consortFlow && !result.consortFlow) result.consortFlow = secondary.consortFlow;
+  if (secondary.prismaFlow && !result.prismaFlow) result.prismaFlow = secondary.prismaFlow;
 
   // Paper quality
   if (secondary.paperQualityAssessment && !result.paperQualityAssessment) result.paperQualityAssessment = secondary.paperQualityAssessment;
@@ -3205,7 +3264,7 @@ function applyCorrections(extracted, criticReview) {
 
 // Main extraction pipeline (3パス精度最大化版)
 // Stage1: PDF準備 / Stage2: 核心抽出 / Stage3: 補完抽出 / Stage4: Critic監査 (原文照合で誤り補正)
-// 1論文 = 3 APIコール → 5論文/日 (RPD 20/日) が現実的上限
+// 1論文 = 3 APIコール以上。実行可能数は選択モデルとAI Studio Rate limitsに依存
 // getModel: 各ステージ開始時に最新のモデルを取得する関数（抽出中の手動変更に追従）
 async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, outcomes, onProgress, onNotice, pilotMode, useMarkdown }) {
   // Vivekanantha 2026 A2 方式: コホート選択ロジックをプロンプト内に直書き
@@ -3223,7 +3282,7 @@ async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, 
   if (rotator.size === 0) throw new Error("APIキーが設定されていません");
   // 各ステージで最新モデルを読み取れるようにする
   const liveModel = () => (getModel ? getModel() : null) || model;
-  const initialModelInfo = GEMINI_MODELS.find(m => m.id === liveModel()) || GEMINI_MODELS[0];
+  const initialModelInfo = getGeminiModelInfo(liveModel());
   // PDF画像化判定は最初のモデルを基準（途中変更されてもStage1の挙動には影響しない）
   const isMultimodal = !initialModelInfo.textOnly;
 
@@ -3260,7 +3319,7 @@ async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, 
   // 各ステージ実行時の最新モデルとそれに基づく挙動
   const stageModelInfo = (stage) => {
     const m = liveModel();
-    const info = GEMINI_MODELS.find(x => x.id === m) || GEMINI_MODELS[0];
+    const info = getGeminiModelInfo(m);
     if (m !== model) onNotice && onNotice(`🔄 ${stage}: モデル変更を反映 → ${info.name.replace(/\s*\(.+/, '')}`);
     return info;
   };
@@ -3315,7 +3374,7 @@ ${sourceText.substring(0, isMultimodal ? 40000 : 80000)}`;
       onModelUsed: (actualModel) => { stagesUsed.core = actualModel; }
     });
   } catch (e) {
-    throw new Error(`抽出に失敗しました: ${e.message}\n\n💡 ヒント:\n・Flash Lite なら出力64K で安定、Flash は思考モードで精度向上\n・1論文 = 3 リクエスト消費。連投で RPD 20/日を超えると失敗するので 5論文/日 以内に\n・複数キー登録で 429/503 を回避（別プロジェクトのキーで枠が掛け算）`);
+    throw new Error(`抽出に失敗しました: ${e.message}\n\n💡 ヒント:\n・既定のFlash Liteは従来挙動を維持。必要に応じてAI Studioで利用可能な別モデルへ切替\n・1論文 = 3 リクエスト以上を消費。連投時はAI Studio Rate limitsでRPD/RPMを確認\n・複数キー登録で 429/503 を回避（別プロジェクトのキーで枠が掛け算）`);
   }
 
   // === Stage 3: 補完抽出 ===（最新モデルで実行 — 抽出中の手動切替に追従）
@@ -3327,9 +3386,10 @@ ${sourceText.substring(0, isMultimodal ? 40000 : 80000)}`;
 
 【タスク】上記論文から以下のみを抽出してください（アウトカム数値は別コールで取得済みなので不要）：
 1. consortFlow: CONSORT Flow Diagram のN数（無作為化/割付/解析/脱落）
-2. baselineCharacteristics: Table 1 の患者背景（年齢・性別等）。各項目に介入群/対照群の n・値・SD・% を抽出
-3. expertCommentary: メタ分析実装上の注意点（800文字以内）
-4. paperQualityAssessment: 論文の質的評価（500文字以内）
+2. prismaFlow: PRISMA Flow Diagram のN数（identified / screened / excluded / included / meta-analysis）
+3. baselineCharacteristics: Table 1 の患者背景（年齢・性別等）。各項目に介入群/対照群の n・値・SD・% を抽出
+4. expertCommentary: メタ分析実装上の注意点（800文字以内）
+5. paperQualityAssessment: 論文の質的評価（500文字以内）
 
 【⚠ 出力サイズ厳守】expertCommentary 800文字以内、paperQualityAssessment 500文字以内、各 baseline 行の文字列値は短く
 
@@ -3348,6 +3408,7 @@ ${sourceText.substring(0, 40000)}`;
     });
     if (supplement) {
       if (supplement.consortFlow) extracted.consortFlow = supplement.consortFlow;
+      if (supplement.prismaFlow) extracted.prismaFlow = supplement.prismaFlow;
       if (supplement.baselineCharacteristics) extracted.baselineCharacteristics = supplement.baselineCharacteristics;
       if (supplement.expertCommentary) extracted.expertCommentary = supplement.expertCommentary;
       if (supplement.paperQualityAssessment) extracted.paperQualityAssessment = supplement.paperQualityAssessment;
@@ -3599,7 +3660,7 @@ ${pdfText.substring(0, 30000)}
   // どのステージで何のモデルが使われたかを表示
   const allSame = stagesUsed.core === stagesUsed.supplement && stagesUsed.core === stagesUsed.critic;
   extracted._sources = allSame
-    ? [`${GEMINI_MODELS.find(m => m.id === stagesUsed.core)?.name || stagesUsed.core} [3パス精度最大化 + Stage5後処理]`]
+    ? [`${getGeminiModelInfo(stagesUsed.core)?.name || stagesUsed.core} [3パス精度最大化 + Stage5後処理]`]
     : [`核心: ${stagesUsed.core} / 補完: ${stagesUsed.supplement || '-'} / Critic: ${stagesUsed.critic || '-'} / 後処理: n%正規化+PDF突合`];
   extracted._stagesUsed = stagesUsed;
   onProgress("complete", "抽出完了", 100);
@@ -3685,7 +3746,7 @@ async function runFigureOnlyExtraction({ apiKeys, model, pdfFile, pico, onProgre
   if (!pdfFile) throw new Error('PDF未指定');
   const rotator = makeKeyRotator(apiKeys);
   if (rotator.size === 0) throw new Error('APIキー未設定');
-  const modelInfo = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[0];
+  const modelInfo = getGeminiModelInfo(model);
   if (modelInfo.textOnly) throw new Error('図表抽出はマルチモーダルモデルが必要');
 
   onProgress('stage1', '図表抽出: PDFを高解像度画像に変換中...', 5);
@@ -3693,7 +3754,7 @@ async function runFigureOnlyExtraction({ apiKeys, model, pdfFile, pico, onProgre
   onProgress('stage2', `図表抽出: ${images.length}ページ分の画像を LLM に送信...`, 30);
 
   const figurePrompt = `あなたは医学論文の **図表専門アナリスト** です。
-提供されたPDF画像 (各ページ) の **図 (Figure)・表 (Table)・グラフ・KMカーブ・棒グラフ・boxplot** からのみ数値を抽出してください。
+提供されたPDF画像 (各ページ) の **図 (Figure)・表 (Table)・グラフ・KMカーブ・棒グラフ・boxplot・PRISMAフローチャート** からのみ数値を抽出してください。
 
 【最優先タスク】
 1. **Table** (Table 1, 2, 3...): 全行・全列を網羅的に読み取り、各セルの数値を抽出
@@ -3701,12 +3762,27 @@ async function runFigureOnlyExtraction({ apiKeys, model, pdfFile, pico, onProgre
 3. **Forest plot** (メタ分析論文内): 各サブグループの効果量・CI を抽出
 4. **Bar chart / Line chart**: Y軸目盛り読み取り、各バー/点の値を近似
 5. **Boxplot**: median, IQR, range を box とヒゲから読取り
+6. **PRISMA flow diagram**: identified / screened / excluded / included / meta-analysis の件数を prismaFlow に抽出（アウトカムとして無理に変換しない）
 
 【PICO設定】 P: ${pico.p} / I: ${pico.i} / C: ${pico.c}
 ${pico.cohortFilter ? `\n【コホートフィルタ】\n${pico.cohortFilter.trim()}\n` : ''}
 
-【出力】 各図表 1要素 1 outcome として、après 拙形式で:
+【出力】 各図表 1要素 1 outcome として、以下の形式で:
 {
+  "prismaFlow": {
+    "recordsIdentified": "...",
+    "duplicatesRemoved": "...",
+    "recordsScreened": "...",
+    "recordsExcluded": "...",
+    "reportsAssessedForEligibility": "...",
+    "reportsExcluded": "...",
+    "studiesIncludedInReview": "...",
+    "studiesIncludedInMetaAnalysis": "...",
+    "evidenceText": "PRISMA flow上の原文と数値",
+    "sourceLocation": "Figure X / PRISMA flow diagram",
+    "pageNumber": 数字,
+    "notes": ""
+  },
   "figureExtractedOutcomes": [
     {
       "actualOutcomeName": "アウトカム名",
@@ -3735,7 +3811,8 @@ ${pico.cohortFilter ? `\n【コホートフィルタ】\n${pico.cohortFilter.tri
       figureExtractedOutcomes: {
         type: 'array',
         items: EXTRACT_SCHEMA_JSON.properties.extractedOutcomes.items
-      }
+      },
+      prismaFlow: EXTRACT_SCHEMA_JSON.properties.prismaFlow
     }
   });
 
@@ -3753,6 +3830,7 @@ ${pico.cohortFilter ? `\n【コホートフィルタ】\n${pico.cohortFilter.tri
   const figs = figResp?.figureExtractedOutcomes || [];
   return {
     figureOnly: true,
+    prismaFlow: figResp?.prismaFlow || null,
     extractedOutcomes: figs.map(o => ({ ...o, _figureOnly: true, notes: (o.notes || '') + ' [図表専用パス]' })),
     paperPICO: { P: pico.p, I: pico.i, C: pico.c },
     statisticalMethods: [],
@@ -4171,14 +4249,28 @@ function GeminiKeyCard({ apiKeys, onChange, model, onModelChange, onVerify, veri
         <div>
           <label className="block text-[11px] font-semibold text-slate-700 mb-1.5">使用モデル</label>
           <select value={model} onChange={e => onModelChange(e.target.value)} className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg text-xs font-mono bg-white focus:outline-none focus:border-purple-500">
+            {!GEMINI_MODELS.some(m => m.id === model) && model && (
+              <option value={model}>{model} (AI Studio指定)</option>
+            )}
             {GEMINI_MODELS.map(m => (
               <option key={m.id} value={m.id}>
-                {m.name} — {m.paid ? '有料のみ' : `無料 ${m.rpm}/分・${m.rpd.toLocaleString()}/日`}
+                {m.name} — 上限はAI Studioで確認
               </option>
             ))}
           </select>
+          <div className="mt-1.5 flex flex-col sm:flex-row gap-1.5">
+            <input
+              value={model}
+              onChange={e => onModelChange(e.target.value.trim())}
+              placeholder="AI Studio Rate limits に表示された model id を貼り付け"
+              className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-[10px] font-mono focus:outline-none focus:border-purple-500"
+            />
+            <a href={GEMINI.rateLimitUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1.5 rounded font-bold text-center whitespace-nowrap">
+              Rate limitsで確認
+            </a>
+          </div>
           {(() => {
-            const sel = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[0];
+            const sel = getGeminiModelInfo(model);
             return (
               <div className="mt-1.5 space-y-1">
                 <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
@@ -4227,7 +4319,7 @@ function GeminiKeyCard({ apiKeys, onChange, model, onModelChange, onVerify, veri
                 </select>
               </div>
               <div className="text-[10px] text-purple-900 bg-white border border-purple-200 rounded px-2 py-1">
-                ⚠ 1論文 = <b>6 APIコール</b> (3パス × 2モデル) を消費。無料枠20/日では <b>3論文/日</b> が実用上限。
+                ⚠ 1論文 = <b>6 APIコール</b> (3パス × 2モデル) を消費。上限は選択モデルとプロジェクトtierに依存します。
               </div>
             </div>
           )}
@@ -4371,18 +4463,18 @@ function UsageGuide() {
       body: (
         <div className="space-y-3">
           <div>
-            <b className="text-slate-800">無料枠の目安（モデル別）</b>
+            <b className="text-slate-800">上限の確認（モデル別）</b>
             <table className="w-full text-[11px] border border-slate-200 mt-1.5 rounded overflow-hidden">
               <thead className="bg-slate-100">
-                <tr><th className="px-2 py-1 text-left">モデル</th><th className="px-2 py-1 text-center">RPM(分)</th><th className="px-2 py-1 text-center">RPD(日)</th><th className="px-2 py-1 text-left">超えたら</th></tr>
+                <tr><th className="px-2 py-1 text-left">モデル</th><th className="px-2 py-1 text-center">RPM</th><th className="px-2 py-1 text-center">RPD</th><th className="px-2 py-1 text-left">確認先</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {GEMINI_MODELS.map(m => (
-                  <tr key={m.id}><td className="px-2 py-1 font-mono">{m.id}</td><td className="px-2 py-1 text-center">{m.rpm}</td><td className="px-2 py-1 text-center">{m.rpd}</td><td className="px-2 py-1 text-slate-600">1〜2分待つ／翌日UTC0時(日本朝9時)復活</td></tr>
+                  <tr key={m.id}><td className="px-2 py-1 font-mono">{m.id}</td><td className="px-2 py-1 text-center">{m.rpm}</td><td className="px-2 py-1 text-center">{m.rpd}</td><td className="px-2 py-1 text-slate-600">AI Studio Rate limits</td></tr>
                 ))}
               </tbody>
             </table>
-            <p className="text-[10px] text-slate-500 mt-1">※ 上記は2026年初頭時点の目安。実際の上限値は <a href="https://ai.google.dev/gemini-api/docs/rate-limits" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">公式ドキュメント</a> でご確認ください。</p>
+            <p className="text-[10px] text-slate-500 mt-1">※ 実際の上限値はプロジェクトとtierで変わります。<a href="https://aistudio.google.com/rate-limit?timeRange=last-7-days" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">AI Studio Rate limits</a> で現在使えるモデルと上限を確認してください。</p>
           </div>
           <div className="bg-blue-50 border border-blue-200 rounded p-2.5 text-blue-900">
             <p className="font-bold mb-1">💡 実際の使用量を確認する方法</p>
@@ -4419,7 +4511,7 @@ function UsageGuide() {
               <p className="font-semibold mt-1">それでもダメな場合:</p>
               <ul className="list-disc pl-5 space-y-0.5">
                 <li>1〜5分待ってから再実行</li>
-                <li>モデルを <b>Gemini 2.0 Flash</b> や <b>Flash Lite</b> に切替（無料枠が大きい）</li>
+                <li>AI Studio Rate limitsで利用可能な別モデルに切替</li>
                 <li>別プロジェクトで作った2個目のキーを登録（無料枠が掛け算で増える）</li>
                 <li>ブラウザの広告ブロッカー／プライバシー拡張機能を一時OFF</li>
                 <li>会社/学校のネットワークだと <code className="bg-slate-100 px-1 rounded">generativelanguage.googleapis.com</code> がブロックされている可能性 → 自宅Wi-Fi等で試す</li>
@@ -4445,7 +4537,7 @@ function UsageGuide() {
             <div className="p-3 text-[11px] space-y-1.5 bg-white">
               <ul className="list-disc pl-5 space-y-0.5">
                 <li>無料枠は <b>RPM（分単位）</b> と <b>RPD（日単位）</b> の<b>両方</b>でカウントされる。短時間連投で RPM に当たることが多い → 1〜2分待つ</li>
-                <li>本アプリは <b>1論文 = 3リクエスト</b>（精度最大化の3パス）。<b>5論文/日が実用上限</b></li>
+                <li>本アプリは <b>1論文 = 3リクエスト以上</b>（精度最大化の3パス）。RPD/RPMはAI Studio Rate limitsで確認</li>
                 <li>RPDが残っていない可能性 → 翌日UTC0時（日本朝9時）まで待つか、別プロジェクトのキーを追加（複数キー登録で枠が掛け算）</li>
               </ul>
             </div>
@@ -4552,7 +4644,7 @@ function SetupPage({ onComplete, initialConfig }) {
   // モデル: localStorage に古い無効ID（gemma 等）が残っている場合は default にフォールバック
   const initialModel = (() => {
     const cached = initialConfig.model || initialConfig.providers?.gemini?.model;
-    if (cached && GEMINI_MODELS.find(m => m.id === cached)) return cached;
+    if (cached && isModelIdLike(cached)) return cached;
     return GEMINI.defaultModel;
   })();
   const [apiKeys, setApiKeys] = useState(initialKeys);
@@ -4563,7 +4655,7 @@ function SetupPage({ onComplete, initialConfig }) {
   const [dualMode, setDualMode] = useState(!!initialConfig.dualMode);
   const [modelB, setModelB] = useState(() => {
     const cached = initialConfig.modelB;
-    if (cached && GEMINI_MODELS.find(m => m.id === cached) && cached !== initialModel) return cached;
+    if (cached && isModelIdLike(cached) && cached !== initialModel) return cached;
     // デフォルトの副モデル: 主モデルと異なるもの
     const other = GEMINI_MODELS.find(m => m.id !== initialModel);
     return other ? other.id : '';
@@ -4599,8 +4691,8 @@ function SetupPage({ onComplete, initialConfig }) {
 
   const handleStart = () => {
     // 保存前に再度検証（無効ID防止）
-    const validatedModel = GEMINI_MODELS.find(m => m.id === model) ? model : GEMINI.defaultModel;
-    let validatedModelB = GEMINI_MODELS.find(m => m.id === modelB) ? modelB : '';
+    const validatedModel = isModelIdLike(model) ? model.trim() : GEMINI.defaultModel;
+    let validatedModelB = isModelIdLike(modelB) ? modelB.trim() : '';
     if (validatedModelB === validatedModel) {
       const other = GEMINI_MODELS.find(m => m.id !== validatedModel);
       validatedModelB = other ? other.id : '';
@@ -4641,14 +4733,14 @@ function SetupPage({ onComplete, initialConfig }) {
                 <li><b>同じPDFを2つのGeminiモデルで独立に並列抽出</b> (Vivekanantha 2026 KSA 70412 [1] が GPT-5.2 + Gemini 3 Pro で 384データ点中 95.1% 少なくとも片方正解を達成した枠組みを Gemini内 Flash Lite + Flash で再現)</li>
                 <li><b>9カテゴリ判定</b>で各フィールドを「両一致正解 / 部分一致 / 不一致」の3層に自動分類。<b>不一致のみ人間検証に回せる</b>ためレビュー負荷激減</li>
                 <li><b>§6 エラーパターン自動検出</b>: 分散値欠落・Primary/Revisionスワップ・単位欠落・SE/SD混同・分母欠落・ハルシネーション疑いを後処理ルールで検出</li>
-                <li>1論文 = 6 APIコール (3パス × 2モデル) → <b>3論文/日が実用上限</b>（無料枠20/日内）</li>
+                <li>1論文 = 6 APIコール (3パス × 2モデル)。実用上限は選択モデルとプロジェクトtierに依存するため、AI Studio Rate limitsで確認</li>
               </ul>
             </div>
             <div className="bg-white/70 border border-blue-200 rounded p-2">
               <p className="font-bold mb-1">📊 単一モデル（軽量）</p>
               <ul className="space-y-1 list-disc pl-5">
-                <li><b>Gemini 2.5 Flash Lite</b>: マルチモーダル + JSON Schema 厳守。1論文=3コール → <b>5論文/日</b></li>
-                <li><b>Gemini 2.5 Flash</b>: 思考トークン搭載で最高精度。重要論文向け</li>
+                <li><b>既定は Gemini 2.5 Flash Lite</b>: 既存アルゴリズムの挙動を維持</li>
+                <li><b>AI Studio Rate limitsに出ているGeminiモデル</b>を選択またはモデルID直接入力で利用可能</li>
               </ul>
             </div>
             <ul className="space-y-1 list-disc pl-5">
@@ -4820,15 +4912,16 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
   const [showDiag, setShowDiag] = useState(false);
   useEffect(() => { modelRef.current = model; }, [model]);
   const handleModelChange = (newModel) => {
-    if (!GEMINI_MODELS.find(m => m.id === newModel)) return;
-    setModel(newModel);
-    modelRef.current = newModel;
+    const nextModel = String(newModel || '').trim();
+    if (!isModelIdLike(nextModel)) return;
+    setModel(nextModel);
+    modelRef.current = nextModel;
     // localStorage にも反映（次回起動でも保持）
     try {
       const cfg = loadConfig();
-      saveConfig({ ...cfg, model: newModel });
+      saveConfig({ ...cfg, model: nextModel });
     } catch (e) { console.warn('config save failed', e); }
-    const info = GEMINI_MODELS.find(m => m.id === newModel);
+    const info = getGeminiModelInfo(nextModel);
     const isExtracting = status === 'running';
     setTimeout(() => setToast({
       message: isExtracting
@@ -4951,7 +5044,7 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
     if (type === 'image' && !image) { showToast("画像が取得できませんでした", "error"); return; }
 
     setExtractingFromSelection(true);
-    const modelInfo = GEMINI_MODELS.find(m => m.id === model) || GEMINI_MODELS[0];
+    const modelInfo = getGeminiModelInfo(model);
     // 画像抽出時、選択モデルがテキスト専用なら自動で Flash Lite に切替
     const targetModel = (type === 'image' && modelInfo.textOnly) ? 'gemini-2.5-flash-lite' : model;
     if (targetModel !== model) showToast(`📷 画像抽出のため ${targetModel} に切替`, 'info');
@@ -5388,8 +5481,8 @@ ${pdfText.substring(0, 30000)}`;
   const runFigureOnlyPass = async () => {
     if (!pdfFile) { showToast("PDFをアップロードしてください", "error"); return; }
     if (!apiKeys?.length) { showToast("APIキーが必要", "error"); return; }
-    const modelInfo = GEMINI_MODELS.find(m => m.id === model);
-    if (modelInfo?.textOnly) { showToast("図表抽出にはマルチモーダルモデル(Flash Lite/Flash)を選択してください", "error"); return; }
+    const modelInfo = getGeminiModelInfo(model);
+    if (modelInfo?.textOnly) { showToast("図表抽出にはPDF/画像対応のマルチモーダルモデルを選択してください", "error"); return; }
     setStatus("running");
     setErrMsg("");
     try {
@@ -5401,11 +5494,18 @@ ${pdfText.substring(0, 30000)}`;
       });
       // 既存の result があれば figure-only 抽出を追加、なければ単独表示
       if (result) {
-        setResult(prev => ({ ...prev, extractedOutcomes: [...(prev.extractedOutcomes || []), ...figRes.extractedOutcomes], _figureOnlyAdded: figRes.extractedOutcomes.length }));
-        showToast(`✅ 図表専用抽出: ${figRes.extractedOutcomes.length}件を既存結果に追加`, 'success');
+        setResult(prev => ({
+          ...prev,
+          prismaFlow: figRes.prismaFlow || prev.prismaFlow,
+          extractedOutcomes: [...(prev.extractedOutcomes || []), ...figRes.extractedOutcomes],
+          _figureOnlyAdded: figRes.extractedOutcomes.length
+        }));
+        const prismaMsg = figRes.prismaFlow ? ' / PRISMA flowも抽出' : '';
+        showToast(`✅ 図表専用抽出: ${figRes.extractedOutcomes.length}件を既存結果に追加${prismaMsg}`, 'success');
       } else {
         setResult(figRes);
-        showToast(`✅ 図表専用抽出完了: ${figRes.extractedOutcomes.length}件`, 'success');
+        const prismaMsg = figRes.prismaFlow ? ' / PRISMA flowも抽出' : '';
+        showToast(`✅ 図表専用抽出完了: ${figRes.extractedOutcomes.length}件${prismaMsg}`, 'success');
       }
       setStatus("complete");
     } catch (e) {
@@ -5625,6 +5725,9 @@ ${pdfText.substring(0, 30000)}`;
                 onChange={e => handleModelChange(e.target.value)}
                 className="text-[11px] bg-transparent font-bold text-blue-900 outline-none cursor-pointer pr-1 max-w-[180px]"
               >
+                {!GEMINI_MODELS.some(m => m.id === model) && model && (
+                  <option value={model}>{model} (AI Studio)</option>
+                )}
                 {GEMINI_MODELS.map(m => (
                   <option key={m.id} value={m.id}>{m.name.replace(/\s*\(.+/, '')}{m.thinking ? ' 🧠' : ''}</option>
                 ))}
@@ -5674,7 +5777,7 @@ ${pdfText.substring(0, 30000)}`;
             {pdfFile && status !== 'running' && (
               <button
                 onClick={runFigureOnlyPass}
-                title="図・表・KMカーブ・棒グラフからのみ画像で抽出 (Moonlight / Gemini 3.0 方式)"
+                title="図・表・KMカーブ・棒グラフ・PRISMAフローチャートから画像で抽出"
                 className="text-[10px] bg-orange-600 hover:bg-orange-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold border-2 border-orange-700">
                 📊 図表
               </button>
@@ -6322,6 +6425,22 @@ ${pdfText.substring(0, 30000)}`;
                   </section>
                 )}
 
+                {result.prismaFlow && (
+                  <section className="border border-violet-200 rounded-lg overflow-hidden">
+                    <div className="bg-violet-50 px-2 py-1 border-b border-violet-200"><h3 className="font-semibold text-violet-800">🔎 PRISMA Flow</h3></div>
+                    <table className="w-full" style={{fontSize:`${Math.max(9,leftFontSize*0.9)}px`}}>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr><td className="px-2 py-0.5 text-slate-600">Identified</td><td className="px-2 py-0.5 font-medium">{result.prismaFlow.recordsIdentified || "-"}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">Duplicates removed</td><td className="px-2 py-0.5 font-medium">{result.prismaFlow.duplicatesRemoved || "-"}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">Screened / Excluded</td><td className="px-2 py-0.5 font-medium">{result.prismaFlow.recordsScreened || "-"} / {result.prismaFlow.recordsExcluded || "-"}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">Eligibility / Excluded</td><td className="px-2 py-0.5 font-medium">{result.prismaFlow.reportsAssessedForEligibility || "-"} / {result.prismaFlow.reportsExcluded || "-"}</td></tr>
+                        <tr><td className="px-2 py-0.5 text-slate-600">Included review / meta-analysis</td><td className="px-2 py-0.5 font-medium">{result.prismaFlow.studiesIncludedInReview || "-"} / {result.prismaFlow.studiesIncludedInMetaAnalysis || "-"}</td></tr>
+                        {result.prismaFlow.sourceLocation && <tr><td className="px-2 py-0.5 text-slate-600">Source</td><td className="px-2 py-0.5 font-medium">{result.prismaFlow.sourceLocation}</td></tr>}
+                      </tbody>
+                    </table>
+                  </section>
+                )}
+
                 {result.baselineCharacteristics?.length > 0 && (
                   <section className="border border-emerald-200 rounded-lg overflow-hidden">
                     <div className="bg-emerald-50 px-2 py-1 border-b border-emerald-200 flex items-center justify-between">
@@ -6613,8 +6732,8 @@ function App() {
 
   const handleSetupComplete = ({ apiKeys, model, modelB, dualMode }) => {
     // 二重防御: 無効モデルIDが渡された場合はデフォルトに戻す
-    const validModel = GEMINI_MODELS.find(m => m.id === model) ? model : GEMINI.defaultModel;
-    let validModelB = GEMINI_MODELS.find(m => m.id === modelB) ? modelB : '';
+    const validModel = isModelIdLike(model) ? model.trim() : GEMINI.defaultModel;
+    let validModelB = isModelIdLike(modelB) ? modelB.trim() : '';
     if (validModelB === validModel) validModelB = '';
     setApiKeys(apiKeys);
     setModel(validModel);
