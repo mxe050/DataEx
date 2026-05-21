@@ -1459,6 +1459,51 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
   }
 ];
 
+const SPEEDUP_OPTION_DEFS = [
+  {
+    id: 'parallelRounds',
+    no: 1,
+    label: 'Round並列実行',
+    summary: '選択したRoundを同時に開始します。',
+    merit: '待ち時間を短縮。抽出プロンプトとモデル設定は変えません。',
+    demerit: '同時API呼び出しが増え、429/503やrate limitに当たりやすくなります。'
+  },
+  {
+    id: 'cachePdfPreprocessing',
+    no: 2,
+    label: 'PDF解析キャッシュ',
+    summary: '同じPDFのテキスト・画像・Markdown前処理を再利用します。',
+    merit: '同一PDFの再抽出や複数Roundで前処理時間を短縮。精度への影響は原則ありません。',
+    demerit: '同名・同サイズ・同更新時刻の別PDFではキャッシュ誤用リスクがごく小さくあります。'
+  },
+  {
+    id: 'shareRoundPreprocessing',
+    no: 3,
+    label: 'Round間で前処理共有',
+    summary: '今回の抽出中、PDF前処理を1回だけ作って各Roundへ渡します。',
+    merit: 'Round 1/2/3の重複したPDF準備を削減。抽出アルゴリズム本体は同じです。',
+    demerit: 'モデル能力が異なる場合、不足分の画像前処理だけ追加実行されることがあります。'
+  },
+  {
+    id: 'conditionalHeavyTasks',
+    no: 4,
+    label: '重い図表処理を条件付き化',
+    summary: '図表/PRISMA/KMなどの指定がない時だけ画像パスを省略します。',
+    merit: '画像レンダリングと画像送信を減らせるため、大きなPDFで速くなります。',
+    demerit: '図だけにある重要数値を見落とす可能性があります。精度最優先の本番抽出ではOFF推奨です。'
+  },
+  {
+    id: 'reuseCachedResults',
+    no: 5,
+    label: '同一条件なら前回結果を再利用',
+    summary: 'この画面を開いている間、PDF・PICO・アウトカム・モデル・Round条件が同じならAPIを呼ばず前回結果を表示します。',
+    merit: '完全な再実行を避けられるため最速。前回と同じ結果を再確認できます。',
+    demerit: 'プロンプトやアプリ実装を変えた直後は、古い結果を再表示する可能性があります。'
+  }
+];
+
+const DEFAULT_SPEEDUP_OPTIONS = SPEEDUP_OPTION_DEFS.reduce((acc, opt) => ({ ...acc, [opt.id]: false }), {});
+
 function getExtractionAlgorithmVariant(id) {
   return EXTRACTION_ALGORITHM_VARIANTS.find(v => v.id === id) || EXTRACTION_ALGORITHM_VARIANTS[0];
 }
@@ -1479,6 +1524,76 @@ function attachAlgorithmVariant(result, variantId) {
     description: variant.description
   };
   return result;
+}
+
+function hasSpeedup(speedOptions, id) {
+  return !!(speedOptions && speedOptions[id]);
+}
+
+function getFileIdentity(file) {
+  if (!file) return 'no-file';
+  return `${file.name || 'file'}|${file.size || 0}|${file.lastModified || 0}`;
+}
+
+function stableCacheString(value) {
+  return JSON.stringify(value, (key, val) => {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      return Object.keys(val).sort().reduce((acc, k) => {
+        acc[k] = val[k];
+        return acc;
+      }, {});
+    }
+    return val;
+  });
+}
+
+function cloneForCache(value) {
+  if (!value) return value;
+  try {
+    if (typeof structuredClone === 'function') return structuredClone(value);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(value));
+}
+
+function needsVisualPdfPath({ pico, outcomes }) {
+  const haystack = [
+    pico?.p, pico?.i, pico?.c, pico?.cohortFilter,
+    ...(outcomes || []).flatMap(o => [o.name, o.definition])
+  ].join(' ').toLowerCase();
+  return /(figure|fig\.|table|graph|chart|kaplan|km|forest|flow|prisma|consort|diagram|supplement|appendix|図|表|グラフ|カーブ|曲線|フロー|フローチャート|プリズマ|補足|付録)/i.test(haystack);
+}
+
+function getSpeedupWarnings({ speedOptions, selectedVariants, dualMode, modelB, pico, outcomes }) {
+  const warnings = [];
+  const selectedCount = selectedVariants?.length || 0;
+  if (hasSpeedup(speedOptions, 'parallelRounds') && selectedCount > 1) {
+    warnings.push('Round並列実行: API同時実行数が増えるため、429/503が出た場合はOFFにしてください。');
+  }
+  if (hasSpeedup(speedOptions, 'parallelRounds') && dualMode && modelB && selectedVariants?.some(v => v.id === 'current')) {
+    warnings.push('Round並列実行 + dual-MODEL: Round 1内部でも2モデル並列のため、同時リクエストが多くなります。');
+  }
+  if (hasSpeedup(speedOptions, 'conditionalHeavyTasks') && !needsVisualPdfPath({ pico, outcomes })) {
+    warnings.push('条件付き図表処理: 図表/PRISMA/KM指定が見つからないため画像パスを省略します。図だけの数値がある論文ではOFF推奨です。');
+  }
+  if (hasSpeedup(speedOptions, 'reuseCachedResults') && hasSpeedup(speedOptions, 'conditionalHeavyTasks')) {
+    warnings.push('前回結果再利用: 条件付き図表処理ON/OFFはキャッシュキーに含めます。条件を変えれば再抽出されます。');
+  }
+  return warnings;
+}
+
+function buildExtractionResultCacheKey({ pdfFile, pico, outcomes, model, modelB, dualMode, pilotMode, useMarkdown, variantId, speedOptions }) {
+  return stableCacheString({
+    file: getFileIdentity(pdfFile),
+    pico,
+    outcomes: (outcomes || []).map(o => ({ name: o.name || '', definition: o.definition || '' })),
+    model,
+    modelB: (dualMode && variantId === 'current') ? modelB : '',
+    dualMode: !!dualMode && variantId === 'current',
+    pilotMode: !!pilotMode,
+    useMarkdown: !!useMarkdown,
+    variantId,
+    conditionalHeavyTasks: hasSpeedup(speedOptions, 'conditionalHeavyTasks')
+  });
 }
 
 function normalizeCompareText(v) {
@@ -1892,6 +2007,87 @@ async function getPdfBase64(file) {
   const chunk = 8192;
   for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode.apply(null, bytes.slice(i, i + chunk));
   return btoa(binary);
+}
+
+const __pdfPrepCache = new Map();
+const __extractionResultCache = new Map();
+
+function trimCacheMap(map, maxEntries) {
+  while (map.size > maxEntries) {
+    const oldestKey = map.keys().next().value;
+    map.delete(oldestKey);
+  }
+}
+
+function buildPdfPrepCacheKey(file, { isMultimodal, useMarkdown, imageScale }) {
+  return `${getFileIdentity(file)}|multi:${!!isMultimodal}|md:${!!useMarkdown}|scale:${imageScale || 3.5}`;
+}
+
+function isPreparedPdfContextCompatible(ctx, { isMultimodal, useMarkdown, imageScale }) {
+  if (!ctx || !ctx.pdfText) return false;
+  if (isMultimodal && (!ctx.pdfBase64 || !Array.isArray(ctx.pdfImages))) return false;
+  if (useMarkdown && typeof ctx.pdfMarkdown !== 'string') return false;
+  if (isMultimodal && imageScale && ctx.imageScale && ctx.imageScale < imageScale) return false;
+  return true;
+}
+
+async function preparePdfContext({ pdfFile, isMultimodal, useMarkdown, onProgress, useCache, imageScale = 3.5 }) {
+  const cacheKey = buildPdfPrepCacheKey(pdfFile, { isMultimodal, useMarkdown, imageScale });
+  if (useCache && __pdfPrepCache.has(cacheKey)) {
+    onProgress && onProgress('PDF前処理キャッシュを再利用');
+    const cached = await __pdfPrepCache.get(cacheKey);
+    return { ...cached, _fromCache: true };
+  }
+
+  const prepPromise = (async () => {
+    const tasks = [extractPdfText(pdfFile)];
+    if (isMultimodal) {
+      tasks.push(getPdfBase64(pdfFile));
+      tasks.push(extractPdfImages(pdfFile, m => onProgress && onProgress(m), imageScale));
+    }
+    if (useMarkdown) tasks.push(extractPdfMarkdown(pdfFile).catch(() => ''));
+    const taskResults = await Promise.all(tasks);
+    return {
+      pdfText: taskResults[0],
+      pdfBase64: isMultimodal ? taskResults[1] : null,
+      pdfImages: isMultimodal ? taskResults[2] : null,
+      pdfMarkdown: useMarkdown ? taskResults[isMultimodal ? 3 : 1] : null,
+      isMultimodal,
+      useMarkdown,
+      imageScale,
+      fileIdentity: getFileIdentity(pdfFile)
+    };
+  })();
+
+  if (useCache) {
+    __pdfPrepCache.set(cacheKey, prepPromise);
+    trimCacheMap(__pdfPrepCache, 8);
+  }
+
+  try {
+    const prepared = await prepPromise;
+    return { ...prepared, _fromCache: false };
+  } catch (e) {
+    if (useCache && __pdfPrepCache.get(cacheKey) === prepPromise) __pdfPrepCache.delete(cacheKey);
+    throw e;
+  }
+}
+
+function getCachedExtractionResult(cacheKey) {
+  if (!cacheKey || !__extractionResultCache.has(cacheKey)) return null;
+  const hit = __extractionResultCache.get(cacheKey);
+  hit.lastUsedAt = Date.now();
+  return cloneForCache(hit.result);
+}
+
+function rememberExtractionResult(cacheKey, result) {
+  if (!cacheKey || !result) return;
+  __extractionResultCache.set(cacheKey, {
+    savedAt: Date.now(),
+    lastUsedAt: Date.now(),
+    result: cloneForCache(result)
+  });
+  trimCacheMap(__extractionResultCache, 20);
 }
 
 /* ============================================================
@@ -3401,7 +3597,7 @@ function applyCorrections(extracted, criticReview) {
 // Stage1: PDF準備 / Stage2: 核心抽出 / Stage3: 補完抽出 / Stage4: Critic監査 (原文照合で誤り補正)
 // 1論文 = 3 APIコール以上。実行可能数は選択モデルとAI Studio Rate limitsに依存
 // getModel: 各ステージ開始時に最新のモデルを取得する関数（抽出中の手動変更に追従）
-async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, outcomes, onProgress, onNotice, pilotMode, useMarkdown, algorithmVariant = 'current' }) {
+async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, outcomes, onProgress, onNotice, pilotMode, useMarkdown, algorithmVariant = 'current', speedOptions = {}, preparedPdfContext = null }) {
   // Vivekanantha 2026 A2 方式: コホート選択ロジックをプロンプト内に直書き
   // ユーザーが cohortFilter を入れていれば、必ずプロンプト先頭に注入してアームスワップを防ぐ
   const cohortBlock = (pico.cohortFilter && pico.cohortFilter.trim())
@@ -3421,24 +3617,38 @@ async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, 
   const liveModel = () => (getModel ? getModel() : null) || model;
   const initialModelInfo = getGeminiModelInfo(liveModel());
   // PDF画像化判定は最初のモデルを基準（途中変更されてもStage1の挙動には影響しない）
-  const isMultimodal = !initialModelInfo.textOnly;
+  const visualPathNeeded = needsVisualPdfPath({ pico, outcomes });
+  const skipHeavyVisualPath = hasSpeedup(speedOptions, 'conditionalHeavyTasks') && !visualPathNeeded;
+  const isMultimodal = !initialModelInfo.textOnly && !skipHeavyVisualPath;
+  if (skipHeavyVisualPath && !initialModelInfo.textOnly) {
+    onNotice && onNotice('⚡ 高速化: 図表/PRISMA/KM指定がないため画像パスを省略し、テキスト中心で抽出します');
+  }
 
   // Stage 1: PDF準備
   // - テキスト抽出は常に実施（PDF.js による高品質テキスト抽出）
   // - 画像抽出はマルチモーダルモデル時のみ（textOnly は対象外で速度向上）
   // - useMarkdown=true なら HubMeta 方式の表構造保存付き Markdown 変換も並行実行
   onProgress("stage1", isMultimodal ? "PDF準備中（テキスト + 高解像度画像）..." : "PDF準備中（テキスト抽出）...", 5);
-  const tasks = [extractPdfText(pdfFile)];
-  if (isMultimodal) {
-    tasks.push(getPdfBase64(pdfFile));
-    tasks.push(extractPdfImages(pdfFile, m => onProgress("stage1", m, 15), 3.5));
+  let prepared = isPreparedPdfContextCompatible(preparedPdfContext, { isMultimodal, useMarkdown, imageScale: 3.5 })
+    ? preparedPdfContext
+    : null;
+  if (prepared) {
+    onNotice && onNotice('⚡ 高速化: Round間で共有したPDF前処理を再利用');
+  } else {
+    prepared = await preparePdfContext({
+      pdfFile,
+      isMultimodal,
+      useMarkdown,
+      imageScale: 3.5,
+      useCache: hasSpeedup(speedOptions, 'cachePdfPreprocessing'),
+      onProgress: m => onProgress("stage1", m, 15)
+    });
+    if (prepared._fromCache) onNotice && onNotice('⚡ 高速化: PDF解析キャッシュを再利用');
   }
-  if (useMarkdown) tasks.push(extractPdfMarkdown(pdfFile).catch(() => ''));
-  const taskResults = await Promise.all(tasks);
-  const pdfText = taskResults[0];
-  const pdfBase64 = isMultimodal ? taskResults[1] : null;
-  const pdfImages = isMultimodal ? taskResults[2] : null;
-  const pdfMarkdown = useMarkdown ? taskResults[isMultimodal ? 3 : 1] : null;
+  const pdfText = prepared.pdfText;
+  const pdfBase64 = isMultimodal ? prepared.pdfBase64 : null;
+  const pdfImages = isMultimodal ? prepared.pdfImages : null;
+  const pdfMarkdown = useMarkdown ? prepared.pdfMarkdown : null;
   // pdfText の代わりに markdown 版を使う (より構造保存)
   const sourceText = (useMarkdown && pdfMarkdown && pdfMarkdown.length > 100) ? pdfMarkdown : pdfText;
   onProgress("stage1", isMultimodal ? `PDF準備完了 (${pdfImages.length}ページ画像${useMarkdown ? ' + Markdown' : ''})` : `PDF準備完了 (${useMarkdown && pdfMarkdown ? `Markdown ${pdfMarkdown.length.toLocaleString()}字` : `テキスト ${pdfText.length.toLocaleString()}字`})`, 25);
@@ -3810,7 +4020,7 @@ ${pdfText.substring(0, 30000)}
 // 同じPDFに対して2モデル(Flash Lite と Flash)を独立に並列実行し、
 // 出力を比較・分類・統合する。モデル間で出力を共有しない。
 // ============================================================
-async function runDualExtractionPipeline({ apiKeys, modelA, modelB, pdfFile, pico, outcomes, onProgress, onNotice, onSubProgress, pilotMode, useMarkdown }) {
+async function runDualExtractionPipeline({ apiKeys, modelA, modelB, pdfFile, pico, outcomes, onProgress, onNotice, onSubProgress, pilotMode, useMarkdown, speedOptions = {}, preparedPdfContext = null }) {
   if (modelA === modelB) throw new Error('dual-MODEL: 2モデルは異なるIDを指定してください');
   const t0 = Date.now();
   onProgress('stage1', `dual-MODEL: ${modelA} と ${modelB} を並列実行します...`, 5);
@@ -3834,12 +4044,14 @@ async function runDualExtractionPipeline({ apiKeys, modelA, modelB, pdfFile, pic
     runExtractionPipeline({
       apiKeys, model: modelA, getModel: () => modelA,
       pdfFile, pico, outcomes, pilotMode, useMarkdown,
+      speedOptions, preparedPdfContext,
       onProgress: (s, m, p) => { subA.stage = s; subA.msg = m; subA.pct = p; updateOverall(); },
       onNotice: (m) => onNotice && onNotice(`[A:${modelA}] ${m}`)
     }),
     runExtractionPipeline({
       apiKeys, model: modelB, getModel: () => modelB,
       pdfFile, pico, outcomes, pilotMode, useMarkdown,
+      speedOptions, preparedPdfContext,
       onProgress: (s, m, p) => { subB.stage = s; subB.msg = m; subB.pct = p; updateOverall(); },
       onNotice: (m) => onNotice && onNotice(`[B:${modelB}] ${m}`)
     })
@@ -4171,7 +4383,7 @@ function HeaderHelpPanel({ onClose }) {
     ['dual', '同じPDFを2つのGeminiモデルで独立並列抽出し、不一致フィールドを見つけやすくします。'],
     ['診断', 'API通信ログ、エラー、モデルフォールバック、リクエスト状況をアプリ内で確認します。'],
     ['保存', '現在の抽出結果をJSONファイルとして保存します。Sessionsの保存とは別の単体バックアップです。'],
-    ['データクリア', '抽出結果、比較ビュー、エラー表示、プレビューだけを消します。PICO、PDF、APIキー設定は残します。']
+    ['データクリア', '抽出結果、比較ビュー、エラー表示、プレビュー、同一条件の結果再利用キャッシュを消します。PICO、PDF、APIキー設定は残します。']
   ];
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
@@ -5176,6 +5388,7 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
   const [showDiag, setShowDiag] = useState(false);
   const [showHeaderHelp, setShowHeaderHelp] = useState(false);
   const [selectedAlgorithmRuns, setSelectedAlgorithmRuns] = useState(() => EXTRACTION_ALGORITHM_VARIANTS.map(v => v.id));
+  const [speedupOptions, setSpeedupOptions] = useState(() => ({ ...DEFAULT_SPEEDUP_OPTIONS }));
   useEffect(() => { modelRef.current = model; }, [model]);
   useEffect(() => {
     const next = initialModel || GEMINI.defaultModel;
@@ -5239,6 +5452,10 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
     () => EXTRACTION_ALGORITHM_VARIANTS.filter(v => selectedAlgorithmRuns.includes(v.id)),
     [selectedAlgorithmRuns]
   );
+  const speedupWarnings = useMemo(
+    () => getSpeedupWarnings({ speedOptions, selectedVariants: selectedAlgorithmVariants, dualMode, modelB, pico, outcomes }),
+    [speedupOptions, selectedAlgorithmVariants, dualMode, modelB, pico, outcomes]
+  );
   const toggleAlgorithmRun = (variantId) => {
     setSelectedAlgorithmRuns(prev => {
       const has = prev.includes(variantId);
@@ -5248,6 +5465,9 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
       }
       return has ? prev.filter(id => id !== variantId) : [...prev, variantId];
     });
+  };
+  const toggleSpeedupOption = (optionId) => {
+    setSpeedupOptions(prev => ({ ...prev, [optionId]: !prev[optionId] }));
   };
 
   const editOutcome = (idx, group, field, value) => {
@@ -5274,19 +5494,83 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
     if (!apiKeys?.length) { showToast("APIキーが設定されていません", "error"); return; }
     const variantsToRun = EXTRACTION_ALGORITHM_VARIANTS.filter(v => selectedAlgorithmRuns.includes(v.id));
     if (variantsToRun.length === 0) { showToast("実行するRoundを選択してください", "error"); return; }
+    const speedOptionsForRun = { ...speedupOptions };
+    const warningsForRun = getSpeedupWarnings({ speedOptions: speedOptionsForRun, selectedVariants: variantsToRun, dualMode, modelB, pico, outcomes });
     setErrMsg(""); setResult(null); setAlgorithmRuns(null); setHlQuery(""); setHlPage(null); setPdfSearchText("");
     setStatus("running");
 
     try {
       const completedRuns = [];
       let primaryResult = null;
+      let sharedPreparedPdfContext = null;
+      const selectedVariantIds = variantsToRun.map(v => v.id);
+      const updateAlgorithmRuns = () => {
+        setAlgorithmRuns({
+          runs: [...completedRuns].sort((a, b) => a.runNo - b.runNo),
+          selectedVariantIds,
+          speedupOptions: speedOptionsForRun,
+          generatedAt: new Date().toISOString()
+        });
+      };
+      const progressByVariant = {};
+      const setScaledProgress = (variant, runIndex, totalRuns, stage, msg, pct) => {
+        if (hasSpeedup(speedOptionsForRun, 'parallelRounds') && totalRuns > 1) {
+          progressByVariant[variant.id] = pct || 0;
+          const sum = variantsToRun.reduce((acc, v) => acc + (progressByVariant[v.id] || 0), 0);
+          setProgress(Math.min(99, Math.round(sum / totalRuns)));
+        } else {
+          setProgress(Math.min(99, Math.round(((runIndex * 100) + (pct || 0)) / totalRuns)));
+        }
+        setCurrentStage(stage);
+        setStatusMsg(`${variant.shortLabel}: ${msg}`);
+      };
+
+      if (warningsForRun.length) {
+        warningsForRun.slice(0, 2).forEach((w, i) => setTimeout(() => showToast(w, 'info'), i * 350));
+      }
+
+      if (hasSpeedup(speedOptionsForRun, 'shareRoundPreprocessing')) {
+        const modelInfoA = getGeminiModelInfo(modelRef.current || model);
+        const modelInfoB = modelB ? getGeminiModelInfo(modelB) : null;
+        const visualNeeded = !hasSpeedup(speedOptionsForRun, 'conditionalHeavyTasks') || needsVisualPdfPath({ pico, outcomes });
+        const sharedIsMultimodal = visualNeeded && (!modelInfoA.textOnly || (dualMode && modelB && modelInfoB && !modelInfoB.textOnly));
+        setCurrentStage("stage1");
+        setStatusMsg("高速化: PDF前処理をRound間で共有中...");
+        setProgress(3);
+        sharedPreparedPdfContext = await preparePdfContext({
+          pdfFile,
+          isMultimodal: sharedIsMultimodal,
+          useMarkdown,
+          imageScale: 3.5,
+          useCache: hasSpeedup(speedOptionsForRun, 'cachePdfPreprocessing'),
+          onProgress: m => {
+            setCurrentStage("stage1");
+            setStatusMsg(`高速化: ${m}`);
+            setProgress(8);
+          }
+        });
+        showToast(`⚡ PDF前処理を共有します${sharedPreparedPdfContext._fromCache ? '（キャッシュ再利用）' : ''}`, 'info');
+      }
+
       const runVariant = async (variant, runIndex, totalRuns) => {
         const scaleProgress = (stage, msg, pct) => {
-          const overall = Math.min(99, Math.round(((runIndex * 100) + (pct || 0)) / totalRuns));
-          setCurrentStage(stage);
-          setStatusMsg(`${variant.shortLabel}: ${msg}`);
-          setProgress(overall);
+          setScaledProgress(variant, runIndex, totalRuns, stage, msg, pct);
         };
+        const resultCacheKey = hasSpeedup(speedOptionsForRun, 'reuseCachedResults')
+          ? buildExtractionResultCacheKey({
+              pdfFile, pico, outcomes, model, modelB, dualMode, pilotMode, useMarkdown,
+              variantId: variant.id,
+              speedOptions: speedOptionsForRun
+            })
+          : null;
+        const cachedResult = getCachedExtractionResult(resultCacheKey);
+        if (cachedResult) {
+          showToast(`⚡ ${variant.shortLabel}: 同一条件の前回結果を再利用`, 'info');
+          setScaledProgress(variant, runIndex, totalRuns, "complete", "前回結果を再利用", 100);
+          return attachAlgorithmVariant(cachedResult, variant.id);
+        }
+
+        let runResult;
         if (variant.id === 'current' && dualMode && modelB && modelB !== model) {
           // 1回目だけは現在の dual-MODEL 経路をそのまま使う
           showToast(`${runIndex + 1}/${totalRuns} ${variant.label} 開始: dual-MODEL ${model} + ${modelB}${pilotMode ? ' / Pilot' : ''}${useMarkdown ? ' / Markdown' : ''}`, 'info');
@@ -5294,10 +5578,14 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
             apiKeys, modelA: model, modelB,
             pdfFile, pico, outcomes,
             pilotMode, useMarkdown,
+            speedOptions: speedOptionsForRun,
+            preparedPdfContext: sharedPreparedPdfContext,
             onProgress: scaleProgress,
             onNotice: (msg) => showToast(msg, 'info')
           });
-          return attachAlgorithmVariant(res, variant.id);
+          runResult = attachAlgorithmVariant(res, variant.id);
+          rememberExtractionResult(resultCacheKey, runResult);
+          return runResult;
         }
         if (variant.id === 'current') {
           if (pilotMode) showToast('🧪 Pilot mode: 最初の2-3アウトカムのみテスト抽出します', 'info');
@@ -5305,51 +5593,82 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
         } else {
           showToast(`${runIndex + 1}/${totalRuns} ${variant.label} 開始`, 'info');
         }
-        return await runExtractionPipeline({
+        runResult = await runExtractionPipeline({
           apiKeys, model,
           getModel: () => modelRef.current,
           pdfFile, pico, outcomes,
           pilotMode, useMarkdown,
           algorithmVariant: variant.id,
+          speedOptions: speedOptionsForRun,
+          preparedPdfContext: sharedPreparedPdfContext,
           onProgress: scaleProgress,
           onNotice: (msg) => showToast(`[${variant.shortLabel}] ${msg}`, 'info')
         });
+        rememberExtractionResult(resultCacheKey, runResult);
+        return runResult;
       };
 
-      for (const [idx, variant] of variantsToRun.entries()) {
-        try {
-          const runResult = await runVariant(variant, idx, variantsToRun.length);
-          const record = {
-            variantId: variant.id,
-            runNo: variant.runNo,
-            label: variant.label,
-            shortLabel: variant.shortLabel,
-            description: variant.description,
-            result: runResult,
-            finishedAt: new Date().toISOString()
-          };
-          completedRuns.push(record);
-          setAlgorithmRuns({ runs: [...completedRuns], selectedVariantIds: variantsToRun.map(v => v.id), generatedAt: new Date().toISOString() });
-          if (variant.id === 'current' || !primaryResult) {
-            primaryResult = runResult;
-            setResult(runResult);
+      const recordSuccess = (variant, runResult) => {
+        const record = {
+          variantId: variant.id,
+          runNo: variant.runNo,
+          label: variant.label,
+          shortLabel: variant.shortLabel,
+          description: variant.description,
+          result: runResult,
+          finishedAt: new Date().toISOString()
+        };
+        completedRuns.push(record);
+        updateAlgorithmRuns();
+        if (variant.id === 'current' || !primaryResult) {
+          primaryResult = runResult;
+          setResult(runResult);
+        }
+      };
+      const recordFailure = (variant, variantError) => {
+        const record = {
+          variantId: variant.id,
+          runNo: variant.runNo,
+          label: variant.label,
+          shortLabel: variant.shortLabel,
+          description: variant.description,
+          error: variantError.message,
+          finishedAt: new Date().toISOString()
+        };
+        completedRuns.push(record);
+        updateAlgorithmRuns();
+        showToast(`${variant.label} は失敗しました。成功済みの結果は保持します。`, 'error');
+      };
+
+      if (hasSpeedup(speedOptionsForRun, 'parallelRounds') && variantsToRun.length > 1) {
+        showToast(`⚡ ${variantsToRun.length} Roundを並列実行します`, 'info');
+        await Promise.all(variantsToRun.map((variant, idx) =>
+          runVariant(variant, idx, variantsToRun.length)
+            .then(runResult => recordSuccess(variant, runResult))
+            .catch(variantError => recordFailure(variant, variantError))
+        ));
+      } else {
+        for (const [idx, variant] of variantsToRun.entries()) {
+          try {
+            const runResult = await runVariant(variant, idx, variantsToRun.length);
+            recordSuccess(variant, runResult);
+          } catch (variantError) {
+            recordFailure(variant, variantError);
           }
-        } catch (variantError) {
-          const record = {
-            variantId: variant.id,
-            runNo: variant.runNo,
-            label: variant.label,
-            shortLabel: variant.shortLabel,
-            description: variant.description,
-            error: variantError.message,
-            finishedAt: new Date().toISOString()
-          };
-          completedRuns.push(record);
-          setAlgorithmRuns({ runs: [...completedRuns], selectedVariantIds: variantsToRun.map(v => v.id), generatedAt: new Date().toISOString() });
-          showToast(`${variant.label} は失敗しました。成功済みの結果は保持します。`, 'error');
         }
       }
+
+      const orderedRuns = [...completedRuns].sort((a, b) => a.runNo - b.runNo);
+      const currentSuccess = orderedRuns.find(r => r.variantId === 'current' && r.result);
+      const firstSuccess = orderedRuns.find(r => r.result);
+      primaryResult = currentSuccess?.result || firstSuccess?.result || primaryResult;
       if (!primaryResult) throw new Error('選択したRoundの抽出結果が取得できませんでした');
+      setAlgorithmRuns({
+        runs: orderedRuns,
+        selectedVariantIds,
+        speedupOptions: speedOptionsForRun,
+        generatedAt: new Date().toISOString()
+      });
       setResult(primaryResult);
       setProgress(100);
       setStatusMsg("選択したRoundの抽出が完了しました");
@@ -6048,7 +6367,7 @@ ${pdfText.substring(0, 30000)}`;
   const hasExtractionData = !!(result || algorithmRuns || errMsg || metaExportPreview || stabilityRuns || livingDiff || status !== 'idle');
   const clearExtractionData = () => {
     if (status === 'running') { showToast("抽出中はクリアできません", "info"); return; }
-    if (!window.confirm("抽出結果・比較ビュー・エラー表示・プレビューをクリアします。PICO、PDF、APIキー設定は残します。よろしいですか？")) return;
+    if (!window.confirm("抽出結果・比較ビュー・エラー表示・プレビュー・結果再利用キャッシュをクリアします。PICO、PDF、APIキー設定は残します。よろしいですか？")) return;
     setResult(null);
     setAlgorithmRuns(null);
     setErrMsg("");
@@ -6063,6 +6382,7 @@ ${pdfText.substring(0, 30000)}`;
     setHlPage(null);
     setPdfSearchText("");
     setHighlightNewIdx(null);
+    __extractionResultCache.clear();
     showToast("抽出データをクリアしました", "success");
   };
 
@@ -6187,7 +6507,7 @@ ${pdfText.substring(0, 30000)}`;
               <Activity size={12}/>診断
             </button>
             {hasExtractionData && status !== 'running' && (
-              <button onClick={clearExtractionData} title="抽出結果と比較ビューをクリア（PICO/PDF/APIキーは保持）" className="text-[10px] bg-red-50 border border-red-300 hover:bg-red-100 px-2 py-1 rounded flex items-center gap-1 font-bold text-red-700 transition-colors">
+              <button onClick={clearExtractionData} title="抽出結果・比較ビュー・結果再利用キャッシュをクリア（PICO/PDF/APIキーは保持）" className="text-[10px] bg-red-50 border border-red-300 hover:bg-red-100 px-2 py-1 rounded flex items-center gap-1 font-bold text-red-700 transition-colors">
                 <Trash2 size={11}/>データクリア
               </button>
             )}
@@ -6474,6 +6794,35 @@ ${pdfText.substring(0, 30000)}`;
                       </label>
                     ))}
                   </div>
+                </div>
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                  <div className="text-[10px] font-bold text-amber-900 mb-1 flex items-center gap-1">
+                    <ZapIcon size={11}/>高速化オプション（チェックしたものだけ実行）
+                  </div>
+                  <div className="space-y-1">
+                    {SPEEDUP_OPTION_DEFS.map(opt => (
+                      <label key={opt.id} className="flex items-start gap-2 text-[10px] text-slate-700 cursor-pointer bg-white border border-amber-100 rounded px-2 py-1.5 hover:border-amber-300">
+                        <input
+                          type="checkbox"
+                          checked={!!speedupOptions[opt.id]}
+                          onChange={() => toggleSpeedupOption(opt.id)}
+                          className="mt-0.5 w-3.5 h-3.5 accent-amber-600 flex-shrink-0"
+                        />
+                        <span className="leading-snug min-w-0">
+                          <b className="text-slate-900">{opt.no}. {opt.label}</b>
+                          <span className="block text-slate-600">{opt.summary}</span>
+                          <span className="block text-emerald-700">メリット: {opt.merit}</span>
+                          <span className="block text-rose-700">デメリット: {opt.demerit}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {speedupWarnings.length > 0 && (
+                    <div className="mt-2 bg-white border border-amber-300 rounded p-2 text-[10px] text-amber-900 space-y-1">
+                      <div className="font-bold flex items-center gap-1"><AlertCircle size={11}/>選択中の注意</div>
+                      {speedupWarnings.map((w, i) => <div key={i}>・{w}</div>)}
+                    </div>
+                  )}
                 </div>
                 <button onClick={startAnalysis} disabled={status==='running' || selectedAlgorithmVariants.length === 0} className="w-full mt-3 btn-shimmer disabled:bg-slate-300 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md">
                   {status === 'running' ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>解析中...</> : <><Sparkles size={16}/>{selectedAlgorithmVariants.length === 3 ? '全Round抽出実行' : `${selectedAlgorithmVariants.length} Round抽出実行`}</>}
