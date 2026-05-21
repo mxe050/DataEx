@@ -4993,7 +4993,7 @@ function SetupPage({ onComplete, initialConfig }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/20 flex flex-col overflow-auto">
+    <div className="h-full min-h-0 bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/20 flex flex-col overflow-y-auto">
       <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/80 py-4 px-6 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center gap-3">
           <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg"><Sparkles size={22}/></div>
@@ -6072,13 +6072,17 @@ ${pdfText.substring(0, 30000)}`;
       <Toast toast={toast}/>
       <header className="bg-white/90 backdrop-blur-sm border-b border-slate-200 py-2 px-3 z-20 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button onClick={onBack} className="text-slate-400 hover:text-purple-600 p-0.5 transition-colors"><ChevronLeft size={20}/></button>
-            <button onClick={onBack} title="表紙へ戻る（抽出結果はデータクリアまで保持）" className="flex items-center gap-2 hover:opacity-80 transition-opacity text-left">
-              <BrainIcon size={20} className="text-purple-700"/>
-              <h1 className="text-sm sm:text-base font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3 Gemini</span></h1>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onBack}
+            title="表紙へ戻る（抽出結果はデータクリアまで保持）"
+            className="flex items-center gap-2 min-w-0 text-left hover:opacity-80 transition-opacity">
+            <ChevronLeft size={20} className="text-slate-400 flex-shrink-0"/>
+            <BrainIcon size={20} className="text-purple-700 flex-shrink-0"/>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 truncate">
+              Meta-Analysis Data Extractor <span className="text-[10px] gradient-text font-mono font-bold">v3 / Gemini Edition</span>
+            </h1>
+          </button>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowHeaderHelp(true)}
