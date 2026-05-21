@@ -39,6 +39,80 @@
       </p>
     </section>
 
+    <section class="grid gap-4 mb-8">
+      <article class="bg-white rounded-2xl border border-purple-200 shadow-sm overflow-hidden">
+        <div class="gradient-bg text-white px-5 py-3">
+          <h3 class="text-lg font-extrabold">Round 1: 現行アルゴリズムでできること</h3>
+        </div>
+        <div class="p-5 grid md:grid-cols-2 gap-4 text-sm text-slate-700 leading-relaxed">
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4">
+            <p class="font-bold text-purple-900 mb-2">🔬 dual-MODEL モード（オプション・推奨）</p>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>同じPDFを2つのGeminiモデルで独立に並列抽出します。Vivekanantha 2026 KSA 70412がGPT-5.2 + Gemini 3 Proで384データ点中95.1%を少なくとも一方のモデルで正解した枠組みを、Gemini内のFlash Lite + Flashで再現する設計です。</li>
+              <li>9カテゴリ判定で各フィールドを「両一致正解 / 部分一致 / 不一致」の3層に分類し、不一致フィールドを人間検証へ回しやすくします。</li>
+              <li>§6エラーパターン自動検出として、分散値欠落、Primary/Revisionスワップ、単位欠落、SE/SD混同、分母欠落、ハルシネーション疑いを後処理ルールで検出します。</li>
+              <li>dual-MODEL時は1論文あたり6 APIコール（3パス × 2モデル）以上を使います。実用上限はAI Studio Rate limitsで確認します。</li>
+            </ul>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <p class="font-bold text-blue-900 mb-2">📊 単一モデル（軽量）</p>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>既定はGemini 2.5 Flash Liteで、従来の抽出挙動を維持します。</li>
+              <li>AI Studio Rate limitsに出ているGeminiモデルを選択、またはモデルIDを直接入力できます。</li>
+              <li>決定論的設定としてtemperature=0.0、randomness fixedを前提にしています。</li>
+              <li>3パス精度最大化パイプライン（核心抽出 → 補完抽出 → Critic監査）で、原文照合による誤りと欠損の補正を行います。</li>
+              <li>CONSORT-AI / STARD-AI準拠Methods自動生成、完全Audit Log、503/429時のFlash Lite ↔ Flash自動フォールバック、複数キー自動ローテーションに対応しています。</li>
+            </ul>
+          </div>
+          <div class="md:col-span-2 bg-amber-50 border border-amber-300 rounded-xl p-4 text-amber-900">
+            <b>⚠ 人間検証は必須です。</b> Laignelot 2026のシステマティックレビューではLLMデータ抽出accuracyが0.36–1.00と幅広く、本アプリは「AI初稿 → ヒト全件検証」を前提にしています。
+          </div>
+        </div>
+      </article>
+
+      <article class="bg-white rounded-2xl border border-emerald-200 shadow-sm overflow-hidden">
+        <div class="bg-emerald-600 text-white px-5 py-3">
+          <h3 class="text-lg font-extrabold">Round 2: masa-med-ai/pubmed-systematic-review方式</h3>
+        </div>
+        <div class="p-5 text-sm text-slate-700 leading-relaxed space-y-3">
+          <p>
+            Round 2は、GitHubで公開されている <a class="paper-link font-semibold" href="https://github.com/masa-med-ai/pubmed-systematic-review" target="_blank" rel="noopener">masa-med-ai/pubmed-systematic-review</a> の考え方を、DataExの抽出プロンプトと自己検証チェックに翻訳したものです。リポジトリ説明は「Pubmed MCPと連携して簡易的なSRを行うSkill」で、PubMed検索からPMID取得、full abstractの小分け取得、中間JSON検証、出力までの5段階ワークフローを定義しています。
+          </p>
+          <p>
+            作者・公開元はGitHubユーザー <b>masa-med-ai</b> で、リポジトリはpublicです。GitHub上で無料閲覧できる公開ページとして参照していますが、GitHub API上では明示ライセンスが設定されていません。そのためDataExはコードを取り込まず、READMEに書かれたワークフロー上の安全策だけを、外装の注意点として利用しています。
+          </p>
+          <div class="grid md:grid-cols-2 gap-3">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+              <p class="font-bold text-emerald-900 mb-2">DataExでの使い方</p>
+              <ul class="list-disc pl-5 space-y-1">
+                <li>抄録・本文・表・図に書かれた数値だけを使い、記憶や推測で補完しない。</li>
+                <li>登録数ではなく、final analysis / analyzed / included in analysis と読める解析対象Nを優先する。</li>
+                <li>primary endpointとsecondary outcomeを混同しない。</li>
+                <li>介入群と対照群の文脈を確認し、Controlの方が高値でも値を入れ替えない。</li>
+                <li>P値、RR、OR、IRR、HRなどの統計量は原文の表記を保持する。</li>
+              </ul>
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p class="font-bold text-slate-900 mb-2">位置づけ</p>
+              <ul class="list-disc pl-5 space-y-1">
+                <li>PubMed MCPやGitHub APIをDataEx内で直接呼び出すわけではありません。</li>
+                <li>Round 1のスキーマ、出力形式、UIは維持したまま、Round 2だけに安全確認プロンプトを追加します。</li>
+                <li>バッチ取得の切断、Primary/Secondary混同、群取り違え、N数間違い、有意性誤判定を避ける目的で使います。</li>
+                <li>中間JSONを作ってから自己検証する思想を、抽出時の内部チェックとして反映しています。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="bg-white rounded-2xl border border-indigo-200 shadow-sm p-5 text-sm text-slate-700 leading-relaxed">
+        <h3 class="text-lg font-extrabold text-indigo-900 mb-2">Round 3: 参考文献ベース追加監査</h3>
+        <p>
+          Round 3は、このページにまとめた論文・ガイドライン・GitHub/公式情報をまとめて追加監査として使います。dual-LLM、人間検証、RCT抽出エラー分類、CONSORT-AI/STARD-AIの透明性報告、RAG/根拠接地を、既存アルゴリズムを壊さない範囲でチェック項目として上乗せします。
+        </p>
+      </article>
+    </section>
+
     <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
