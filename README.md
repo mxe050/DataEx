@@ -2,15 +2,9 @@
 
 RCT（ランダム化比較試験）論文から、システマティックレビュー／メタ分析に必要な数値データを **2つのGeminiモデルで独立に並列抽出** し、不一致フィールドを自動検出するブラウザ単体ツールです。**Google AI Studio の無料APIキー**を貼り付けるだけで動きます。サーバ・課金カード登録すべて不要。
 
-> **エビデンスベース設計**: dual-LLM抽出、LLM systematic review支援、RCT数値抽出ベンチマーク、AI報告ガイドラインの知見を組み合わせ、Gemini内 Flash Lite + Flash の独立並列抽出と人間検証前提の安全層として実装しています。
+> **エビデンスベース設計**: Vivekanantha 2026 (KSA 70412) が GPT-5.2 + Gemini 3 Pro の dual-LLM で 384 データ点中 95.1% の少なくとも一方正解率を達成した枠組みを、Gemini内 Flash Lite + Flash で再現しています。
 
-## 主な特徴 (v3.10 PubMed Workflow Safety Edition)
-
-> **v3.10 追加**: PMID 42015569 / 42055792、Shokraneh 2026のLLM抽出エラー分類、masa-med-ai/pubmed-systematic-review の5段階PubMed安全ワークフローを反映。batch truncation guard、misallocation/mislocated/deep source フラグ、get_full_abstract再取得推奨を追加。
-
-> **v3.9 追加**: noteページで確認した近年のデータ抽出研究を反映し、SC/PC/IE/CC/OM/SD の6バケット omission scan、`Automation tier: auto-ready / human-check / manual-only`、effect direction/reference group チェック、実体のある [`references.html`](references.html) 参考文献ページを追加。
-
-> **v3.8 追加**: PubMed/抄録14フィールド抽出 (PMID, 1st Author, Journal, Year, Study Name, N analyzed, Design, Intervention, Primary Outcome, Intervention/Control Result, P-value/Effect Size, Significance, Key Finding), 抄録ベース自己検証 (N analyzed優先、primary/secondary混同防止、介入/対照取り違え防止、p値-Sig/NS整合), CADe領域の実例ベースアンチパターンをCritic/Stage6監査に追加
+## 主な特徴 (v3.7 Complete Edition)
 
 > **v3.7 追加**: events vs % 厳密分離 (RevMan安全), CONSORT から n_total 自動推定, events>n_total 整合性チェック, 結果フィルタ・ソート・キーワードハイライト, 抽出ログCSV, 図表専用抽出パス (Moonlight/Gemini 3.0方式), RevMan XML (.rm5互換), R metafor 解析パイプライン (escalc/rma/forest 自動生成), 複数論文集約セッション + 集約TSV, HTML プリント可能レポート, 設定 JSON エクスポート/インポート
 
@@ -39,30 +33,6 @@ RCT（ランダム化比較試験）論文から、システマティックレ�
 ### 🧪 Pilot mode (Elicit 方式)
 - 本実行前に「最初の2-3アウトカムだけ」テスト抽出 → プロンプト/コホートフィルタを調整 → 本実行
 - 無料枠とトークンを節約しつつ抽出戦略を最適化
-
-### 🧾 PubMed/抄録ファースト安全策
-- 抄録から `PMID`, `1st Author`, `Journal`, `Year`, `Study Name`, `N (analyzed)`, `Design`, `Intervention`, `Primary Outcome`, `Intervention Result`, `Control Result`, `P-value / Effect Size`, `Significance`, `Key Finding` を中間データとして抽出
-- 抄録に記載のない値は `NR (not reported)` と明記し、推測・記憶・外部知識で補完しない
-- `N (analyzed)` は enrolled/randomized ではなく final analysis / analyzed のNを優先
-- `Primary Outcome` は primary endpoint と明示された指標だけを採用し、secondary outcome の有意差と混同しない
-- control group が先に記載される抄録でも、介入群/対照群の向きを保持
-- p値と `Sig / NS / Borderline` の整合を自己検証
-
-### 📚 参考文献ページ
-- 表紙またはアプリ内ヘッダーの「参考文献」から、主要文献の英語サマリー・日本語サマリー・リンク・DataExでの実装根拠を一覧表示
-- CONSORT-AI / STARD-AI / RAG / dual-LLM / LLM systematic review / RCT数値抽出ベンチマークの根拠を Methods 出力にも反映
-
-### 🧠 Automation safety layer
-- `SC / PC / IE / CC / OM / SD` の6バケットで、抽出済みJSONに重要情報の漏れがないか自己点検
-- 各outcomeの `notes` に `Automation tier: auto-ready / human-check / manual-only` を要求
-- HR/RR/OR/MD等の effect direction / reference group が不明な場合にフラグ化
-- 高precisionでも recall が落ちる可能性を前提に、missingOutcomes と human-check を優先レビュー対象にする
-
-### 🧾 PubMed workflow safety
-- PubMed由来データでは `count → PMID取得 → full abstract小分け取得 → 中間JSON検証 → 出力` の順序をプロンプトに明示
-- `fetch_batch` 大量取得、`Output too large`、途中切断、未読抄録が疑われる場合は値を補完せず `NR` とし、`get_full_abstract` 相当で再取得を推奨
-- 2026年BMJ EBM大規模実証研究を反映し、`misallocation` と `missed/omitted data` を優先監査
-- Shokraneh 2026のエラー分類を、made-up / missed / misallocated / mislocated / misread / misinterpreted / misprioritised / miscollected / secondary-source / standardisation error としてCriticに追加
 
 ### 📑 PDF→Markdown 変換 (HubMeta 方式)
 - pdf.js のテキスト座標から行/見出し/表構造を推定 → Markdown 形式で LLM に送信
@@ -106,10 +76,9 @@ RCT（ランダム化比較試験）論文から、システマティックレ�
 4. アプリの「APIキー」欄に貼り付け、「全キー接続テスト」で確認
 5. （任意）**🔬 dual-MODEL モード** を有効化 → モデルA(主) と モデルB(副) を選択
 6. PICO を入力、PDFをドラッグ＆ドロップ、「抽出実行」
-7. 結果画面で抄録サマリー、9カテゴリ判定バッジ、§6 エラーフラグを確認 → N(analyzed)、primary endpoint、介入/対照の向き、不一致フィールドを優先的に検証
-8. 「参考文献」ページで実装根拠とリンクを確認
+7. 結果画面で 9カテゴリ判定バッジと §6 エラーフラグを確認 → 不一致フィールドを優先的に検証
 
-詳細な手順は、アプリ内の「**使い方ガイド**」（7セクション）に記載があります。
+詳細な手順は、アプリ内の「**使い方ガイド**」（6セクション）に記載があります。
 
 ## 対応モデル（無料枠目安・2026年初頭時点）
 
@@ -147,31 +116,11 @@ Google Cloud の無料枠は **プロジェクト単位** で計上されます�
 
 ## エビデンスベース (本アプリの理論的根拠)
 
-本アプリは、dual-LLM 抽出研究、LLM systematic review、AI報告ガイドライン、根拠接地型生成の知見を組み合わせて設計しています。
+本アプリは以下2つのpeer-reviewed論文の知見に基づく:
 
-[1] **Vivekanantha P, Kahlon H, Balogun OT, et al.** Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini Pro 3: a dual-large language model approach in orthopaedic research. *Knee Surg Sports Traumatol Arthrosc.* 2026. PMID:[42015569](https://pubmed.ncbi.nlm.nih.gov/42015569/) doi:[10.1002/ksa.70412](https://doi.org/10.1002/ksa.70412)
-根拠: dual-MODEL、9カテゴリ判定、不一致フィールド優先レビュー、複雑領域のomission対策。384データ点中、少なくとも一方のモデルが完全正解した割合95.1%。
+[1] **Vivekanantha P, Kahlon H, Balogun OT, et al.** Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. *Knee Surg Sports Traumatol Arthrosc.* 2026;1-19. doi:[10.1002/ksa.70412](https://doi.org/10.1002/ksa.70412)
 
 [2] **Laignelot F, Martin GL, Ossman M, et al.** Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. *J Clin Epidemiol.* 2026;194:112221. doi:[10.1016/j.jclinepi.2026.112221](https://doi.org/10.1016/j.jclinepi.2026.112221)
-根拠: LLM抽出は有望だが精度に幅があるため、ヒト最終照合、3-run安定性検証、Audit Logを必須にする。
-
-[3] **Fan S, Chen M, Doi SA, et al.** Evaluating data extraction error by a large language model from randomised controlled trials: a large-scale empirical study. *BMJ Evid Based Med.* 2026. PMID:[42055792](https://pubmed.ncbi.nlm.nih.gov/42055792/) doi:[10.1136/bmjebm-2025-114044](https://doi.org/10.1136/bmjebm-2025-114044)
-根拠: 664件のRCT、23,069セルでLLM抽出エラーを検証。misallocation と missed/omitted data を重点監査する。
-
-[4] **Shokraneh F.** Classification of LLM Errors in Data Extraction for Systematic Reviews and Factors Affecting the LLM-Based Tool’s Performance. *Medium.* 2026. [link](https://farhadinfo.medium.com/classification-of-llm-errors-in-data-extraction-for-systematic-reviews-and-factors-affecting-the-4549f5c68467)
-根拠: AI Error Vigilancy taxonomyをCritic、§6フラグ、Methods出力に反映。
-
-[5] **masa-med-ai.** PubMed Systematic Review — 正確な文献データ収集のためのワークフロー. *GitHub.* 2026. [link](https://github.com/masa-med-ai/pubmed-systematic-review)
-根拠: count、PMID取得、get_full_abstract小分け取得、中間JSON検証、出力前チェックリストを外装・プロンプト安全策として反映。
-
-[6] **Liu X, Cruz Rivera S, Moher D, et al.** Reporting guidelines for clinical trial reports for interventions involving artificial intelligence: the CONSORT-AI extension. *Nat Med.* 2020;26:1364-1374. PMID:[32908283](https://pubmed.ncbi.nlm.nih.gov/32908283/)
-根拠: AI利用時のモデル・設定・介入内容・評価手順を透明に報告するため、Methods自動生成に反映。
-
-[7] **Sounderajah V, Ashrafian H, Golub RM, Shetty S, De Fauw J, Hooft L, et al.** Developing STARD-AI: an extension to the STARD statement for AI-centred diagnostic accuracy studies. *Nat Med.* 2025;31:3283-3289. doi:[10.1038/s41591-025-03953-8](https://doi.org/10.1038/s41591-025-03953-8)
-根拠: データ源、AIシステム、評価・検証フローを監査可能に残す設計に反映。
-
-[8] **Gao Y, Xiong Y, Gao X, et al.** Retrieval-Augmented Generation for Large Language Models: A Survey. arXiv:2312.10997. [https://arxiv.org/abs/2312.10997](https://arxiv.org/abs/2312.10997)
-根拠: evidenceText原文引用、PDF物理突合、ハルシネーション検出、PubMed/抄録14フィールドの根拠接地型チェックに反映。
 
 設計仕様の詳細根拠は `Dataex仕様書.md` を参照してください。
 
@@ -210,8 +159,7 @@ Google Cloud の無料枠は **プロジェクト単位** で計上されます�
 
 ## バージョン
 
-- [`meta-analysis-extractor v3-opus47.html`](meta-analysis-extractor%20v3-opus47.html) — **最新版** (v3.10 PubMed Workflow Safety + dual-MODEL Edition / PubMed抄録14フィールド / 参考文献ページ / batch truncation guard / AI Error Vigilancy / Automation tier / §6 エラー検出 / CONSORT-AI Methods 出力)
-- [`references.html`](references.html) — DataExの参考文献ページ（英語サマリー、日本語サマリー、リンク、実装反映点）
+- [`meta-analysis-extractor v3-opus47.html`](meta-analysis-extractor%20v3-opus47.html) — **最新版** (v3.5 dual-MODEL Edition / Vivekanantha 2026 方式 / §6 エラー検出 / CONSORT-AI Methods 出力)
 - [`meta-analysis-extractor v2ー1.html`](meta-analysis-extractor%20v2%E3%83%BC1.html) — 旧版（Gemini API単独・dual-MODEL 非対応）
 
 ## 技術スタック
