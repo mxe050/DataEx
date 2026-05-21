@@ -35,7 +35,7 @@
       <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">References</div>
       <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-800 mb-3">参考文献・参考ページ</h2>
       <p class="text-sm text-slate-600 max-w-3xl mx-auto">
-        DataExの設計検討で参照した論文、GitHub、公式ドキュメントの一覧です。現在アプリのアルゴリズムへ実装済みとして扱っているものは2文献のみです。
+        DataExの設計検討で参照した論文、GitHub、公式ドキュメントの一覧です。実装済みのものはアルゴリズムへ直接反映し、3回抽出では2回目にPubMed workflow、3回目に参考文献群を追加監査として使います。
       </p>
     </section>
 
@@ -76,9 +76,9 @@
               <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://farhadinfo.medium.com/classification-of-llm-errors-in-data-extraction-for-systematic-reviews-and-factors-affecting-the-4549f5c68467" target="_blank" rel="noopener">Medium</a></td>
             </tr>
             <tr>
-              <td class="px-4 py-4"><span class="bg-slate-100 text-slate-700 border border-slate-300 px-2 py-1 rounded-full text-xs font-bold">参考</span></td>
+              <td class="px-4 py-4"><span class="bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-1 rounded-full text-xs font-bold">実装済み</span><div class="text-[10px] text-slate-500 mt-1">2回目</div></td>
               <td class="px-4 py-4 leading-relaxed"><b>masa-med-ai/pubmed-systematic-review.</b> PubMed Systematic Review — 正確な文献データ収集のためのワークフロー. GitHub. 2026.</td>
-              <td class="px-4 py-4 leading-relaxed text-slate-700">PubMed検索、PMID取得、full abstractの小分け取得、中間JSON検証、出力という安全な作業手順を提示するGitHubページ。PubMedベースの抽出ワークフローを検討する際に参照しました。</td>
+              <td class="px-4 py-4 leading-relaxed text-slate-700">PubMed検索、PMID取得、full abstractの小分け取得、中間JSON検証、出力という安全な作業手順を提示するGitHubページ。2回目の抽出アルゴリズムでは、数値の推測補完禁止、解析対象N、primary endpoint、群方向、P値整合性の自己検証として反映しています。</td>
               <td class="px-4 py-4 whitespace-nowrap"><a class="paper-link font-semibold" href="https://github.com/masa-med-ai/pubmed-systematic-review" target="_blank" rel="noopener">GitHub</a><br/><a class="paper-link font-semibold" href="https://x.com/masa_ai_med/status/2057074876708778257" target="_blank" rel="noopener">Demo</a></td>
             </tr>
             <tr>

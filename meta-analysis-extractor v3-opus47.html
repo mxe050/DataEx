@@ -1416,6 +1416,141 @@ function calculateStabilityScore(runs) {
   };
 }
 
+const EXTRACTION_ALGORITHM_VARIANTS = [
+  {
+    id: 'current',
+    runNo: 1,
+    label: '1回目: 現行アルゴリズム',
+    shortLabel: 'Run 1 / 現行',
+    description: '現在の抽出パイプラインを追加プロンプトなしでそのまま実行します。',
+    promptBlock: ''
+  },
+  {
+    id: 'pubmed-systematic-review',
+    runNo: 2,
+    label: '2回目: PubMed systematic-review方式',
+    shortLabel: 'Run 2 / PubMed SR',
+    description: 'masa-med-ai/pubmed-systematic-reviewの、抄録・原文にある数値だけを中間JSON化して自己検証するワークフローを反映します。',
+    promptBlock: `【追加アルゴリズム: masa-med-ai/pubmed-systematic-review 方式】
+以下は外装の安全策として追加する。既存スキーマは維持し、抽出値を推測で補完しない。
+- まず中間データとして、各アウトカムを構造化JSONで確定してから出力する意識で抽出する。
+- 数値はPDF本文・表・図・抄録相当テキストに明示されたものだけを使う。記載がなければ「不明」または notes に「NR (not reported)」と明記する。
+- Nは登録数ではなく、final analysis / analyzed / included in analysis と読める解析対象Nを優先する。登録数しかなければその旨を notes に残す。
+- primary outcome / primary endpoint と secondary outcome を混同しない。primary と明示された指標は notes に根拠を残す。
+- 介入群と対照群を必ず文脈から確認する。Control の方が高値の文章でも、値を入れ替えない。
+- P値・RR・OR・IRR・HRなどの統計量は原文の表記をそのまま保持する。p<0.05 と p>=0.05 の判定が矛盾しないか確認する。
+- 同一著者の別研究、別コホート、ITT/PP/mITT/Safety集団を混同しない。集団が違う値は別レコードにする。
+- 抽出後に自己検証する: N、primary endpoint、群方向、P値/有意性、NR補完、デバイス/介入名、evidenceTextの存在。`
+  },
+  {
+    id: 'reference-enhanced',
+    runNo: 3,
+    label: '3回目: 参考文献ベース新アルゴリズム',
+    shortLabel: 'Run 3 / 文献ベース',
+    description: '参考文献ページで整理した dual-LLM、人間検証、RCT抽出エラー、透明性報告、根拠接地の知見を追加監査として使います。',
+    promptBlock: `【追加アルゴリズム: 参考文献ベース新方式】
+以下は参考文献ページの知見を使った追加監査であり、既存スキーマと既存抽出方針を上書きしない。
+- Vivekanantha 2026: 同じPDFから独立抽出したつもりで、各フィールドを「確実」「部分的」「要確認」に内的分類し、要確認は confidence を下げ notes に理由を書く。
+- Laignelot 2026: LLM抽出精度には幅がある前提で、全ての数値を人間が照合できるよう evidenceText / pageNumber / sourceLocation を優先する。
+- RCT抽出エラー研究・分類: omitted outcome、wrong arm、wrong denominator、wrong time point、SE/SD混同、unit欠落、percentage-only、effect direction逆転を重点チェックする。
+- CONSORT-AI / STARD-AI: モデル設定、プロンプト、検証手順、監査可能性を意識し、unclearItems と notes に検証上の注意を残す。
+- RAG/根拠接地: 数値フィールドに入る数字は evidenceText に対応する根拠があるものだけに限定し、本文・表・図で値が異なる場合は統合せず別レコードにする。
+- PRISMA/CONSORT flow: フローチャートのN数はアウトカムに変換せず、consortFlow/prismaFlow として保持する。`
+  }
+];
+
+function getExtractionAlgorithmVariant(id) {
+  return EXTRACTION_ALGORITHM_VARIANTS.find(v => v.id === id) || EXTRACTION_ALGORITHM_VARIANTS[0];
+}
+
+function buildAlgorithmPromptBlock(variantId) {
+  const variant = getExtractionAlgorithmVariant(variantId);
+  return variant.promptBlock ? `\n\n${variant.promptBlock}\n` : '';
+}
+
+function attachAlgorithmVariant(result, variantId) {
+  const variant = getExtractionAlgorithmVariant(variantId);
+  if (!result) return result;
+  result._algorithmVariant = {
+    id: variant.id,
+    runNo: variant.runNo,
+    label: variant.label,
+    shortLabel: variant.shortLabel,
+    description: variant.description
+  };
+  return result;
+}
+
+function normalizeCompareText(v) {
+  return String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function outcomeCompareKey(o) {
+  return [
+    normalizeCompareText(o?.actualOutcomeName || o?.requestedOutcomeName),
+    normalizeCompareText(o?.timePoint),
+    normalizeCompareText(o?.populationType),
+    normalizeCompareText(o?.variableType)
+  ].join(' | ');
+}
+
+function outcomeNumericSignature(o) {
+  return [
+    o?.interventionGroup?.n_total,
+    o?.interventionGroup?.events_or_mean,
+    o?.interventionGroup?.sd_or_se,
+    o?.comparisonGroup?.n_total,
+    o?.comparisonGroup?.events_or_mean,
+    o?.comparisonGroup?.sd_or_se,
+    o?.effectEstimate?.measureType,
+    o?.effectEstimate?.value,
+    o?.effectEstimate?.ci95,
+    o?.effectEstimate?.pValue
+  ].map(v => String(v || '').trim() || '-').join(' | ');
+}
+
+function buildAlgorithmComparisonRows(algorithmRuns) {
+  if (!algorithmRuns?.runs?.length) return [];
+  const rows = [];
+  algorithmRuns.runs.forEach(run => {
+    const variant = getExtractionAlgorithmVariant(run.variantId || run.id);
+    if (run.error) {
+      rows.push({
+        key: `error-${variant.id}`,
+        groupKey: `zz-error-${variant.id}`,
+        groupLabel: '実行エラー',
+        runNo: variant.runNo,
+        runLabel: variant.shortLabel,
+        variantLabel: variant.label,
+        error: run.error,
+        numericSignature: '-'
+      });
+      return;
+    }
+    (run.result?.extractedOutcomes || []).forEach((oc, idx) => {
+      const groupKey = outcomeCompareKey(oc) || `unknown-${idx}`;
+      rows.push({
+        key: `${variant.id}-${idx}`,
+        groupKey,
+        groupLabel: oc.actualOutcomeName || oc.requestedOutcomeName || '(outcome未記載)',
+        runNo: variant.runNo,
+        runLabel: variant.shortLabel,
+        variantLabel: variant.label,
+        outcomeIndex: idx + 1,
+        numericSignature: outcomeNumericSignature(oc),
+        oc
+      });
+    });
+  });
+  rows.sort((a, b) =>
+    a.groupKey.localeCompare(b.groupKey) ||
+    a.numericSignature.localeCompare(b.numericSignature) ||
+    a.runNo - b.runNo ||
+    (a.outcomeIndex || 0) - (b.outcomeIndex || 0)
+  );
+  return rows;
+}
+
 /* ============================================================
    SECTION 6: PDF VIEWER
    ============================================================ */
@@ -3266,7 +3401,7 @@ function applyCorrections(extracted, criticReview) {
 // Stage1: PDF準備 / Stage2: 核心抽出 / Stage3: 補完抽出 / Stage4: Critic監査 (原文照合で誤り補正)
 // 1論文 = 3 APIコール以上。実行可能数は選択モデルとAI Studio Rate limitsに依存
 // getModel: 各ステージ開始時に最新のモデルを取得する関数（抽出中の手動変更に追従）
-async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, outcomes, onProgress, onNotice, pilotMode, useMarkdown }) {
+async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, outcomes, onProgress, onNotice, pilotMode, useMarkdown, algorithmVariant = 'current' }) {
   // Vivekanantha 2026 A2 方式: コホート選択ロジックをプロンプト内に直書き
   // ユーザーが cohortFilter を入れていれば、必ずプロンプト先頭に注入してアームスワップを防ぐ
   const cohortBlock = (pico.cohortFilter && pico.cohortFilter.trim())
@@ -3277,6 +3412,8 @@ async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, 
       ? outcomes.filter(o => o.name.trim()).map(o => `- ${o.name}${o.definition ? `: ${o.definition}` : ''}`).join('\n')
       : '全自動抽出モード（論文から全アウトカムを網羅）'
   }\n`;
+  const algorithmVariantInfo = getExtractionAlgorithmVariant(algorithmVariant);
+  const algorithmPromptBlock = buildAlgorithmPromptBlock(algorithmVariantInfo.id);
 
   const rotator = makeKeyRotator(apiKeys);
   if (rotator.size === 0) throw new Error("APIキーが設定されていません");
@@ -3327,7 +3464,7 @@ async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, 
   // 出力上限が小さいモデル(<16K)では evidenceText を120文字に制限し、全アウトカムが入りきるよう調整
   const evidenceCap = (initialModelInfo.maxOut || 8192) < 16000 ? 120 : 250;
 
-  const userPrompt = `${picoBlock}${pilotMode ? '\n\n【🧪 PILOT MODE】 これはパイロット実行です。**最初に発見できた最重要 2-3 アウトカムのみ**を抽出してください。本実行前のテスト目的のため、後でユーザーがプロンプトを調整できるよう、抽出戦略がうまく機能するか確認してください。\n' : ''}
+  const userPrompt = `${picoBlock}${algorithmPromptBlock}${pilotMode ? '\n\n【🧪 PILOT MODE】 これはパイロット実行です。**最初に発見できた最重要 2-3 アウトカムのみ**を抽出してください。本実行前のテスト目的のため、後でユーザーがプロンプトを調整できるよう、抽出戦略がうまく機能するか確認してください。\n' : ''}
 \n【タスク】
 ${isMultimodal ? '添付の論文PDF（テキスト + 高解像度画像）' : 'PDFから抽出されたテキスト'}を徹底的に精読し、上記PICO/アウトカム設定に従って **アウトカム数値データ** を抽出してください。
 
@@ -3382,7 +3519,7 @@ ${sourceText.substring(0, isMultimodal ? 40000 : 80000)}`;
   stagesUsed.supplement = stage3Info.id;
   onProgress("stage3", `${stage3Info.name.replace(/\s*\(.+/, '')} で患者背景・解説を取得中（失敗してもOK）...`, 60);
   try {
-    const supplementPrompt = `${picoBlock}
+    const supplementPrompt = `${picoBlock}${algorithmPromptBlock}
 
 【タスク】上記論文から以下のみを抽出してください（アウトカム数値は別コールで取得済みなので不要）：
 1. consortFlow: CONSORT Flow Diagram のN数（無作為化/割付/解析/脱落）
@@ -3427,7 +3564,7 @@ ${sourceText.substring(0, 40000)}`;
       const outcomesJson = JSON.stringify(extracted.extractedOutcomes, null, 2);
       const truncatedOutcomes = outcomesJson.length > 30000 ? outcomesJson.substring(0, 30000) + '\n... (省略)' : outcomesJson;
 
-      const criticPrompt = `${picoBlock}
+      const criticPrompt = `${picoBlock}${algorithmPromptBlock}
 
 【あなたの役割】
 あなたはメタ分析データ抽出の **監査専門家** です。別のAIが抽出した outcomes リストを原論文と照合し、修正版を返してください。
@@ -3663,6 +3800,7 @@ ${pdfText.substring(0, 30000)}
     ? [`${getGeminiModelInfo(stagesUsed.core)?.name || stagesUsed.core} [3パス精度最大化 + Stage5後処理]`]
     : [`核心: ${stagesUsed.core} / 補完: ${stagesUsed.supplement || '-'} / Critic: ${stagesUsed.critic || '-'} / 後処理: n%正規化+PDF突合`];
   extracted._stagesUsed = stagesUsed;
+  attachAlgorithmVariant(extracted, algorithmVariantInfo.id);
   onProgress("complete", "抽出完了", 100);
   return extracted;
 }
@@ -3904,6 +4042,117 @@ function ErrorFlagsBadge({ flags }) {
     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border ${cls} cursor-help`} title={tooltip}>
       ⚠ {critical.length ? `致命${critical.length}` : ''}{critical.length && warning.length ? '/' : ''}{warning.length ? `警告${warning.length}` : ''}
     </span>
+  );
+}
+
+function AlgorithmRunComparison({ algorithmRuns, rows, fontSize }) {
+  if (!algorithmRuns?.runs?.length) return null;
+  const value = (v) => {
+    const s = String(v || '').trim();
+    return s || '-';
+  };
+  const runClass = (runNo) => ({
+    1: 'bg-sky-100 text-sky-800 border-sky-300',
+    2: 'bg-amber-100 text-amber-800 border-amber-300',
+    3: 'bg-purple-100 text-purple-800 border-purple-300'
+  }[runNo] || 'bg-slate-100 text-slate-700 border-slate-300');
+  const armText = (g) => (
+    <div className="space-y-0.5">
+      <div><span className="text-slate-400">N</span> <b>{value(g?.n_total)}</b></div>
+      <div><span className="text-slate-400">値</span> <b>{value(g?.events_or_mean)}</b></div>
+      <div><span className="text-slate-400">SD/SE</span> <b>{value(g?.sd_or_se)}</b></div>
+    </div>
+  );
+  const completed = algorithmRuns.runs.filter(r => r.result).length;
+  const failed = algorithmRuns.runs.filter(r => r.error).length;
+  return (
+    <div className="border border-indigo-200 rounded-lg overflow-hidden bg-white shadow-sm">
+      <div className="bg-indigo-50 border-b border-indigo-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-bold text-indigo-900 flex items-center gap-1.5"><LayersIcon size={14}/>3回抽出 比較ビュー</div>
+          <div className="text-[11px] text-indigo-800">同じアウトカムと同じ数値キーが隣に並ぶように表示します。通常カード/TSV/CSVは1回目の現行アルゴリズム結果です。</div>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {EXTRACTION_ALGORITHM_VARIANTS.map(v => {
+            const record = algorithmRuns.runs.find(r => r.variantId === v.id);
+            const state = record?.error ? '失敗' : record?.result ? '完了' : '未実行';
+            return (
+              <span key={v.id} className={`text-[9px] font-bold px-2 py-1 rounded border ${runClass(v.runNo)}`} title={v.description}>
+                {v.shortLabel}: {state}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+      <div className="px-3 py-2 text-[11px] text-slate-600 border-b border-slate-100">
+        完了 {completed}/3{failed ? ` / 失敗 ${failed}` : ''}。2回目は <a className="text-indigo-700 underline font-semibold" href="https://github.com/masa-med-ai/pubmed-systematic-review" target="_blank" rel="noopener">masa-med-ai/pubmed-systematic-review</a> の安全策、3回目は参考文献ページの知見を追加しています。
+      </div>
+      <div className="overflow-auto max-h-[46vh]">
+        <table className="w-full border-collapse" style={{fontSize:`${Math.max(10, fontSize * 0.82)}px`}}>
+          <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700">
+            <tr>
+              <th className="text-left px-2 py-1 border-b border-slate-200 min-w-[130px]">Run</th>
+              <th className="text-left px-2 py-1 border-b border-slate-200 min-w-[170px]">Outcome / 集団</th>
+              <th className="text-left px-2 py-1 border-b border-slate-200 min-w-[140px]">Intervention</th>
+              <th className="text-left px-2 py-1 border-b border-slate-200 min-w-[140px]">Control</th>
+              <th className="text-left px-2 py-1 border-b border-slate-200 min-w-[150px]">Effect / P</th>
+              <th className="text-left px-2 py-1 border-b border-slate-200 min-w-[240px]">根拠</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan="6" className="px-3 py-4 text-center text-slate-500">比較できるアウトカムがまだありません。</td></tr>
+            )}
+            {rows.map((row, idx) => {
+              const oc = row.oc;
+              const showGroup = row.groupKey !== rows[idx - 1]?.groupKey;
+              return (
+                <React.Fragment key={row.key}>
+                  {showGroup && (
+                    <tr className="bg-slate-50">
+                      <td colSpan="6" className="px-2 py-1 border-y border-slate-200 font-bold text-slate-700">
+                        {row.groupLabel}
+                        {!row.error && <span className="ml-2 text-[10px] font-normal text-slate-500">時点: {value(oc?.timePoint)} / 集団: {value(oc?.populationType)} / 型: {value(oc?.variableType)}</span>}
+                      </td>
+                    </tr>
+                  )}
+                  {row.error ? (
+                    <tr className="bg-red-50">
+                      <td className="px-2 py-2 border-b border-red-100"><span className={`px-2 py-1 rounded border font-bold ${runClass(row.runNo)}`}>{row.runLabel}</span></td>
+                      <td colSpan="5" className="px-2 py-2 border-b border-red-100 text-red-800">{row.error}</td>
+                    </tr>
+                  ) : (
+                    <tr className="hover:bg-indigo-50/40">
+                      <td className="px-2 py-2 border-b border-slate-100 align-top">
+                        <span className={`inline-block px-2 py-1 rounded border font-bold ${runClass(row.runNo)}`}>{row.runLabel}</span>
+                        <div className="text-[9px] text-slate-500 mt-1">#{row.outcomeIndex}</div>
+                      </td>
+                      <td className="px-2 py-2 border-b border-slate-100 align-top">
+                        <div className="font-semibold text-slate-800">{value(oc.actualOutcomeName || oc.requestedOutcomeName)}</div>
+                        <div className="text-[10px] text-slate-500">時点 {value(oc.timePoint)} / {value(oc.populationType)}</div>
+                        <div className="mt-1 text-[9px] font-mono text-slate-500 break-all" title="この数値キーが同じ行は、同じ抽出内容として隣接表示されます">{row.numericSignature}</div>
+                      </td>
+                      <td className="px-2 py-2 border-b border-slate-100 align-top">{armText(oc.interventionGroup)}</td>
+                      <td className="px-2 py-2 border-b border-slate-100 align-top">{armText(oc.comparisonGroup)}</td>
+                      <td className="px-2 py-2 border-b border-slate-100 align-top">
+                        <div><span className="text-slate-400">型</span> <b>{value(oc.effectEstimate?.measureType)}</b></div>
+                        <div><span className="text-slate-400">値</span> <b>{value(oc.effectEstimate?.value)}</b></div>
+                        <div><span className="text-slate-400">CI</span> <b>{value(oc.effectEstimate?.ci95)}</b></div>
+                        <div><span className="text-slate-400">P</span> <b>{value(oc.effectEstimate?.pValue)}</b></div>
+                      </td>
+                      <td className="px-2 py-2 border-b border-slate-100 align-top">
+                        <div className="text-slate-700 line-clamp-3">{value(oc.evidenceText)}</div>
+                        <div className="text-[10px] text-slate-500 mt-1">{value(oc.sourceLocation)}{oc.pageNumber ? ` / P${oc.pageNumber}` : ''}</div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -4942,6 +5191,7 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
   const [currentStage, setCurrentStage] = useState(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [result, setResult] = useState(null);
+  const [algorithmRuns, setAlgorithmRuns] = useState(null);
   const [errMsg, setErrMsg] = useState("");
   const [toast, setToast] = useState(null);
   const [hlQuery, setHlQuery] = useState("");
@@ -4980,50 +5230,94 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
     if (!pdfFile) { showToast("PDFをアップロードしてください", "error"); return; }
     if (!pico.p || !pico.i || !pico.c) { showToast("PICOを入力してください", "error"); return; }
     if (!apiKeys?.length) { showToast("APIキーが設定されていません", "error"); return; }
-    setErrMsg(""); setResult(null); setHlQuery(""); setHlPage(null); setPdfSearchText("");
+    setErrMsg(""); setResult(null); setAlgorithmRuns(null); setHlQuery(""); setHlPage(null); setPdfSearchText("");
     setStatus("running");
 
     try {
-      let res;
-      if (dualMode && modelB && modelB !== model) {
-        // dual-MODEL: 同じPDFを2つのGeminiモデルで独立並列抽出 (Vivekanantha 2026)
-        showToast(`🔬 dual-MODEL 抽出開始: ${model} + ${modelB} を並列実行 (Vivekanantha 2026 方式)${pilotMode ? ' / Pilot' : ''}${useMarkdown ? ' / Markdown' : ''}`, 'info');
-        res = await runDualExtractionPipeline({
-          apiKeys, modelA: model, modelB,
-          pdfFile, pico, outcomes,
-          pilotMode, useMarkdown,
-          onProgress: (stage, msg, pct) => {
-            setCurrentStage(stage);
-            setStatusMsg(msg);
-            setProgress(pct);
-          },
-          onNotice: (msg) => showToast(msg, 'info')
-        });
-      } else {
-        if (pilotMode) showToast('🧪 Pilot mode: 最初の2-3アウトカムのみテスト抽出します', 'info');
-        if (useMarkdown) showToast('📑 PDF→Markdown 変換ON: 表構造をより正確に保持', 'info');
-        res = await runExtractionPipeline({
+      const completedRuns = [];
+      let primaryResult = null;
+      const runVariant = async (variant) => {
+        const scaleProgress = (stage, msg, pct) => {
+          const overall = Math.min(99, Math.round((((variant.runNo - 1) * 100) + (pct || 0)) / EXTRACTION_ALGORITHM_VARIANTS.length));
+          setCurrentStage(stage);
+          setStatusMsg(`${variant.shortLabel}: ${msg}`);
+          setProgress(overall);
+        };
+        if (variant.id === 'current' && dualMode && modelB && modelB !== model) {
+          // 1回目だけは現在の dual-MODEL 経路をそのまま使う
+          showToast(`1/3 現行アルゴリズム開始: dual-MODEL ${model} + ${modelB}${pilotMode ? ' / Pilot' : ''}${useMarkdown ? ' / Markdown' : ''}`, 'info');
+          const res = await runDualExtractionPipeline({
+            apiKeys, modelA: model, modelB,
+            pdfFile, pico, outcomes,
+            pilotMode, useMarkdown,
+            onProgress: scaleProgress,
+            onNotice: (msg) => showToast(msg, 'info')
+          });
+          return attachAlgorithmVariant(res, variant.id);
+        }
+        if (variant.id === 'current') {
+          if (pilotMode) showToast('🧪 Pilot mode: 最初の2-3アウトカムのみテスト抽出します', 'info');
+          if (useMarkdown) showToast('📑 PDF→Markdown 変換ON: 表構造をより正確に保持', 'info');
+        } else {
+          showToast(`${variant.runNo}/3 ${variant.label} 開始`, 'info');
+        }
+        return await runExtractionPipeline({
           apiKeys, model,
-          getModel: () => modelRef.current,  // 抽出中の手動切替に追従するための ref-based getter
+          getModel: () => modelRef.current,
           pdfFile, pico, outcomes,
           pilotMode, useMarkdown,
-          onProgress: (stage, msg, pct) => {
-            setCurrentStage(stage);
-            setStatusMsg(msg);
-            setProgress(pct);
-          },
-          onNotice: (msg) => showToast(msg, 'info')
+          algorithmVariant: variant.id,
+          onProgress: scaleProgress,
+          onNotice: (msg) => showToast(`[${variant.shortLabel}] ${msg}`, 'info')
         });
+      };
+
+      for (const variant of EXTRACTION_ALGORITHM_VARIANTS) {
+        try {
+          const runResult = await runVariant(variant);
+          const record = {
+            variantId: variant.id,
+            runNo: variant.runNo,
+            label: variant.label,
+            shortLabel: variant.shortLabel,
+            description: variant.description,
+            result: runResult,
+            finishedAt: new Date().toISOString()
+          };
+          completedRuns.push(record);
+          setAlgorithmRuns({ runs: [...completedRuns], generatedAt: new Date().toISOString() });
+          if (variant.id === 'current') {
+            primaryResult = runResult;
+            setResult(runResult);
+          }
+        } catch (variantError) {
+          const record = {
+            variantId: variant.id,
+            runNo: variant.runNo,
+            label: variant.label,
+            shortLabel: variant.shortLabel,
+            description: variant.description,
+            error: variantError.message,
+            finishedAt: new Date().toISOString()
+          };
+          completedRuns.push(record);
+          setAlgorithmRuns({ runs: [...completedRuns], generatedAt: new Date().toISOString() });
+          if (variant.id === 'current') throw variantError;
+          showToast(`${variant.label} は失敗しました。1回目の結果は保持します。`, 'error');
+        }
       }
-      setResult(res);
+      if (!primaryResult) throw new Error('1回目の現行アルゴリズム結果が取得できませんでした');
+      setResult(primaryResult);
+      setProgress(100);
+      setStatusMsg("3回抽出が完了しました");
       setStatus("complete");
-      const sourceInfo = res._sources?.join(' + ') || '';
-      showToast(`抽出完了 (${sourceInfo})`, 'success');
-      if (res._dualLLM?.summary) {
-        const s = res._dualLLM.summary;
+      const sourceInfo = primaryResult._sources?.join(' + ') || '';
+      showToast(`3回抽出完了。通常表示は1回目（現行）です。(${sourceInfo})`, 'success');
+      if (primaryResult._dualLLM?.summary) {
+        const s = primaryResult._dualLLM.summary;
         setTimeout(() => showToast(`📊 dual-MODEL: 両一致${s.bothCorrectPct}% / 少なくとも片方${s.atLeastOneCorrectPct}% (Vivekanantha [1] 95.1%目標)`, 'info'), 1200);
       }
-      if (res._criticConfidence) setTimeout(() => showToast(`Critic信頼度スコア: ${res._criticConfidence}/100`, 'info'), 1500);
+      if (primaryResult._criticConfidence) setTimeout(() => showToast(`Critic信頼度スコア: ${primaryResult._criticConfidence}/100`, 'info'), 1500);
     } catch (err) {
       console.error(err);
       setStatus("error");
@@ -5416,6 +5710,7 @@ ${pdfText.substring(0, 30000)}`;
     }
     return list;
   }, [result?.extractedOutcomes, resultFilter]);
+  const algorithmComparisonRows = useMemo(() => buildAlgorithmComparisonRows(algorithmRuns), [algorithmRuns]);
 
   // Templates handlers
   const saveCurrentAsTemplate = () => {
@@ -5450,6 +5745,7 @@ ${pdfText.substring(0, 30000)}`;
     if (!window.confirm("同じPDFと同じ設定で3回連続抽出します (1論文あたり9 APIコール消費)。\n結果の安定性スコアが算出されます (Vivekanantha [1] 推奨の再現性検証)。\n続行しますか?")) return;
     setStatus("running");
     setErrMsg("");
+    setAlgorithmRuns(null);
     const runs = [];
     try {
       for (let i = 0; i < 3; i++) {
@@ -5770,7 +6066,7 @@ ${pdfText.substring(0, 30000)}`;
                 onClick={runStabilityCheck}
                 title="同じ設定で3回連続実行 → 安定性スコア表示 (Vivekanantha 2026 推奨の再現性検証 / 9 APIコール消費)"
                 className="text-[10px] bg-cyan-600 hover:bg-cyan-700 text-white px-2 py-1 rounded flex items-center gap-1 font-bold border-2 border-cyan-700">
-                🔁 3run
+                🔁 安定性
               </button>
             )}
             {/* 図表専用抽出ボタン (Moonlight 方式) */}
@@ -6078,8 +6374,11 @@ ${pdfText.substring(0, 30000)}`;
                   )}
                 </div>
                 <button onClick={startAnalysis} disabled={status==='running'} className="w-full mt-3 btn-shimmer disabled:bg-slate-300 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition-all shadow-md">
-                  {status === 'running' ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>解析中...</> : <><Sparkles size={16}/>抽出実行</>}
+                  {status === 'running' ? <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"/>解析中...</> : <><Sparkles size={16}/>3回抽出実行</>}
                 </button>
+                <div className="mt-2 text-[10px] text-slate-500 leading-relaxed">
+                  1回目は現行アルゴリズムをそのまま実行。2回目はPubMed SR workflow、3回目は参考文献ベースの追加監査で実行し、最後に並べて表示します。API使用量は通常の約3倍です。
+                </div>
               </div>
             </section>
             {status === 'running' && (
@@ -6188,6 +6487,14 @@ ${pdfText.substring(0, 30000)}`;
                       {result._errors?.length > 0 && <div className="mt-1 text-amber-800"><b>部分エラー:</b> {result._errors.join(' / ')}</div>}
                     </div>
                   </div>
+                )}
+
+                {algorithmRuns && (
+                  <AlgorithmRunComparison
+                    algorithmRuns={algorithmRuns}
+                    rows={algorithmComparisonRows}
+                    fontSize={leftFontSize}
+                  />
                 )}
 
                 {/* メタ分析ソフト連携 変換結果プレビュー
