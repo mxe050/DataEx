@@ -35,21 +35,26 @@
         <p class="text-xs text-slate-500">Meta-Analysis Data Extractor</p>
       </div>
     </div>
-    <a href="https://github.com/mxe050/DataEx" target="_blank" rel="noopener" class="text-xs bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+    <div class="flex items-center gap-2">
+      <a href="references.html" class="text-xs bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium">
+        参考文献
+      </a>
+      <a href="https://github.com/mxe050/DataEx" target="_blank" rel="noopener" class="text-xs bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.374 0 12c0 5.302 3.438 9.8 8.207 11.387.6.11.793-.26.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.626-5.374-12-12-12z"/></svg>
-      GitHub
-    </a>
+        GitHub
+      </a>
+    </div>
   </div>
 </header>
 
 <main class="max-w-5xl mx-auto px-6 py-12">
   <section class="text-center mb-12 fade-in">
-    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">v3.7 Complete Edition · 図表専用抽出 + RevMan XML + R解析パイプライン + 複数論文集約 + HTMLレポート</div>
+    <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">DataEx · Meta-Analysis Data Extractor</div>
     <h2 class="text-4xl sm:text-5xl font-extrabold text-slate-800 mb-4">
       RCT論文から<br class="sm:hidden"/><span class="gradient-text">メタ分析データを最適化抽出</span>
     </h2>
     <p class="text-slate-600 max-w-2xl mx-auto">
-      <b>Google AI Studio の無料APIキー</b>1個で動作。<b>dual-MODEL モード</b>では同じPDFを Flash Lite + Flash で独立並列抽出し、Vivekanantha 2026 (KSA 70412) の 9カテゴリ判定で不一致フィールドを自動検出。クレジットカード登録不要・サーバ不要・ブラウザのみで完結。
+      Google AI Studio のAPIキーを使い、RCT論文PDFからメタ分析用のデータ整理をブラウザ上で支援します。抽出結果は必ず原論文と照合してください。
     </p>
   </section>
 
@@ -58,78 +63,14 @@
       <div class="gradient-bg text-white px-6 py-5 flex items-center justify-between">
         <div>
           <div class="text-[11px] font-bold opacity-80">LATEST / RECOMMENDED</div>
-          <div class="text-xl font-bold">v3.5 dual-MODEL Edition</div>
+          <div class="text-xl font-bold">Meta-Analysis Data Extractor</div>
         </div>
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
       </div>
       <div class="p-6">
-        <ul class="text-sm text-slate-700 space-y-2 mb-4">
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>🔬 <b>dual-MODEL モード</b>: 2つのGeminiモデルで独立並列抽出 (Vivekanantha 2026 方式)</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📊 <b>9カテゴリ判定</b>: 各フィールドを「両一致 / 部分一致 / 要確認」に自動分類</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>⚠ <b>§6 エラーパターン自動検出</b>: 分散値欠落・アームスワップ・単位欠落・SE/SD混同</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>📋 <b>CONSORT-AI / STARD-AI 準拠 Methods 自動生成</b> + 完全 Audit Log export</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>Google AI Studio 無料APIキーで動作（CC登録不要）・複数キーで枠拡張</li>
-          <li class="flex items-start gap-2"><span class="text-emerald-500 font-bold">✓</span>503 過負荷時に Flash Lite ↔ Flash 自動フォールバック</li>
-        </ul>
         <div class="gradient-bg text-white font-bold py-3 rounded-xl text-center">起動する →</div>
       </div>
     </a>
-  </section>
-
-  <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-8 fade-in fade-d3">
-    <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-600"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-      主な機能
-    </h3>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-      <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
-        <div class="font-bold text-purple-900 mb-1">🔬 dual-MODEL 並列抽出</div>
-        <div class="text-xs text-purple-800">2モデル独立実行 + 9カテゴリ判定 (Vivekanantha 2026)</div>
-      </div>
-      <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
-        <div class="font-bold text-purple-900 mb-1">⚠ §6 エラー検出</div>
-        <div class="text-xs text-purple-800">分散値欠落・アームスワップ・単位欠落を自動フラグ</div>
-      </div>
-      <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
-        <div class="font-bold text-purple-900 mb-1">📋 CONSORT-AI Methods</div>
-        <div class="text-xs text-purple-800">論文Methods欄に貼れるテキストを自動生成</div>
-      </div>
-      <div class="bg-slate-50 p-4 rounded-lg">
-        <div class="font-bold text-slate-800 mb-1">📊 全アウトカム網羅</div>
-        <div class="text-xs text-slate-600">指定外アウトカムも自動抽出。ITT/PP/mITT集団を分離して保持</div>
-      </div>
-      <div class="bg-slate-50 p-4 rounded-lg">
-        <div class="font-bold text-slate-800 mb-1">🧬 揺らぎの保持</div>
-        <div class="text-xs text-slate-600">Abstract と本文の数値差、術前・術後・変化量を独立レコードで</div>
-      </div>
-      <div class="bg-slate-50 p-4 rounded-lg">
-        <div class="font-bold text-slate-800 mb-1">📑 根拠原文付き</div>
-        <div class="text-xs text-slate-600">各項目に evidence text。PDFビュアーで即座にハイライト</div>
-      </div>
-      <div class="bg-slate-50 p-4 rounded-lg">
-        <div class="font-bold text-slate-800 mb-1">🛡️ SD/SE判定</div>
-        <div class="text-xs text-slate-600">厳密区別、ゼロイベント保持、3群比較対応</div>
-      </div>
-      <div class="bg-slate-50 p-4 rounded-lg">
-        <div class="font-bold text-slate-800 mb-1">📋 CONSORT抽出</div>
-        <div class="text-xs text-slate-600">Flow diagram から自動でN数を抽出</div>
-      </div>
-      <div class="bg-slate-50 p-4 rounded-lg">
-        <div class="font-bold text-slate-800 mb-1">💾 TSV/CSV/Audit出力</div>
-        <div class="text-xs text-slate-600">RevMan・R対応 + 完全audit log JSON export</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border border-purple-200 shadow-sm p-6 mb-8 fade-in fade-d4">
-    <h3 class="text-lg font-bold text-purple-900 mb-3 flex items-center gap-2">
-      📚 エビデンスベース設計
-    </h3>
-    <p class="text-xs text-slate-700 leading-relaxed mb-3">本アプリは以下2つのpeer-reviewed論文の知見に基づき、データ抽出を最適化:</p>
-    <ul class="text-xs text-slate-700 space-y-2 list-disc pl-5">
-      <li><b>Vivekanantha P, et al.</b> Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. <i>Knee Surg Sports Traumatol Arthrosc.</i> 2026;1-19. doi:10.1002/ksa.70412 — 384データ点中 95.1% で少なくとも一方のモデルが正解</li>
-      <li><b>Laignelot F, et al.</b> Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. <i>J Clin Epidemiol.</i> 2026;194:112221. doi:10.1016/j.jclinepi.2026.112221 — 63研究148評価のシステマティックレビュー、データ抽出 accuracy 0.36–1.00 中央値0.95</li>
-    </ul>
   </section>
 
   <section class="bg-rose-50 border border-rose-200 rounded-xl p-5 mb-8 fade-in fade-d4">

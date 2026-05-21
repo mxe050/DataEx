@@ -5,189 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DataEx References</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    .gradient-text {
-      background: linear-gradient(135deg, #2563eb, #0f766e, #7c3aed);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .paper-link { color: #1d4ed8; text-decoration: underline; text-underline-offset: 2px; }
+    body { font-family: 'Noto Sans JP', sans-serif; }
+    .gradient-bg { background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%); }
+    .gradient-text { background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .paper-link { color: #6d28d9; text-decoration: underline; text-underline-offset: 3px; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800">
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+<body class="bg-gradient-to-br from-slate-50 via-purple-50/30 to-pink-50/20 min-h-screen text-slate-800">
+  <header class="bg-white/80 backdrop-blur-sm border-b border-slate-200 py-5 px-6 sticky top-0 z-10">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div>
         <h1 class="text-xl font-extrabold gradient-text">DataEx References</h1>
-        <p class="text-xs text-slate-500">データ抽出アルゴリズムの根拠と、実装への反映点</p>
+        <p class="text-xs text-slate-500">データ抽出設計に関する参考文献</p>
       </div>
       <nav class="flex flex-wrap items-center gap-2 text-xs font-bold">
         <a href="index.html" class="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 px-3 py-2 rounded-lg">表紙</a>
-        <a href="meta-analysis-extractor%20v3-opus47.html" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg">アプリを開く</a>
-        <a href="https://note.com/mxe05064/n/n332de67c26ed?app_launch=false" target="_blank" rel="noopener" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg">noteページ</a>
+        <a href="meta-analysis-extractor%20v3-opus47.html" class="gradient-bg text-white px-3 py-2 rounded-lg">アプリを開く</a>
+        <a href="https://github.com/mxe050/DataEx" target="_blank" rel="noopener" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-lg">GitHub</a>
       </nav>
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-5 py-8 space-y-7">
-    <section class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div>
-          <div class="text-[11px] font-bold text-blue-700 mb-2">v3.10 PubMed Workflow Safety Layer</div>
-          <h2 class="text-2xl font-extrabold text-slate-900 mb-2">抽出精度を壊さず、見落としを減らすための参考文献</h2>
-          <p class="text-sm text-slate-600 leading-relaxed max-w-3xl">
-            DataExでは、独立並列抽出、根拠テキスト接地、PubMed/抄録ファースト確認、人間検証を維持したまま、今回のnoteページで確認した近年の研究から
-            <b>omission scan</b>、<b>Automation tier</b>、<b>effect direction確認</b>、<b>PubMed batch切断ガード</b>、<b>AI Error Vigilancy分類</b>を追加しました。
-          </p>
-        </div>
-        <a href="https://note.com/mxe05064/n/n332de67c26ed?app_launch=false" target="_blank" rel="noopener" class="inline-flex items-center justify-center text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg whitespace-nowrap">
-          元のnoteを開く
-        </a>
-      </div>
+  <main class="max-w-5xl mx-auto px-6 py-10">
+    <section class="text-center mb-8">
+      <div class="inline-block gradient-bg text-white text-xs font-bold px-3 py-1 rounded-full mb-4">References</div>
+      <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-800 mb-3">参考文献</h2>
+      <p class="text-sm text-slate-600 max-w-2xl mx-auto">DataExのデータ抽出設計に関連する主要文献です。</p>
     </section>
 
-    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-white border border-blue-200 rounded-xl p-4">
-        <div class="text-sm font-extrabold text-blue-900 mb-1">Omission scan</div>
-        <p class="text-xs text-slate-600 leading-relaxed">SC / PC / IE / CC / OM / SD の6バケットで、重要項目の未抽出を最終JSON前に確認。</p>
-      </div>
-      <div class="bg-white border border-emerald-200 rounded-xl p-4">
-        <div class="text-sm font-extrabold text-emerald-900 mb-1">Automation tier</div>
-        <p class="text-xs text-slate-600 leading-relaxed">auto-ready / human-check / manual-only を outcome notes に明示し、検証優先度を残す。</p>
-      </div>
-      <div class="bg-white border border-amber-200 rounded-xl p-4">
-        <div class="text-sm font-extrabold text-amber-900 mb-1">RCT numerical safety</div>
-        <p class="text-xs text-slate-600 leading-relaxed">分母、分散、群方向、効果量のreference group、primary/secondary混同を重点監査。</p>
-      </div>
-      <div class="bg-white border border-rose-200 rounded-xl p-4 md:col-span-3">
-        <div class="text-sm font-extrabold text-rose-900 mb-1">PubMed workflow safety</div>
-        <p class="text-xs text-slate-600 leading-relaxed">count確認、PMID取得、5-6件ずつfull abstract取得、中間JSON検証、出力前チェックをプロンプトに組み込み、batch切断・誤配置・見落としを優先監査。</p>
-      </div>
-    </section>
-
-    <section class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      <div class="px-5 py-4 border-b border-slate-200">
-        <h2 class="text-lg font-extrabold text-slate-900">主要参考文献</h2>
-        <p class="text-xs text-slate-500 mt-1">各リンクはPubMed、DOI、arXiv、medRxiv等の文献ページへ移動します。</p>
-      </div>
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-slate-100 text-slate-700">
             <tr>
-              <th class="text-left px-4 py-3 w-40">カテゴリ</th>
-              <th class="text-left px-4 py-3 min-w-72">文献</th>
-              <th class="text-left px-4 py-3 min-w-80">サマリー</th>
-              <th class="text-left px-4 py-3 min-w-80">DataExへの反映</th>
+              <th class="text-left px-5 py-3 w-1/2">文献</th>
+              <th class="text-left px-5 py-3">サマリー</th>
+              <th class="text-left px-5 py-3 w-32">リンク</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200 align-top">
             <tr>
-              <td class="px-4 py-4 font-bold text-blue-900">dual-LLM</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/42015569/" target="_blank" rel="noopener">Vivekanantha P, et al. Knee Surg Sports Traumatol Arthrosc. 2026. PMID: 42015569.</a></td>
-              <td class="px-4 py-4 text-slate-700">整形外科SRデータ抽出でdual-LLM方式を検証。384フィールド中365フィールド（95.1%）で少なくとも片方のモデルが完全正解。</td>
-              <td class="px-4 py-4 text-slate-700">Flash Lite + Flashの独立並列抽出、9カテゴリ判定、不一致フィールド優先レビュー、複雑領域のomission対策。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-blue-900">SR支援レビュー</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/41831731/" target="_blank" rel="noopener">Laignelot F, et al. J Clin Epidemiol. 2026;194:112221.</a></td>
-              <td class="px-4 py-4 text-slate-700">LLMによるSR支援のシステマティックレビュー。性能は有望だがタスクと評価により幅がある。</td>
-              <td class="px-4 py-4 text-slate-700">人間最終照合、再現性チェック、Methods/Audit JSON、過信を避ける警告設計。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-blue-900">大規模エラー実証</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/42055792/" target="_blank" rel="noopener">Fan S, et al. BMJ Evid Based Med. 2026. PMID: 42055792.</a></td>
-              <td class="px-4 py-4 text-slate-700">664件のRCT、23,069セルを対象にLLM抽出エラーを検証。全体エラー率6.6%、主要エラーはmisallocationとmissed/omitted data。</td>
-              <td class="px-4 py-4 text-slate-700">誤フィールド配置、見落とし、adverse outcomesの省略リスク、CONSORT報告品質チェックを追加。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-blue-900">エラー分類</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://farhadinfo.medium.com/classification-of-llm-errors-in-data-extraction-for-systematic-reviews-and-factors-affecting-the-4549f5c68467" target="_blank" rel="noopener">Shokraneh F. Medium. 2026.</a></td>
-              <td class="px-4 py-4 text-slate-700">LLM抽出エラーを、捏造、見落とし、誤配置、誤セクション、変換ミス、誤解釈、二次引用などに分類。</td>
-              <td class="px-4 py-4 text-slate-700">AI Error Vigilancy taxonomyとして、Criticと§6フラグ、Methods出力に反映。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-blue-900">PubMedワークフロー</td>
-              <td class="px-4 py-4">
-                <a class="paper-link font-semibold" href="https://github.com/masa-med-ai/pubmed-systematic-review" target="_blank" rel="noopener">masa-med-ai/pubmed-systematic-review. GitHub. 2026.</a><br/>
-                <a class="paper-link font-semibold" href="https://x.com/masa_ai_med/status/2057074876708778257" target="_blank" rel="noopener">Demo post on X.</a>
+              <td class="px-5 py-5 leading-relaxed">
+                <b>Vivekanantha P, et al.</b> Automated data extraction for systematic reviews using GPT-5.2 and Google Gemini 3 Pro: A dual-large language model approach in orthopaedic research. <i>Knee Surg Sports Traumatol Arthrosc.</i> 2026;1-19. doi:10.1002/ksa.70412 — 384データ点中 95.1% で少なくとも一方のモデルが正解
               </td>
-              <td class="px-4 py-4 text-slate-700">count確認、PMID取得、5-6件ずつfull abstract取得、中間JSON検証、出力という5段階の安全ワークフロー。</td>
-              <td class="px-4 py-4 text-slate-700">batch truncation guard、get_full_abstract再取得推奨、PMIDハイパーリンク、中間JSON検証チェックリスト。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-emerald-900">LLM抽出概念実証</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://doi.org/10.1002/jrsm.1710" target="_blank" rel="noopener">Gartlehner G, et al. Res Synth Methods. 2024;15(4):576-589.</a></td>
-              <td class="px-4 py-4 text-slate-700">LLMによるSRデータ抽出の概念実証。高精度の可能性を示しつつ、未抽出項目が重要なエラー型として残る。</td>
-              <td class="px-4 py-4 text-slate-700">missingOutcomes重視、推測補完禁止、抽出後の漏れ確認、human-in-the-loop。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-emerald-900">SRスコーピングレビュー</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://doi.org/10.1016/j.jclinepi.2025.111746" target="_blank" rel="noopener">Lieberum JL, et al. J Clin Epidemiol. 2025;181:111746.</a></td>
-              <td class="px-4 py-4 text-slate-700">SR作成におけるLLM利用を整理。利用は増加しているが、十分に検証済みの実運用はまだ限定的。</td>
-              <td class="px-4 py-4 text-slate-700">自動抽出を最終判断にしない設計、検証手順の明示、Audit Logでの透明化。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-amber-900">RCT数値抽出</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://arxiv.org/abs/2405.01686" target="_blank" rel="noopener">Yun HS, et al. arXiv:2405.01686. 2024.</a></td>
-              <td class="px-4 py-4 text-slate-700">RCTから数値結果を抽出するベンチマーク。二値アウトカムは比較的扱いやすい一方、複雑な測定や推論を要する抽出は難しい。</td>
-              <td class="px-4 py-4 text-slate-700">events/denominator、mean/SD/SE/IQR、HR/RR/ORの向き、outcome-comparator-intervention結合の確認。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-amber-900">信頼性検証</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://doi.org/10.1016/j.jdent.2025.105846" target="_blank" rel="noopener">Daraqel B, et al. J Dent. 2025;160:105846.</a></td>
-              <td class="px-4 py-4 text-slate-700">AI抽出と手動抽出の一致を検証したパイロット研究。AIを単独で完全に信頼するには不十分という注意を補強。</td>
-              <td class="px-4 py-4 text-slate-700">根拠不足・図のみ・分母/分散欠落を human-check / manual-only に分類。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-purple-900">SR自動化</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://doi.org/10.1101/2025.06.13.25329541" target="_blank" rel="noopener">Cao C, et al. medRxiv. 2025.06.13.25329541.</a></td>
-              <td class="px-4 py-4 text-slate-700">LLMエージェントによるSRワークフロー自動化のpreprint。高い性能を報告するが、差分の人間裁定も組み込む。</td>
-              <td class="px-4 py-4 text-slate-700">PDF→Markdown、抽出エージェント、差分優先レビュー、監査ログの方向性。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-purple-900">自動化レベル</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://arxiv.org/abs/2507.15152" target="_blank" rel="noopener">Li L, Mathrani A, Susnjak T. arXiv:2507.15152. 2025.</a></td>
-              <td class="px-4 py-4 text-slate-700">メタ分析データ抽出ベンチマーク。高precisionでも重要項目の省略でrecallが低下しうるため、リスク別の自動化レベルを提案。</td>
-              <td class="px-4 py-4 text-slate-700">6バケットomission scan、Automation tier、human-check/manual-onlyフラグ。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-rose-900">Study within reviews</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://doi.org/10.7326/ANNALS-25-00739" target="_blank" rel="noopener">Gartlehner G, et al. Ann Intern Med. 2025;178(12):1763-1771.</a></td>
-              <td class="px-4 py-4 text-slate-700">6件のSR内でAI支援抽出と人間のみの抽出を比較。AI支援は効率化しうるが、確認者と裁定の役割は残る。</td>
-              <td class="px-4 py-4 text-slate-700">AI初稿を人間レビューへ渡す設計、見落とし優先監査、検証優先順位づけ。</td>
-            </tr>
-            <tr>
-              <td class="px-4 py-4 font-bold text-slate-900">透明なAI報告</td>
-              <td class="px-4 py-4">
-                <a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/32908283/" target="_blank" rel="noopener">CONSORT-AI. Nat Med. 2020.</a><br/>
-                <a class="paper-link font-semibold" href="https://doi.org/10.1038/s41591-025-03953-8" target="_blank" rel="noopener">STARD-AI. Nat Med. 2025.</a>
+              <td class="px-5 py-5 leading-relaxed text-slate-700">
+                システマティックレビューのデータ抽出におけるdual-LLM方式の有用性を評価した研究。384データ点のうち95.1%で少なくとも一方のモデルが正解したと報告しています。
               </td>
-              <td class="px-4 py-4 text-slate-700">AIを含む研究・診断精度研究の透明な報告フレーム。</td>
-              <td class="px-4 py-4 text-slate-700">モデル名、設定、プロンプト、検証手順、制約をMethods / Audit JSONとして出力。</td>
+              <td class="px-5 py-5 whitespace-nowrap">
+                <a class="paper-link font-semibold" href="https://doi.org/10.1002/ksa.70412" target="_blank" rel="noopener">DOI</a><br/>
+                <a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/42015569/" target="_blank" rel="noopener">PubMed</a>
+              </td>
             </tr>
             <tr>
-              <td class="px-4 py-4 font-bold text-slate-900">根拠接地</td>
-              <td class="px-4 py-4"><a class="paper-link font-semibold" href="https://arxiv.org/abs/2312.10997" target="_blank" rel="noopener">Gao Y, et al. arXiv:2312.10997.</a></td>
-              <td class="px-4 py-4 text-slate-700">RAGの体系的サーベイ。外部根拠に基づく生成、評価、接地の考え方を整理。</td>
-              <td class="px-4 py-4 text-slate-700">evidenceText原文引用、PDF物理突合、PubMed/抄録14フィールド、ハルシネーション検出。</td>
+              <td class="px-5 py-5 leading-relaxed">
+                <b>Laignelot F, et al.</b> Large language models show promising performance for some systematic review tasks but call for cautious implementation: a systematic review. <i>J Clin Epidemiol.</i> 2026;194:112221. doi:10.1016/j.jclinepi.2026.112221 — 63研究148評価のシステマティックレビュー、データ抽出 accuracy 0.36–1.00 中央値0.95
+              </td>
+              <td class="px-5 py-5 leading-relaxed text-slate-700">
+                システマティックレビュー支援におけるLLMの性能を整理したレビュー。データ抽出精度は研究やタスクにより幅があり、慎重な実装と人間による確認が必要とされています。
+              </td>
+              <td class="px-5 py-5 whitespace-nowrap">
+                <a class="paper-link font-semibold" href="https://doi.org/10.1016/j.jclinepi.2026.112221" target="_blank" rel="noopener">DOI</a><br/>
+                <a class="paper-link font-semibold" href="https://pubmed.ncbi.nlm.nih.gov/41831731/" target="_blank" rel="noopener">PubMed</a>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
-
-    <section class="bg-rose-50 border border-rose-200 rounded-xl p-5">
-      <h2 class="text-base font-extrabold text-rose-900 mb-2">運用上の注意</h2>
-      <p class="text-xs text-rose-900 leading-relaxed">
-        このページの文献は、DataExの抽出支援アルゴリズムを設計するための根拠です。抽出結果をそのまま確定値として扱わず、原論文、表、図、Supplement、PubMed抄録と照合してください。特に human-check / manual-only が付いた項目は、最終利用前の人間確認が必須です。
-      </p>
-    </section>
   </main>
-
-  <footer class="max-w-6xl mx-auto px-5 pb-8 text-center text-xs text-slate-400">
-    <p>© 2026 DataEx · <a class="underline hover:text-blue-700" href="https://github.com/mxe050/DataEx" target="_blank" rel="noopener">github.com/mxe050/DataEx</a></p>
-  </footer>
 </body>
 </html>
