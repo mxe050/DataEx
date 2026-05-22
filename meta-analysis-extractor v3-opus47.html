@@ -175,7 +175,7 @@ overall cohort summary がある場合は、それを優先採用すること。
 - 数値が "%" や "0.80" の割合のみでも、events_or_mean に "80%" や "0.80" だけを書かない。分母があればイベント数を計算して "97 (80%)" 形式にし、分母不明なら "不明 (80%)" として notes に "[%のみ報告 - イベント数不明]" と書く
 - 成功率(success/successes)と失敗率(failure/failures)は表裏一体でも、原文・表・図に片方または両方が読み取れる場合は**必ず別レコードで両方出す**。片方だけ明示され、分母Nとイベント数が確実な場合のみ、もう片方を N−event で計算し、calculationMethod と notes に式を残す。効果量/P値は方向が変わる可能性があるため、原文でその方向に明示されていない限りコピーしない
 - 1つの extractedOutcomes は「1つの根拠箇所」だけから作る。Flow diagram のN/イベント数と、本文・表・KM図のHR/CI/P値を同じ行に混ぜない。出処が違えば行を分け、Flow由来行の effectEstimate は空欄にする。
-- TSV/CSVの数値セルに説明語を混ぜない。例: "19 cumulative failures" は events_or_mean の主値を "19" または "19 (16.5%)" にし、"cumulative failures" は actualOutcomeName / sourceDetail / notes / evidenceText に書く。
+- 抽出段階では、フローチャートbox内のラベル付き原文（例: "19 cumulative failures"）を捨てずに保持する。数値セル用の整形は後処理で行う。
 - 本文中の右肩文献番号・脚注番号・図表番号をイベント数として抽出しない。群名、アウトカム名、分母、単位、%などと結びつかない孤立小数字はデータではない
 - "p < 0.001" → effectEstimate.pValue="<0.001"
 - 95%CI が "0.21-4.08" → effectEstimate.ci95="0.21-4.08"
@@ -587,21 +587,21 @@ const EXTRACT_SCHEMA_JSON = {
         analyzedPP_comparison: { type: "string" },
         lostToFollowUp_intervention: { type: "string" },
         lostToFollowUp_comparison: { type: "string" },
-        ittSuccess_intervention: { type: "string" },
-        ittSuccess_comparison: { type: "string" },
-        ittFailure_intervention: { type: "string" },
-        ittFailure_comparison: { type: "string" },
-        ppSuccess_intervention: { type: "string" },
-        ppSuccess_comparison: { type: "string" },
-        ppFailure_intervention: { type: "string" },
-        ppFailure_comparison: { type: "string" },
+        ittSuccess_intervention: { type: "string", description: "Flow box内の成功/反応などの原文ラベル付き値。例: '96 cumulative successes'。数字だけに丸めない" },
+        ittSuccess_comparison: { type: "string", description: "Flow box内の成功/反応などの原文ラベル付き値。数字だけに丸めない" },
+        ittFailure_intervention: { type: "string", description: "Flow box内の失敗/非反応などの原文ラベル付き値。例: '19 cumulative failures'。数字だけに丸めない" },
+        ittFailure_comparison: { type: "string", description: "Flow box内の失敗/非反応などの原文ラベル付き値。数字だけに丸めない" },
+        ppSuccess_intervention: { type: "string", description: "Flow box内のPP/完了例などの成功/反応の原文ラベル付き値。数字だけに丸めない" },
+        ppSuccess_comparison: { type: "string", description: "Flow box内のPP/完了例などの成功/反応の原文ラベル付き値。数字だけに丸めない" },
+        ppFailure_intervention: { type: "string", description: "Flow box内のPP/完了例などの失敗/非反応の原文ラベル付き値。数字だけに丸めない" },
+        ppFailure_comparison: { type: "string", description: "Flow box内のPP/完了例などの失敗/非反応の原文ラベル付き値。数字だけに丸めない" },
         ittOtherOutcomeName: { type: "string" },
         ittOtherResult_intervention: { type: "string" },
         ittOtherResult_comparison: { type: "string" },
         ppOtherOutcomeName: { type: "string" },
         ppOtherResult_intervention: { type: "string" },
         ppOtherResult_comparison: { type: "string" },
-        flowOutcomeEvidenceText: { type: "string" },
+        flowOutcomeEvidenceText: { type: "string", description: "結果が書かれたFlow boxの原文を、数値とラベルごと短く引用する" },
         notes: { type: "string" },
         sourceLocation: { type: "string" }, pageNumber: { type: "integer" }
       }
@@ -1571,7 +1571,7 @@ Round 3 方針:
 - n、%、mean、SD、SE、CI、p値、HR/RR/OR/MDなどのラベル、または群名・時点・アウトカム名とセットで確認できる数字だけを採用する。
 - 二値アウトカムでは、80%や0.80をイベント数として扱わない。分母Nが分かる場合はイベント数を計算し「イベント数 (元の%)」形式にする。例: N=115で80%なら「92 (80%)」。分母が不明なら「不明 (80%)」とし、イベント数不明と明記する。
 - パーセントや割合からイベント数を逆算した場合は、Notesに「%/割合報告から計算: 0.80 × 115 = 92」のように必ず書く。
-- Excel/TSVの数値セルには説明語を入れない。例: "115 | 19 cumulative failures | SW | 114 | 39 cumulative failures" のようにせず、Intervention N=115、Intervention Result=19、Control N=114、Control Result=39 と数字だけにする。"cumulative failures" はOutcome、Source Detail、Notes、Evidence Textに書く。
+- 抽出段階では "19 cumulative failures" のようなラベル付き数値をラベルごと保持し、Evidence Text / Notes に残す。Excel貼付時の数値セル化は後処理で行うため、抽出時にラベルを捨てない。
 - evidence textにHTML/CSS断片、OCRノイズ、border-radius、font-weight、padding等が混じる場合は引用として不適切。原文として読める短い数値文に清掃し、清掃できなければ要確認にする。
 
 【過去の実エラーパターンを必ず避ける】
@@ -1588,8 +1588,8 @@ PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I�
 1. まず自動設定したPICOと、比較した2群を短く示す。
 2. 次にCONSORT/PRISMAフローチャート確認結果を、群別Nの短い表で示す。
 3. 次にExcelへそのまま貼れるOutcome TSV表を出す。列はタブ区切りにする。通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行もOutcome TSV内に入れる。独立したFlow TSVは出さない。
-   - Intervention N / Intervention Result / Control N / Control Result / Effect Value / 95% CI / P-value は、原則として数字・比較記号・ハイフンだけにする。
-   - "cumulative failures", "successes", "events", "from flowchart bottom box" などの説明は Source Detail または Notes に入れる。
+   - まずラベル付き原文をEvidence Text / Notesに保持する。
+   - 最終TSVでは、Intervention Result / Control Result などの数値セルは数字だけにし、"cumulative failures" などの意味ラベルは Source Detail または Notes に残す。
 
 Outcome TSVヘッダー:
 Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tSource Detail\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
@@ -4614,7 +4614,7 @@ evidenceText だけ書いて数値フィールドが空のレコードは絶対�
 - 成功率/成功数と失敗率/失敗数は片方だけで終わらせない。原文に両方がある場合は両方を別 extractedOutcomes にする。片方しかないが N とイベント数が確実な場合は、もう片方を N−event で計算した別レコードとして追加し、効果量/P値は原文にその方向で書かれていない限り空欄にする。
 - 右肩の文献番号・脚注番号・図表番号をイベント数として扱わない。群名、分母、アウトカム名、%/単位と結びつく数値だけを採用する。
 - 1レコード=1根拠箇所。sourceLocation に "+" や "Figure/Table" のような複数出処を書かない。Flow diagram のN/イベントと、本文・表・KM図のHR/CI/P値が別の場所なら必ず別 extractedOutcomes に分ける。Flow由来の行では effectEstimate を空欄にし、HR/CI/P値の行では群別N/イベントを空欄にする。
-- TSV/CSVへ出す数値セルは数字だけ。例: "19 cumulative failures" は値セルに "19"、Outcome/Source Detail/Notes に "cumulative failures" と書く。"39 cumulative failures" も値セルは "39"。N列、Result列、Effect Value列、CI列、P-value列に説明語を入れない。
+- フローチャートや図表からの抽出では、"19 cumulative failures" のようなラベル付き表現をEvidence Text / Notesに必ず残す。最終TSV整形時のみ、Result列を数字だけに分離する。
 
 【⚠ 出力サイズ厳守 — 応答が途中で切れるのを防ぐ】
 - evidenceText: ${evidenceCap}文字以内に**要約抜粋**（数値を含む核心部分のみ）。長文の場合は "..." で省略
@@ -4627,7 +4627,7 @@ evidenceText だけ書いて数値フィールドが空のレコードは絶対�
 - effectEstimate（測定型・値・CI・P値）
 - evidenceText（${evidenceCap}文字以内）+ evidenceTextJa（${evidenceCap}文字以内）
 - pageNumber, sourceLocation（単一箇所のみ）, confidence
-- 最終TSVの数値セルへ入る値は、メタ解析ソフトで読める数字・記号のみ（例: 19, 39, 0.38, 0.23-0.63, <0.001）。説明語は sourceDetail / notes に分離。
+- ラベル付き数値は抽出時に削らず、後処理でResult列の数字とsourceDetail/notesの説明に分ける。
 
 \n【参照テキスト（OCR済みPDF本文）】
 ${sourceText.substring(0, coreTextLimit)}`;
@@ -5280,6 +5280,7 @@ PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow d
 - 一番下の脱落除外後 / completed protocol / per-protocol / analyzed PP の2群boxはPP候補として扱う。analyzedPP_* を群別に取り、同じ下段boxに成功/失敗があれば ppSuccess_* / ppFailure_* に入れる。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけなら片方だけ入れる。ここではN−event補完をしない（後処理で安全に補完する）。
 - success/failure以外の結果（response, non-response, changed, improved, healed, deterioration など）がFlow内にある場合は ittOtherOutcomeName/ittOtherResult_* または ppOtherOutcomeName/ppOtherResult_* に入れる。
+- 結果フィールドには、読める範囲で "19 cumulative failures" のような図中ラベル付き表現をそのまま入れてよい。数字だけに丸めない。数値セル用の分離は後処理で行う。
 - フローチャートが無い、または画像から読めない場合は空のまま返す。
 - evidenceText には図中の原文・数値を短く引用する。
 - flowOutcomeEvidenceText には結果が書かれたboxの原文・数値を短く引用する。
