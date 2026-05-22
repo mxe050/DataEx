@@ -1487,6 +1487,83 @@ function buildAlgorithmPromptBlock(variantId) {
   return variant.promptBlock ? `\n\n${variant.promptBlock}\n` : '';
 }
 
+const HIGH_PERFORMANCE_MODEL_EXTRACTION_PROMPT = `あなたはRCT論文からメタ解析用データを抽出する専門家です。以下のPDFまたはURLを、抄録だけでなく本文・表・図・フローチャートまで確認し、2群比較RCTのメタ解析用データを正確に抽出してください。
+
+【入力】
+- 論文PDFまたはURL: ここに貼る
+- 可能なら研究テーマ・疾患領域: 未入力なら本文から自動推定
+- 可能なら比較したい2群: 未入力なら本文から主比較を自動推定
+- 可能なら優先アウトカム: 未入力ならRCT本文から主要・副次アウトカムを自動抽出
+
+【最初に必ず行う判定】
+1. 研究デザインがRCTか確認する。RCTでない場合は、その旨を先に報告し、抽出可能な範囲を確認する。
+2. 比較群が2群なら、その2群でPICOを自動設定して抽出を続ける。
+3. 3群以上、多群、factorial、複数用量、複数デバイスの場合は、抽出を始める前に必ず「どの2群を比較しますか？」と質問して停止する。勝手に2群を選ばない。
+4. 本文、表、図、フローチャート、Supplementにアクセスできない場合は、見られない範囲を明記し、抽出の信頼度を下げる。推測で補完しない。
+
+【基本方針: DataEx Round 1 + Round 2 + Round 3 を統合】
+Round 1 方針:
+- 3パスで行う: 核心抽出 → 補完抽出 → Critic監査。
+- dual-modelで独立抽出したつもりで、各フィールドを「確実 / 部分的 / 要確認」に分類する。
+- §6エラーパターンを必ず確認する: 分散値欠落、アームスワップ、単位欠落、SE/SD混同、分母欠落、ハルシネーション疑い。
+- ITT / mITT / PP / safety集団、術前値・術後値・変化量、時点違いを混同せず、必要なら別レコードにする。
+- 全アウトカムを網羅する。指定アウトカム以外でも、メタ解析に使える主要・副次アウトカムは候補として抽出する。
+
+Round 2 方針:
+- 数値は論文本文・表・図・抄録に書かれているものだけを使う。記憶や一般知識で補完しない。
+- 抽出結果を一度中間JSONのように構造化してから自己検証し、最後に表へ出す。
+- Nは登録数ではなく、final analysis / analyzed / included in analysis と読める解析対象Nを優先する。登録数しかない場合は notes に明記する。
+- primary outcome / primary endpoint と secondary outcomeを混同しない。primaryと明示された指標をPrimaryとして扱う。
+- 介入群と対照群を文脈から確認する。Controlの方が高値でも値を入れ替えない。
+- P値・RR・OR・IRR・HR・MD等は原文の表記を保持し、p<0.05ならSig、p>=0.05ならNSと機械的に整合確認する。閾値が論文で別指定ならnotesに書く。
+- 同一著者の別研究、別コホート、別時点、別解析集団を混同しない。
+
+Round 3 方針:
+- 抄録ファーストではなく本文ファースト。Abstractは候補探索に使い、構造化フィールドへ入れる値はResults本文、Table、Figure、CONSORT/PRISMA flow、Supplementで再確認する。
+- Abstractと本文・表・図の値が違う場合は丸めない。本文/表/図を優先し、差分をnotesに明記する。
+- RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
+- Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
+- CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNをアウトカムイベント数に変換しない。
+
+【数字を取り違えないための必須ルール】
+- 本文中の右肩の小さい文献番号、引用番号、脚注番号、表注記番号を、患者数・イベント数・効果量として抽出しない。
+- 文献番号は通常、文末や著者名の後に小さく表示される。単位、%記号、群名、分母、アウトカム名と結びつかない孤立した小数字はデータではない。
+- ページ番号、図表番号、参考文献番号、行番号、脚注番号、年号をアウトカム値として扱わない。
+- n、%、mean、SD、SE、CI、p値、HR/RR/OR/MDなどのラベル、または群名・時点・アウトカム名とセットで確認できる数字だけを採用する。
+- evidence textにHTML/CSS断片、OCRノイズ、border-radius、font-weight、padding等が混じる場合は引用として不適切。原文として読める短い数値文に清掃し、清掃できなければ要確認にする。
+
+【過去の実エラーパターンを必ず避ける】
+1. バッチ取得が途中で切れたのに残りを推測で埋めない。長い場合は5-6件ずつ、または章ごとに完全に読んでから抽出する。
+2. PrimaryとSecondaryを混同しない。例: primary endpointがAADRなら、ADRの有意差をPrimaryとして記録しない。
+3. 介入群と対照群を取り違えない。例: “ADR was 54.5% in the control group and 50.7% in the CADe group”ならControlが54.5%、介入が50.7%。
+4. N数は登録数ではなく解析対象数。例: enrolledではなくincluded in final analysis / analyzedの数を使う。
+5. 有意性を誤判定しない。p<0.05でSig、p>=0.05でNS。p=0.05付近や多重性補正がある場合はBorderline/要確認。
+
+【抽出すべきフィールド】
+PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I、PICO-C、解析集団、時点、Outcome、Outcome種別(Binary/Continuous/Time-to-event)、Intervention名、Control名、Intervention N、Intervention result、Intervention SD/SE、Control N、Control result、Control SD/SE、Effect measure、Effect value、95%CI、P-value、Significance、Source location、Page/Figure/Table、Evidence text、Evidence text日本語訳、Confidence、Notes。
+
+【出力形式】
+1. まず自動設定したPICOと、比較した2群を短く示す。
+2. 次にCONSORT/PRISMAフローチャート確認結果を、群別Nの短い表で示す。
+3. 次にExcelへそのまま貼れるTSV表を出す。列はタブ区切りにする。
+
+TSVヘッダー:
+Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
+
+4. 最後に自己検証チェックリストを出す:
+- 解析対象Nか
+- Primary/secondaryを混同していないか
+- 介入群/対照群が逆でないか
+- P値とSignificanceが整合しているか
+- 抄録にしかない値と本文・表・図の値が矛盾していないか
+- フローチャート・表・図を確認したか
+- 右肩文献番号や脚注番号をデータとして誤抽出していないか
+- evidence textに各数値の根拠があるか
+- 記載のない数値をNRではなく推測で埋めていないか
+
+【重要】
+最終表の数値は、必ず原文の該当箇所に根拠があるものだけにしてください。根拠が弱い場合はconfidenceをlowにし、Notesに理由を書いてください。`;
+
 function attachAlgorithmVariant(result, variantId) {
   const variant = getExtractionAlgorithmVariant(variantId);
   if (!result) return result;
@@ -5216,6 +5293,8 @@ function SetupPage({ onComplete, initialConfig }) {
   const [model, setModel] = useState(initialModel);
   const [verifyState, setVerifyState] = useState({});
   const [saveKeys, setSaveKeys] = useState(initialConfig.saveKeys !== false);
+  const [showExternalPrompt, setShowExternalPrompt] = useState(false);
+  const [externalPromptCopied, setExternalPromptCopied] = useState(false);
   // dual-MODEL モード (Vivekanantha 2026): 同じPDFを2つのGeminiモデルで独立並列抽出
   const [dualMode, setDualMode] = useState(!!initialConfig.dualMode);
   const [modelB, setModelB] = useState(() => {
@@ -5232,6 +5311,11 @@ function SetupPage({ onComplete, initialConfig }) {
       if (other) setModelB(other.id);
     }
   }, [model, modelB]);
+  useEffect(() => {
+    if (window.location.hash === '#high-performance-prompt') {
+      setShowExternalPrompt(true);
+    }
+  }, []);
 
   const validKeys = apiKeys.filter(k => k && k.trim());
 
@@ -5269,15 +5353,25 @@ function SetupPage({ onComplete, initialConfig }) {
     onComplete({ apiKeys: validKeys, model: validatedModel, modelB: validatedModelB, dualMode });
   };
 
+  const copyExternalPrompt = () => {
+    if (clipCopy(HIGH_PERFORMANCE_MODEL_EXTRACTION_PROMPT)) {
+      setExternalPromptCopied(true);
+      setTimeout(() => setExternalPromptCopied(false), 1800);
+    }
+  };
+
   return (
     <div className="h-full min-h-0 bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/20 flex flex-col overflow-y-auto">
       <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/80 py-4 px-6 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
-          <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg"><Sparkles size={22}/></div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-800">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3 / Gemini Edition</span></h1>
-            <p className="text-xs text-slate-500">Google AI Studio の無料APIキーで動く RCT データ抽出ツール</p>
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-2 rounded-lg flex-shrink-0"><Sparkles size={22}/></div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-slate-800 truncate">Meta-Analysis Data Extractor <span className="text-xs gradient-text font-mono font-bold">v3 / Gemini Edition</span></h1>
+              <p className="text-xs text-slate-500">Google AI Studio の無料APIキーで動く RCT データ抽出ツール</p>
+            </div>
           </div>
+          <a href="index.html" className="text-[11px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-3 py-1.5 rounded-lg font-bold flex-shrink-0">表紙</a>
         </div>
       </header>
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
@@ -5295,6 +5389,23 @@ function SetupPage({ onComplete, initialConfig }) {
             <a href="references.html" className="font-bold underline ml-1" target="_blank" rel="noopener">参考文献ページ</a>
             に移動しました。
           </p>
+        </div>
+
+        <div id="high-performance-prompt" className="bg-white border-2 border-indigo-200 rounded-xl shadow-sm p-4 mb-6 fade-in-up fade-d2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-indigo-900 mb-1 flex items-center gap-2 text-sm"><FileText size={16}/>高性能モデルで直接抽出するプロンプト</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                本アプリ内ではAPI制限で難しい長文PDFや高性能モデル利用時に、PDFまたはURLと一緒に貼り付けるためのプロンプトです。DataExのRound 1/2/3の考え方をまとめたコピー用で、アプリ本体の抽出アルゴリズムは変更しません。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowExternalPrompt(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 flex-shrink-0">
+              <CopyIcon size={13}/>プロンプトを開く
+            </button>
+          </div>
         </div>
 
         <div className="mb-6 fade-in-up fade-d2">
@@ -5328,6 +5439,39 @@ function SetupPage({ onComplete, initialConfig }) {
           {validKeys.length === 0 && <p className="text-[11px] text-slate-500 mt-2">APIキーを少なくとも1個入力してください</p>}
         </div>
       </main>
+      {showExternalPrompt && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-end sm:items-center justify-center p-3" onClick={() => setShowExternalPrompt(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-indigo-700 text-white px-4 py-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold flex items-center gap-2 text-sm"><FileText size={16}/>高性能モデル用データ抽出プロンプト</h3>
+                <p className="text-[11px] text-indigo-100 mt-0.5">このプロンプトとPDFまたはURLを、高性能モデルのチャットへそのまま貼り付けてください。</p>
+              </div>
+              <button onClick={() => setShowExternalPrompt(false)} className="text-white/80 hover:text-white"><XCircle size={18}/></button>
+            </div>
+            <div className="p-4 space-y-3 overflow-y-auto">
+              <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-3 text-xs leading-relaxed">
+                3群以上のRCTでは、このプロンプトが「どの2群を比較しますか？」と先に確認するよう指示しています。2群比較ではPICOを自動設定し、Excelへ貼り付けやすいTSV表で出力します。
+              </div>
+              <textarea
+                readOnly
+                value={HIGH_PERFORMANCE_MODEL_EXTRACTION_PROMPT}
+                className="w-full h-[52vh] bg-slate-950 text-slate-50 rounded-lg border border-slate-700 p-3 font-mono text-[11px] leading-relaxed resize-none"
+                onFocus={e => e.target.select()}
+              />
+            </div>
+            <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] text-slate-500">クリックで全選択、または右のボタンでコピーできます。</span>
+              <button
+                type="button"
+                onClick={copyExternalPrompt}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5">
+                <CopyIcon size={13}/>{externalPromptCopied ? 'コピーしました' : 'プロンプトをコピー'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -6470,6 +6614,13 @@ ${pdfText.substring(0, 30000)}`;
             </h1>
           </button>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onBack}
+              title="表紙へ戻る（抽出結果はデータクリアまで保持）"
+              className="text-[10px] bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-300 px-2 py-1 rounded flex items-center gap-1 font-bold">
+              <ChevronLeft size={11}/>表紙
+            </button>
             <button
               onClick={() => setShowHeaderHelp(true)}
               title="右上ボタンの説明"
