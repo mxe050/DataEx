@@ -3156,14 +3156,14 @@ function computeSEFromCI(ciLowerStr, ciUpperStr) {
   return ((hi - lo) / 3.92).toFixed(4);
 }
 
-// 論文識別子の自動生成: paperPICO + 抽出元から派生 ("Maltz2017" / "Study_1" などに落とす)
+// 論文識別子の自動生成: paperPICO + 抽出元から派生 ("Smith2017" / "Study_1" などに落とす)
 // ユーザーがUIで上書き可能になるよう外部から studyIdOverride を渡せる
 function deriveStudyId(paperPICO, fileName, override) {
   if (override && String(override).trim()) return String(override).trim();
   // PICOのstudyDesign/sampleSizeから推測しないで、まずファイル名を試す
   if (fileName) {
     const stem = String(fileName).replace(/\.[a-zA-Z]+$/, '');
-    // "Smith2020" / "Maltz_2017_..." パターン
+    // "Smith2020" / "Study_2017_..." パターン
     const m1 = stem.match(/([A-Za-z][A-Za-z\-]{2,})[\s_\-]*(?:et\s*al)?[\s_\-]*(\d{4})/);
     if (m1) return `${m1[1]}${m1[2]}`;
     // 数字始まりは除外、基本ファイル名最初の単語
