@@ -308,7 +308,6 @@ Figure 1 (CONSORT) から以下を抽出:
 - Analyzed (ITT) N / Analyzed (PP) N
 - 上段のランダム化/割付直後に成功・失敗・反応・非反応などの結果が書かれていれば ITT候補結果として抽出
 - 下段の脱落除外後 / completed protocol / analyzed PP box に成功・失敗・反応・非反応などの結果が書かれていれば PP候補結果として抽出
-上段と下段を優先し、中段の脱落理由は明確なNだけ補助情報として扱う。中段の説明語をアウトカムイベント数へ混ぜない。
 成功/失敗の片方だけが記載され、同じbox内のNが明確なら、もう片方は N−event で計算して別レコード化し、notes に式を残す。これらは populationType ごとの n_total とアウトカム候補として使用。
 
 【Table 1 (Baseline) の完全抽出】
@@ -1563,7 +1562,6 @@ Round 3 方針:
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
 - フローチャートbox内に success/failure/response/non-response/changed/improved などの結果が書かれていれば必ずOutcome TSVに入れる。上段のランダム化/割付boxはITT候補、下段のcompleted protocol/analyzed PP boxはPP候補として、成功と失敗を両方別行で出す。
-- フローチャートは上段（randomized/allocated/analyzed ITT候補）と下段（completed/analyzed PP候補と結果）を最優先する。中段の脱落理由は、明確に読めるNだけを補助情報として扱い、成功/失敗イベント数やHR/P値と混同しない。
 - 図表やフローチャートから読んだ数値も、後でExcelへ貼れるTSVに必ず入れる。画面上の説明だけで終わらせない。
 
 【数字を取り違えないための必須ルール】
@@ -4673,7 +4671,6 @@ ${sourceText.substring(0, coreTextLimit)}`;
 【CONSORT Flow結果の読み方】
 - ランダム化/割付直後の2群boxは ITT候補。allocated / randomized / analyzed ITT のNを群別に取り、同じboxまたは直下に success/failure などの結果があれば ittSuccess_* / ittFailure_* に入れる。
 - 一番下の脱落除外後、completed protocol、per protocol、analyzed PP の2群boxは PP候補。analyzedPP_* のNを群別に取り、同じboxに結果があれば ppSuccess_* / ppFailure_* に入れる。
-- 上段と下段を優先。中段の脱落理由は明確なNのみ補助的に取り、結果イベントや効果量と混ぜない。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけ書かれている場合は推測で補完せず、記載値だけ入れる（後処理でNが確実な場合だけ N−event 補完する）。
 - success/failure以外の結果（changed/improved/healed/responseなど）がFlow内にある場合は ittOtherOutcomeName/ittOtherResult_* または ppOtherOutcomeName/ppOtherResult_* に入れる。
 - flowOutcomeEvidenceText には、結果が書かれたboxの原文・数値を短く引用する。
@@ -5281,7 +5278,6 @@ PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow d
 - 返すのは consortFlow / prismaFlow のみ。通常の本文/表アウトカムは抽出しないが、Flow diagramのbox内に直接書かれた success/failure/response/non-response/変化などの結果は consortFlow の結果フィールドに必ず入れる。
 - ランダム化/割付直後の2群boxはITT候補として扱う。全体randomized、allocated intervention/control、analyzed ITT が読める場合はそれぞれ抽出し、同じ上段boxに成功/失敗があれば ittSuccess_* / ittFailure_* に入れる。
 - 一番下の脱落除外後 / completed protocol / per-protocol / analyzed PP の2群boxはPP候補として扱う。analyzedPP_* を群別に取り、同じ下段boxに成功/失敗があれば ppSuccess_* / ppFailure_* に入れる。
-- 上段と下段を最優先する。中段の脱落理由・除外理由は、明確なNだけを lostToFollowUp 等へ補助的に入れ、成功/失敗イベントや効果量と混同しない。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけなら片方だけ入れる。ここではN−event補完をしない（後処理で安全に補完する）。
 - success/failure以外の結果（response, non-response, changed, improved, healed, deterioration など）がFlow内にある場合は ittOtherOutcomeName/ittOtherResult_* または ppOtherOutcomeName/ppOtherResult_* に入れる。
 - フローチャートが無い、または画像から読めない場合は空のまま返す。
