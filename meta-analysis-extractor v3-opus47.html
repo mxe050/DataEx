@@ -251,6 +251,8 @@ overall cohort summary がある場合は、それを優先採用すること。
 5. 時点が複数（e.g., 4週・12週・24週）→ 時点ごとに別レコード
 6. 同じアウトカムが異なるサブグループで報告 → 独立抽出
 7. 異なる計算方法（例: last-observation-carried-forward vs multiple imputation）→ 別レコード
+8. 同じアウトカムで Flow diagram、Abstract、本文Results、Table、Figure の N やイベント数が違う場合 → 全て別レコード候補として保持し、sourceLocation と variationReason で出処差を明記
+9. 各レコードの notes 末尾には必ず「なぜこの数値を採用したか」を書く。例: "[採用根拠: ITT解析集団、Results本文p.5のprimary analysis、分母はCONSORT analyzed ITT N=115]"
 
 【群のペアリング（超重要）】
 同じアウトカム・同じ時点・同じ集団タイプの介入群と対照群データは必ずペアで格納。
@@ -259,6 +261,7 @@ overall cohort summary がある場合は、それを優先採用すること。
 【出処の厳密な分離】
 sourceLocationには単一の出処のみ記載（例: "Table 2", "Abstract Results", "Figure 2", "本文p.5段落3"）。
 記載場所が違えば必ず別レコード。「Table 2 / Figure 2」のような複合記載は禁止。
+ただし notes には「同じアウトカムの別レコードとして Abstract値 / 本文値 / Flow由来N / ITT / PP が存在する」ことを記載してよい。
 
 【データ抽出の厳密ルール】
 1. 文献番号（例: "Smith et al [15]"）は除外
@@ -1442,6 +1445,7 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
 - 介入群と対照群を必ず文脈から確認する。Control の方が高値の文章でも、値を入れ替えない。
 - P値・RR・OR・IRR・HRなどの統計量は原文の表記をそのまま保持する。p<0.05 と p>=0.05 の判定が矛盾しないか確認する。
 - 同一著者の別研究、別コホート、ITT/PP/mITT/Safety集団を混同しない。集団が違う値は別レコードにする。
+- 同じアウトカムで Abstract、本文Results、Table、Figure、Flow diagram、ITT、PP の値や分母が違う場合は、1つに選別せず全て別レコードとして残す。notes には「採用根拠」と「他候補の存在」を書く。
 - 抽出後に自己検証する: N、primary endpoint、群方向、P値/有意性、NR補完、デバイス/介入名、evidenceTextの存在。`
   },
   {
@@ -1459,6 +1463,7 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
 - Laignelot 2026: LLM抽出精度には幅がある前提で、全ての数値を人間が照合できるよう evidenceText / pageNumber / sourceLocation を優先する。
 - Fan 2026 / RCT抽出エラー研究・分類: misallocation(フィールド/群/時点への誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。各アウトカムで wrong arm、wrong denominator、wrong time point、SE/SD混同、unit欠落、percentage-only、effect direction逆転、primary/secondary混同を必ず点検する。
 - 見落とし防止: ユーザー指定アウトカムだけでなく、本文Results/Table/Figureにある同じ臨床概念の時点違い・解析集団違い(ITT/PP/mITT/safety)・スケール違いを別レコード候補として確認する。
+- 同一アウトカム内の複数候補: Abstract値、本文値、Table値、Figure値、Flow由来N、ITT、PP、mITT、available case が複数ある場合は全候補を出し、notes に採用根拠と差分理由を書く。
 - CONSORT 2025/CONSORT flow: randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcome を群別に確認し、アウトカムの分母と矛盾しないか見る。フローチャートのN数はアウトカムに変換せず consortFlow/prismaFlow として保持する。
 - CONSORT-AI / STARD-AI: モデル設定、プロンプト、検証手順、監査可能性を意識し、unclearItems と notes に検証上の注意を残す。
 - RAG/根拠接地: 先に本文内の該当箇所を探し、次に値を抽出し、最後に evidenceText と構造化フィールドが一致するか検証する。数値フィールドに入る数字は evidenceText / sourceLocation / pageNumber に対応するものだけに限定する。
@@ -1509,6 +1514,8 @@ Round 1 方針:
 - dual-modelで独立抽出したつもりで、各フィールドを「確実 / 部分的 / 要確認」に分類する。
 - §6エラーパターンを必ず確認する: 分散値欠落、アームスワップ、単位欠落、SE/SD混同、分母欠落、ハルシネーション疑い。
 - ITT / mITT / PP / safety集団、術前値・術後値・変化量、時点違いを混同せず、必要なら別レコードにする。
+- 同じアウトカムでも、Abstract値、本文値、Table値、Figure値、CONSORT/PRISMA Flow由来N、ITT、PP、mITT、available case が複数ある場合は、最も良さそうな1つに絞らず全て別行で出す。
+- 各行のNotesには「採用根拠」を必ず書く。例: "採用根拠: PP解析、Table 2、分母はcompleted protocol N=88。ITT解析は別行。"
 - 全アウトカムを網羅する。指定アウトカム以外でも、メタ解析に使える主要・副次アウトカムは候補として抽出する。
 
 Round 2 方針:
@@ -1523,6 +1530,7 @@ Round 2 方針:
 Round 3 方針:
 - 抄録ファーストではなく本文ファースト。Abstractは候補探索に使い、構造化フィールドへ入れる値はResults本文、Table、Figure、CONSORT/PRISMA flow、Supplementで再確認する。
 - Abstractと本文・表・図の値が違う場合は丸めない。本文/表/図を優先し、差分をnotesに明記する。
+- Flow diagramのNと本文/表のNが違う場合も丸めない。Flow結果はFlow TSVに、本文/表アウトカムはOutcome TSVに残し、Notesに差分を書く。
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNをアウトカムイベント数に変換しない。
@@ -2158,10 +2166,42 @@ function rememberExtractionResult(cacheKey, result) {
 /* ============================================================
    SECTION 9: EXPORT HELPERS
    ============================================================ */
+function buildOutcomeRationale(o) {
+  const parts = [];
+  const src = String(o.sourceLocation || '').trim();
+  const page = o.pageNumber ? `p.${o.pageNumber}` : '';
+  const figure = String(o.figureType || '').trim();
+  const pop = String(o.populationType || '').trim();
+  const popDesc = String(o.populationDescription || '').trim();
+  const variation = String(o.variationReason || '').trim();
+  const calc = String(o.calculationMethod || '').trim();
+  const notes = String(o.notes || '').trim();
+  if (src || page || figure) {
+    parts.push(`出処=${[src, page, figure && `図表種別:${figure}`].filter(Boolean).join(' / ')}`);
+  }
+  if (pop || popDesc) {
+    parts.push(`解析集団=${[pop, popDesc].filter(Boolean).join(' / ')}`);
+  }
+  if (variation) parts.push(`別候補理由=${variation}`);
+  if (calc) parts.push(`計算=${calc}`);
+  if (notes) parts.push(`注記=${notes}`);
+  const sig = [
+    o.interventionGroup?.n_total && `I_N=${o.interventionGroup.n_total}`,
+    o.interventionGroup?.events_or_mean && `I値=${o.interventionGroup.events_or_mean}`,
+    o.comparisonGroup?.n_total && `C_N=${o.comparisonGroup.n_total}`,
+    o.comparisonGroup?.events_or_mean && `C値=${o.comparisonGroup.events_or_mean}`,
+    o.effectEstimate?.measureType && `指標=${o.effectEstimate.measureType}`,
+    o.effectEstimate?.value && `推定値=${o.effectEstimate.value}`,
+    o.effectEstimate?.pValue && `P=${o.effectEstimate.pValue}`
+  ].filter(Boolean).join(' / ');
+  if (sig) parts.push(`抽出値=${sig}`);
+  return parts.length ? parts.join(' | ') : '-';
+}
+
 const OC_HDRS = ["要求アウトカム", "実際のアウトカム", "評価時点", "揺らぎ説明", "計算方法", "変数型", "対象集団", "集団説明",
   "介入群_N", "介入群_イベント/平均", "介入群_SD/SE", "対照群_N", "対照群_イベント/平均", "対照群_SD/SE",
   "第3群名", "第3群_N", "第3群_イベント/平均", "第3群_SD/SE", "指標", "推定値", "95%CI", "P値", "SD/SE判定", "信頼度",
-  "図表種別", "出処", "根拠原文", "注記", "ページ"];
+  "図表種別", "出処", "根拠原文", "注記", "ページ", "抽出根拠コメント"];
 
 function outcomeRow(o) {
   return [o.requestedOutcomeName||"-", o.actualOutcomeName||"-", o.timePoint||"-", o.variationReason||"-",
@@ -2171,7 +2211,7 @@ function outcomeRow(o) {
     o.thirdGroupName||"-", o.thirdGroup?.n_total||"-", o.thirdGroup?.events_or_mean||"-", o.thirdGroup?.sd_or_se||"-",
     o.effectEstimate?.measureType||"-", o.effectEstimate?.value||"-", o.effectEstimate?.ci95||"-", o.effectEstimate?.pValue||"-",
     o.sdOrSe||"-", o.confidence||"-",
-    o.figureType||"-", o.sourceLocation||"-", (o.evidenceText||"-").replace(/[\n\t]/g, " "), o.notes||"-", o.pageNumber||"-"];
+    o.figureType||"-", o.sourceLocation||"-", (o.evidenceText||"-").replace(/[\n\t]/g, " "), o.notes||"-", o.pageNumber||"-", buildOutcomeRationale(o)];
 }
 
 const BL_HDRS = ["カテゴリ", "変数", "型", "単位", "介入_N", "介入_値", "介入_SD", "介入_%", "介入_IQR", "介入_範囲",
@@ -2587,6 +2627,79 @@ function extractDenominatorFromEventsValue(val) {
   return '';
 }
 
+function _variantOutcomeKey(o) {
+  const raw = `${o?.requestedOutcomeName || ''} ${o?.actualOutcomeName || ''}`.toLowerCase();
+  const normalizedName = raw
+    .replace(/\b(itt|m?itt|pp|per[-\s]?protocol|safety|available case|complete case)\b/g, '')
+    .replace(/\b(abstract|results?|table|figure|fig|flow|consort|prisma)\b/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .slice(0, 80);
+  return [
+    normalizedName || String(o?.actualOutcomeName || o?.requestedOutcomeName || '').toLowerCase().trim(),
+    String(o?.timePoint || '').toLowerCase().trim(),
+    String(o?.variableType || '').toLowerCase().trim()
+  ].join('|');
+}
+
+function _variantSignature(o) {
+  return [
+    o?.populationType || '-',
+    o?.sourceLocation || '-',
+    o?.figureType || '-',
+    `I:${o?.interventionGroup?.n_total || '-'}/${o?.interventionGroup?.events_or_mean || '-'}`,
+    `C:${o?.comparisonGroup?.n_total || '-'}/${o?.comparisonGroup?.events_or_mean || '-'}`
+  ].join(' ');
+}
+
+function annotateOutcomeVariantRationales(outcomes) {
+  if (!Array.isArray(outcomes) || outcomes.length < 2) return outcomes;
+  const groups = new Map();
+  outcomes.forEach((o, idx) => {
+    const key = _variantOutcomeKey(o);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ o, idx });
+  });
+  groups.forEach(items => {
+    if (items.length < 2) return;
+    const signatures = items.map(({ o }) => _variantSignature(o));
+    const unique = new Set(signatures.map(s => s.toLowerCase()));
+    if (unique.size < 2) return;
+    items.forEach(({ o }, i) => {
+      const others = signatures.filter((_, j) => j !== i).slice(0, 4).join(' / ');
+      const own = signatures[i];
+      o.variationReason = o.variationReason || '同一アウトカムで解析集団・出処・分母・値が異なる候補を別レコードとして保持';
+      o.notes = _appendExtractionNote(
+        o.notes,
+        `[複数候補保持: この行=${own}; 他候補=${others}]`
+      );
+    });
+  });
+  return outcomes;
+}
+
+function annotateFlowDenominatorDifferences(out, consort) {
+  if (!out || !consort) return out;
+  const text = `${out.populationType || ''} ${out.populationDescription || ''} ${out.actualOutcomeName || ''} ${out.notes || ''}`.toLowerCase();
+  const isPP = /per.?protocol|\bpp\b|protocol completed|プロトコ|完遂/.test(text);
+  const isITT = /intention|itt|m?itt|full analysis|fas|解析対象|割付/.test(text);
+  const source = consort.sourceLocation || 'CONSORT Flow';
+  const pairs = [
+    ['interventionGroup', '介入群', isPP ? consort.analyzedPP_intervention : isITT ? consort.analyzedITT_intervention : ''],
+    ['comparisonGroup', '対照群', isPP ? consort.analyzedPP_comparison : isITT ? consort.analyzedITT_comparison : '']
+  ];
+  pairs.forEach(([g, label, flowVal]) => {
+    const outcomeN = extractNumber(out[g]?.n_total);
+    const flowN = extractNumber(flowVal);
+    if (outcomeN && flowN && outcomeN !== flowN) {
+      const popLabel = isPP ? 'PP' : isITT ? 'ITT/mITT/FAS' : '解析集団不明';
+      out.notes = _appendExtractionNote(out.notes, `[n差異: ${label} ${popLabel} outcome N=${outcomeN}, CONSORT Flow=${flowN} (${source})。Flow値はフローチャートTSVにも保持]`);
+      out.variationReason = out.variationReason || 'Flow diagramと本文/表の分母Nが異なるため要照合';
+    }
+  });
+  return out;
+}
+
 // 引用文の PDF 突合 (fuzzy match): evidenceText が pdfText 内に概ね存在するか
 // 判定方法: 引用文を空白を除去して小文字化、PDF テキストも同様にして連続部分一致を見る
 // 部分一致率 >= 0.6 ならpass、それ未満は fail (ハルシネーション疑い)
@@ -2687,6 +2800,7 @@ function postProcessExtraction(result, pdfTextLower) {
         }
       });
     }
+    annotateFlowDenominatorDifferences(out, consort);
     // 2. quote validation (PDF 物理突合)
     if (pdfTextLower) {
       const v = validateQuoteAgainstPdf(o.evidenceText, pdfTextLower);
@@ -2699,6 +2813,7 @@ function postProcessExtraction(result, pdfTextLower) {
     }
     return out;
   });
+  normalized.extractedOutcomes = annotateOutcomeVariantRationales(normalized.extractedOutcomes);
   normalized._postProcess = {
     nPercentNormalizations: nFmtChanges,
     quoteValidations: pdfTextLower ? normalized.extractedOutcomes.length : 0,
@@ -3997,6 +4112,7 @@ G. **複数metric同時報告漏れ**  (Vivekanantha A2 必須ルール)
    - 同じアウトカムで mean と median 両方が報告されているのに片方しか抽出されていない → 両方を別レコードで保持
    - Pre と Post の両方が報告されているのに片方しか無い → 両方を別レコードで保持
    - Abstract と本文で値が違うのに統一されている → 両方を別レコードで保持 (variationReason に明記)
+   - Flow diagram の解析対象Nと本文/表の分母Nが違う → Flowは consortFlow に残し、アウトカム側は本文/表の分母で別レコード化。notes に "[n差異: Flow analyzed ITT=..., Table outcome denominator=...]" と書く
 
 H. **コホート違反** (Vivekanantha A2 cohort filter)
 ${pico.cohortFilter ? `   - 上記コホートフィルタ ("${pico.cohortFilter.trim().substring(0,200)}...") に従い、対象外群からの抽出が混入していないか確認\n   - 違反していれば該当レコードを削除 (correctedOutcomes に含めない)` : '   - PICO の I/C 群以外からの抽出が混入していないか確認'}
@@ -4007,9 +4123,10 @@ ${pico.cohortFilter ? `   - 上記コホートフィルタ ("${pico.cohortFilter
 3. **集団タイプの分離**: ITT/PP/mITT/Safety が混ざっていないか、populationType が正しいか
 4. **時点違いの分離**: 同一アウトカムが複数時点で報告されている場合、別レコードになっているか
 5. **見落としアウトカム**: 元のリストに含まれていない重要アウトカムが論文中に存在しないか
-6. **figureType の妥当性**: KMカーブからの抽出なら "KaplanMeier"、表からなら "Table" を必ず記録
-7. **evidenceText / evidenceTextJa**: 原文と日本語訳の整合性、両方とも 250 文字以内
-8. **evidenceText の物理存在**: 引用文が論文原文に literally 存在するか (ハルシネーション検出)。捏造されていれば該当レコードの notes に "[捏造疑い: 原文未確認]" を追加
+6. **同一アウトカムの複数候補保持**: Abstract値、本文値、Table値、Figure値、Flow由来N、ITT、PP、mITT、available case が複数ある場合、選別せず全候補を correctedOutcomes に残す。各行の notes に採用根拠と他候補の存在を書く
+7. **figureType の妥当性**: KMカーブからの抽出なら "KaplanMeier"、表からなら "Table" を必ず記録
+8. **evidenceText / evidenceTextJa**: 原文と日本語訳の整合性、両方とも 250 文字以内
+9. **evidenceText の物理存在**: 引用文が論文原文に literally 存在するか (ハルシネーション検出)。捏造されていれば該当レコードの notes に "[捏造疑い: 原文未確認]" を追加
 
 【重要な出力ルール】
 - correctedOutcomes には **元のリストを修正した完全版** を入れる（差分でなく全件）
