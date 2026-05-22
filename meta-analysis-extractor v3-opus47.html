@@ -300,8 +300,10 @@ Flow diagramから読んだN/イベントと、本文・表・KM図から読ん�
 - 図表からの読み取りは confidence="low" または "medium" に設定し、figureType フィールドに種別を記録、notes に "[図表からの目視抽出]" と明記
 
 【CONSORT Flow Diagramからの抽出（重要）】
-Figure 1 (CONSORT) から以下を抽出する。必ず **Step 1: 図中の数字を全て読む → Step 2: 意味を解釈してフィールドへ割り当てる** の順で行う:
-- Step 1: flowNumberInventory に、Flow diagram内で読める全ての数字を、周辺ラベル・群名・box位置と一緒に列挙する。randomized / allocated / lost / excluded / analyzed / completed / successes / failures / cumulative など、数値が付くものは省略しない。
+Figure 1 (CONSORT) から以下を抽出する。必ず **Step 0: boxごとに全文を書き起こす → Step 1: 図中の数字を全て読む → Step 2: 意味を解釈してフィールドへ割り当てる** の順で行う:
+- Step 0: flowBoxTranscription に、Flow diagram内の全boxを上から下・左から右の読順で列挙し、box内の読める文字を省略せず rawText に書く。途中の脱落/除外boxも省略しない。
+- Step 1: flowBoxTranscription の rawText から、Flow diagram内で読める全ての数字を flowNumberInventory に列挙する。n、%、年/月、p値、CI、分母、除外理由別N、success/failure、cumulative など、数値が付くものは全て入れる。患者数らしくない数字でも、Flow box内に見えるならまず台帳に入れ、解釈は Step 2 で行う。
+- Step 1検証: flowBoxTranscription の allNumbers に入れた数字数より flowNumberInventory が少ない場合は、必ず不足分を追加してから返す。解釈済みフィールドだけ返して数字台帳を省略することは禁止。
 - Step 2: flowNumberInventory を見ながら、以下の構造化フィールドへ割り当てる。
 - Randomized N
 - Allocated to each arm N
@@ -603,6 +605,23 @@ const EXTRACT_SCHEMA_JSON = {
         ppOtherOutcomeName: { type: "string" },
         ppOtherResult_intervention: { type: "string" },
         ppOtherResult_comparison: { type: "string" },
+        flowBoxTranscription: {
+          type: "array",
+          description: "Flow diagram内の全boxを読順で全文書き起こしする。数字抽出前の原本台帳。",
+          items: {
+            type: "object",
+            properties: {
+              readingOrder: { type: "integer" },
+              boxLocation: { type: "string" },
+              group: { type: "string" },
+              rawText: { type: "string" },
+              allNumbers: { type: "array", items: { type: "string" } },
+              interpretedRole: { type: "string" },
+              confidence: { type: "string" },
+              notes: { type: "string" }
+            }
+          }
+        },
         flowNumberInventory: {
           type: "array",
           description: "Flow diagram内で読める全ての数字を、解釈前に台帳として列挙する",
@@ -1580,7 +1599,9 @@ Round 3 方針:
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
-- フローチャートでは、まず図中の数字を全て flowNumberInventory 相当の台帳に列挙し、その後で randomized / allocated / analyzed ITT / analyzed PP / success / failure などへ解釈する。数字を読み飛ばして解釈だけ出さない。
+- フローチャートでは、まず全boxを読順に書き起こす flowBoxTranscription 相当の台帳を作る。各boxについて rawText と allNumbers を作り、途中の脱落/除外boxも省略しない。
+- 次に図中の数字を全て flowNumberInventory 相当の台帳に列挙し、その後で randomized / allocated / analyzed ITT / analyzed PP / success / failure などへ解釈する。数字を読み飛ばして解釈だけ出さない。
+- flowNumberInventory は flowBoxTranscription の allNumbers を下回ってはいけない。不足があれば出力前に補う。Flow box内の n、%、年/月、p値、CI、理由別除外N、success/failure は全て入れる。
 - フローチャートbox内に success/failure/response/non-response/changed/improved などの結果が書かれていれば必ずOutcome TSVに入れる。上段のランダム化/割付boxはITT候補、下段のcompleted protocol/analyzed PP boxはPP候補として、成功と失敗を両方別行で出す。
 - 図表やフローチャートから読んだ数値も、後でExcelへ貼れるTSVに必ず入れる。画面上の説明だけで終わらせない。
 
@@ -1605,23 +1626,14 @@ Round 3 方針:
 PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I、PICO-C、解析集団、時点、Outcome、Outcome種別(Binary/Continuous/Time-to-event)、Intervention名、Control名、Intervention N、Intervention result、Intervention SD/SE、Control N、Control result、Control SD/SE、Effect measure、Effect value、95%CI、P-value、Significance、Source location、Page/Figure/Table、Evidence text、Evidence text日本語訳、Confidence、Notes。
 
 【出力形式】
-1. まず自動設定したPICOと、比較した2群を短く示す。
-2. 次にCONSORT/PRISMAフローチャート確認結果を、群別Nの短い表で示す。
-3. 次にFlow Number Inventory TSVを出す。フローチャート内で読んだ全数字、周辺ラベル、群名、box位置、解釈を入れる。
-4. 次にExcelへそのまま貼れるOutcome TSV表を出す。列はタブ区切りにする。通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行もOutcome TSV内に入れる。独立したFlow TSVは出さない。
-   - まずラベル付き原文をEvidence Text / Notesに保持する。
-   - 最終TSVでは、Intervention Result / Control Result などの数値セルは数字だけにし、"cumulative failures" などの意味ラベルは Source Detail または Notes に残す。
-5. Outcome TSVの後に、抽出サマリーをTSVで出す。このRCTで使われているアウトカム候補、ITT/PP差、Flow由来値、本文/表/Figure由来値、メタ分析時の注意点をExcel上で読めるように書く。
-6. 最後に「最終メタ分析候補TSV」を出す。本文/表/Figure/Flowを照合した上で、メタ分析に使いやすい候補行を、数値セルが数字だけになるようにまとめる。
+1. 最後にExcelへそのまま1回で貼れる「単一TSV」を1つだけ出す。複数の独立TSV表に分割しない。列はタブ区切りで、先頭列に Section / Row Type を入れて、PICO、Flow box書き起こし、Flow数字台帳、全アウトカム、抽出サマリー、最終メタ分析候補を同じ表内に縦に並べる。
+2. 通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行も同じ単一TSV内に入れる。独立したFlow TSVは出さない。
+3. まずラベル付き原文をEvidence Text / Notesに保持する。
+4. 最終メタ分析候補行では、Intervention Result / Control Result などの数値セルは数字だけにし、"cumulative failures" などの意味ラベルは Source Detail または Notes に残す。
+5. このRCTで使われているアウトカム候補、ITT/PP差、Flow由来値、本文/表/Figure由来値、メタ分析時の注意点も、同じ単一TSV内の summary 行としてExcel上で読めるように書く。
 
-Outcome TSVヘッダー:
-Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tSource Detail\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
-
-Flow Number Inventory TSVヘッダー:
-Source Location\tPage\tBox Location\tGroup\tNumber\tLabel\tRaw Text\tInterpreted As\tConfidence\tNotes
-
-Final Meta-analysis Candidate TSVヘッダー:
-Outcome\tStudy\tTimepoint\tPopulation\tEvents Intervention\tTotal Intervention\tPercent Intervention\tEvents Control\tTotal Control\tPercent Control\tEffect Measure\tEffect Value\t95% CI\tP-value\tSource Detail\tEvidence Text\tNotes
+単一TSVヘッダー:
+Section\tRow Type\tOrder\tStudy ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome/Item\tOutcome Type\tIntervention/Arm1\tIntervention N\tIntervention Value/Events\tIntervention SD/SE\tIntervention Percent\tControl/Arm2\tControl N\tControl Value/Events\tControl SD/SE\tControl Percent\tThird Group\tThird N\tThird Value\tEffect Measure\tEffect Value\t95%CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tSource Detail\tEvidence Text\tEvidence Text JA\tConfidence\tNotes\tRaw Text
 
 7. 最後に自己検証チェックリストを出す:
 - 解析対象Nか
@@ -2292,6 +2304,14 @@ const BL_HDRS = ["カテゴリ", "変数", "型", "単位", "介入_N", "介入_
   "第3群_N", "第3群_値", "第3群_SD", "第3群_%", "第3群_IQR", "第3群_範囲", "P値", "出処", "ページ"];
 const FLOW_INV_HDRS = ["出処", "ページ", "box位置", "群", "数字", "ラベル", "原文", "解釈", "信頼度", "注記"];
 const SUMMARY_HDRS = ["セクション", "項目", "内容"];
+const UNIFIED_COPY_HDRS = [
+  "セクション", "サブセクション", "順番", "Study ID", "PMID/DOI", "1st Author", "Journal", "Year", "Study Name", "Design",
+  "PICO-P", "PICO-I", "PICO-C", "Population", "Time Point", "Outcome/項目", "Outcome Type",
+  "Intervention/群1", "Intervention N", "Intervention Value/Events", "Intervention SD/SE", "Intervention Percent",
+  "Control/群2", "Control N", "Control Value/Events", "Control SD/SE", "Control Percent",
+  "Third Group", "Third N", "Third Value", "Effect Measure", "Effect Value", "95%CI", "P-value", "Significance",
+  "Source Location", "Page/Figure/Table", "Source Detail", "Evidence Text", "Evidence Text JA", "Confidence", "Notes", "Raw Text"
+];
 
 function baselineRow(b) {
   return [b.category||"-", b.variable||"-", b.dataType||"-", b.unit||"-",
@@ -2301,13 +2321,23 @@ function baselineRow(b) {
     b.pValue||"-", b.sourceLocation||"-", b.pageNumber||"-"];
 }
 
+function _flowNumberCell(value, rawText) {
+  let source = value ?? rawText ?? "";
+  if (source && typeof source === "object") source = source.number || source.value || source.rawText || source.text || JSON.stringify(source);
+  const s = _cleanOneLine(source);
+  if (!s || s === "-") return "-";
+  const m = s.match(/[<>]?\s*-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:%|％)?/);
+  if (!m) return extractNumber(s) || "-";
+  return m[0].replace(/\s+/g, "");
+}
+
 function _flowInventoryRow(item, flow) {
   return [
     flow?.sourceLocation || "-",
     flow?.pageNumber || "-",
     item?.boxLocation || "-",
     item?.group || "-",
-    extractNumber(item?.number || item?.rawText) || "-",
+    _flowNumberCell(item?.number, item?.rawText),
     item?.label || "-",
     _cleanOneLine(item?.rawText || item?.number || "-"),
     item?.interpretedAs || "-",
@@ -2316,12 +2346,46 @@ function _flowInventoryRow(item, flow) {
   ];
 }
 
-function buildFlowInventoryRows(result) {
-  const flow = result?.consortFlow;
+function extractFlowNumberTokens(text) {
+  const s = _cleanOneLine(text || "");
+  if (!s || s === "-") return [];
+  const out = [];
+  const re = /[<>]?\s*-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:%|％)?/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const token = m[0].replace(/\s+/g, "");
+    if (token && !out.includes(token)) out.push(token);
+  }
+  return out;
+}
+
+function _flowBoxNumberRows(flow) {
+  const boxes = Array.isArray(flow?.flowBoxTranscription) ? flow.flowBoxTranscription : [];
+  const rows = [];
+  boxes.forEach((box, idx) => {
+    const rawText = _cleanOneLine(box?.rawText || "");
+    const explicitNumbers = Array.isArray(box?.allNumbers)
+      ? box.allNumbers.map(n => _flowNumberCell(n, n)).filter(n => n && n !== "-")
+      : [];
+    const parsedNumbers = extractFlowNumberTokens(rawText);
+    const nums = [];
+    explicitNumbers.concat(parsedNumbers).forEach(n => { if (n && !nums.includes(n)) nums.push(n); });
+    nums.forEach(number => rows.push(_flowInventoryRow({
+      rawText,
+      number,
+      label: box?.interpretedRole || box?.notes || "box number",
+      group: box?.group || "-",
+      boxLocation: box?.boxLocation || `box ${box?.readingOrder || idx + 1}`,
+      interpretedAs: box?.interpretedRole || "box transcription number",
+      confidence: box?.confidence || "from-box-transcription",
+      notes: box?.notes || "flowBoxTranscriptionから抽出"
+    }, flow)));
+  });
+  return rows;
+}
+
+function _structuredFlowFallbackRows(flow) {
   if (!flow) return [];
-  const inv = Array.isArray(flow.flowNumberInventory) ? flow.flowNumberInventory : [];
-  const rows = inv.map(item => _flowInventoryRow(item, flow));
-  if (rows.length) return rows;
   const fallback = [];
   const add = (rawText, label, group, interpretedAs, boxLocation) => {
     if (!_hasFlowValue(rawText)) return;
@@ -2333,7 +2397,7 @@ function buildFlowInventoryRows(result) {
       interpretedAs,
       boxLocation,
       confidence: "fallback",
-      notes: "flowNumberInventoryが未出力だったため、構造化フィールドから再構成"
+      notes: "flowNumberInventory/box書き起こしの不足を、構造化フィールドから補完"
     }, flow));
   };
   add(flow.randomized, "randomized", "overall", "randomized total", "CONSORT flow");
@@ -2361,6 +2425,61 @@ function buildFlowInventoryRows(result) {
   return fallback;
 }
 
+function _dedupeFlowInventoryRows(rows) {
+  const seen = new Set();
+  return (rows || []).filter(row => {
+    const key = [row[0], row[1], row[2], row[3], row[4], row[5], row[6]].join("|").toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildFlowInventoryRows(result) {
+  const flow = result?.consortFlow;
+  if (!flow) return [];
+  const inv = Array.isArray(flow.flowNumberInventory) ? flow.flowNumberInventory : [];
+  const rows = inv.map(item => _flowInventoryRow(item, flow));
+  return _dedupeFlowInventoryRows(rows.concat(_flowBoxNumberRows(flow), _structuredFlowFallbackRows(flow)));
+}
+
+function _mergeObjectArrayByKey(a, b, keyFn) {
+  const out = [];
+  const seen = new Set();
+  (a || []).concat(b || []).forEach(item => {
+    if (!item) return;
+    const key = keyFn(item);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  });
+  return out;
+}
+
+function mergeConsortFlow(primary, secondary) {
+  if (!primary) return secondary;
+  if (!secondary) return primary;
+  const out = { ...primary };
+  Object.keys(secondary).forEach(k => {
+    if (k === "flowNumberInventory" || k === "flowBoxTranscription") return;
+    if (!_hasFlowValue(out[k]) && _hasFlowValue(secondary[k])) out[k] = secondary[k];
+  });
+  out.flowNumberInventory = _mergeObjectArrayByKey(
+    primary.flowNumberInventory,
+    secondary.flowNumberInventory,
+    item => [item?.boxLocation, item?.group, item?.number, item?.label, item?.rawText].map(x => _cleanOneLine(x || "")).join("|").toLowerCase()
+  );
+  out.flowBoxTranscription = _mergeObjectArrayByKey(
+    primary.flowBoxTranscription,
+    secondary.flowBoxTranscription,
+    item => [item?.readingOrder, item?.boxLocation, item?.group, item?.rawText].map(x => _cleanOneLine(x || "")).join("|").toLowerCase()
+  );
+  if ((secondary.flowOutcomeEvidenceText || "").length > (out.flowOutcomeEvidenceText || "").length) out.flowOutcomeEvidenceText = secondary.flowOutcomeEvidenceText;
+  if ((secondary.evidenceText || "").length > (out.evidenceText || "").length) out.evidenceText = secondary.evidenceText;
+  if ((secondary.notes || "").length > (out.notes || "").length) out.notes = secondary.notes;
+  return out;
+}
+
 function _uniqueJoin(vals, max = 12) {
   const list = [];
   (vals || []).forEach(v => {
@@ -2385,6 +2504,7 @@ function buildExtractionSummaryRows(result) {
   add("研究", "サンプル/追跡", [pico.sampleSize, pico.followUpDuration].filter(Boolean).join(" / "));
   add("アウトカム候補", "論文から抽出されたアウトカム", _uniqueJoin(ocs.map(o => o.actualOutcomeName || o.requestedOutcomeName), 20));
   add("アウトカム候補", "解析集団", _uniqueJoin(ocs.map(o => o.populationType), 12));
+  add("フローチャート", "box書き起こし件数", Array.isArray(result?.consortFlow?.flowBoxTranscription) ? `${result.consortFlow.flowBoxTranscription.length}件` : "0件");
   add("フローチャート", "数字台帳件数", flowRows.length ? `${flowRows.length}件` : "0件");
   add("フローチャート", "Flow出処", result?.consortFlow?.sourceLocation || "-");
   add("フローチャート", "Flow原文", result?.consortFlow?.flowOutcomeEvidenceText || result?.consortFlow?.evidenceText || "-");
@@ -4033,6 +4153,197 @@ function buildFinalMetaContinuousRows(result, fileName, studyIdOverride) {
     .filter(_isFinalMetaContinuousCandidate);
 }
 
+function _blankUnifiedRow(section, subSection, order, result, studyId) {
+  const p = result?.paperPICO || {};
+  const row = {};
+  UNIFIED_COPY_HDRS.forEach(h => row[h] = "");
+  row["セクション"] = section || "";
+  row["サブセクション"] = subSection || "";
+  row["順番"] = order || "";
+  row["Study ID"] = studyId || "";
+  row["Design"] = p.studyDesign || "";
+  row["PICO-P"] = p.P || "";
+  row["PICO-I"] = p.I || "";
+  row["PICO-C"] = p.C || "";
+  return row;
+}
+
+function _rowToUnifiedArray(row) {
+  return UNIFIED_COPY_HDRS.map(h => row?.[h] ?? "");
+}
+
+function _effectFromBinaryRow(r) {
+  if (r.reported_HR) return ["HR", r.reported_HR];
+  if (r.reported_RR) return ["RR", r.reported_RR];
+  if (r.reported_OR) return ["OR", r.reported_OR];
+  if (r.reported_RD) return ["RD", r.reported_RD];
+  return ["", ""];
+}
+
+function _effectFromContinuousRow(r) {
+  if (r.reported_MD) return ["MD", r.reported_MD];
+  if (r.reported_SMD) return ["SMD", r.reported_SMD];
+  if (r.reported_AdjMD) return ["AdjMD", r.reported_AdjMD];
+  return ["", ""];
+}
+
+function _ciFromRow(r) {
+  if (r?.ci95_lower || r?.ci95_upper) return [r.ci95_lower || "", r.ci95_upper || ""].filter(Boolean).join("-");
+  return "";
+}
+
+function buildUnifiedCopyRows(result, fileName, studyIdOverride) {
+  if (!result) return [];
+  const studyId = deriveStudyId(result.paperPICO, fileName, studyIdOverride);
+  const rows = [];
+  let order = 1;
+  const push = (row) => rows.push(_rowToUnifiedArray(row));
+  (result.baselineCharacteristics || []).forEach((b) => {
+    const row = _blankUnifiedRow("患者背景_全一覧", b.category || "", order++, result, studyId);
+    row["Outcome/項目"] = b.variable || "";
+    row["Outcome Type"] = b.dataType || "";
+    row["Intervention N"] = b.interventionGroup?.n || "";
+    row["Intervention Value/Events"] = b.interventionGroup?.value || "";
+    row["Intervention SD/SE"] = b.interventionGroup?.sd || "";
+    row["Intervention Percent"] = b.interventionGroup?.percent || "";
+    row["Control N"] = b.comparisonGroup?.n || "";
+    row["Control Value/Events"] = b.comparisonGroup?.value || "";
+    row["Control SD/SE"] = b.comparisonGroup?.sd || "";
+    row["Control Percent"] = b.comparisonGroup?.percent || "";
+    row["Third N"] = b.thirdGroup?.n || "";
+    row["Third Value"] = b.thirdGroup?.value || "";
+    row["P-value"] = b.pValue || "";
+    row["Source Location"] = b.sourceLocation || "";
+    row["Page/Figure/Table"] = b.pageNumber || "";
+    row["Notes"] = [b.unit ? `単位=${b.unit}` : "", b.interventionGroup?.iqr ? `介入IQR=${b.interventionGroup.iqr}` : "", b.comparisonGroup?.iqr ? `対照IQR=${b.comparisonGroup.iqr}` : ""].filter(Boolean).join(" / ");
+    push(row);
+  });
+
+  buildMainOutcomeRowsForCopy(result).forEach((o) => {
+    const row = _blankUnifiedRow("アウトカム_全一覧", o.figureType || o.variableType || "", order++, result, studyId);
+    row["Population"] = o.populationType || "";
+    row["Time Point"] = o.timePoint || "";
+    row["Outcome/項目"] = o.actualOutcomeName || o.requestedOutcomeName || "";
+    row["Outcome Type"] = o.variableType || "";
+    row["Intervention/群1"] = o.interventionGroup?.name || result.paperPICO?.I || "";
+    row["Intervention N"] = _flatExportGroupN(o, "interventionGroup");
+    row["Intervention Value/Events"] = _flatExportGroupValue(o, "interventionGroup");
+    row["Intervention SD/SE"] = _flatExportGroupSdSe(o, "interventionGroup");
+    row["Control/群2"] = o.comparisonGroup?.name || result.paperPICO?.C || "";
+    row["Control N"] = _flatExportGroupN(o, "comparisonGroup");
+    row["Control Value/Events"] = _flatExportGroupValue(o, "comparisonGroup");
+    row["Control SD/SE"] = _flatExportGroupSdSe(o, "comparisonGroup");
+    row["Third Group"] = o.thirdGroupName || o.thirdGroup?.name || "";
+    row["Third N"] = _flatExportGroupN(o, "thirdGroup");
+    row["Third Value"] = _flatExportGroupValue(o, "thirdGroup");
+    row["Effect Measure"] = o.effectEstimate?.measureType || "";
+    row["Effect Value"] = o.effectEstimate?.value || "";
+    row["95%CI"] = o.effectEstimate?.ci95 || "";
+    row["P-value"] = o.effectEstimate?.pValue || "";
+    row["Significance"] = o.significance || "";
+    row["Source Location"] = o.sourceLocation || "";
+    row["Page/Figure/Table"] = o.pageNumber || "";
+    row["Source Detail"] = o.calculationMethod || o.variationReason || "";
+    row["Evidence Text"] = o.evidenceText || "";
+    row["Evidence Text JA"] = o.evidenceTextJa || "";
+    row["Confidence"] = o.confidence || "";
+    row["Notes"] = o.notes || buildOutcomeRationale(o);
+    push(row);
+  });
+
+  (result.consortFlow?.flowBoxTranscription || []).forEach((box) => {
+    const row = _blankUnifiedRow("フローチャートbox全文", box.interpretedRole || "box transcription", order++, result, studyId);
+    row["Population"] = box.group || "";
+    row["Outcome/項目"] = box.interpretedRole || box.boxLocation || "";
+    row["Intervention Value/Events"] = Array.isArray(box.allNumbers) ? box.allNumbers.map(n => _flowNumberCell(n, n)).join(" / ") : extractFlowNumberTokens(box.rawText).join(" / ");
+    row["Source Location"] = result.consortFlow?.sourceLocation || "CONSORT Flow Diagram";
+    row["Page/Figure/Table"] = result.consortFlow?.pageNumber || "";
+    row["Source Detail"] = box.boxLocation || "";
+    row["Raw Text"] = box.rawText || "";
+    row["Confidence"] = box.confidence || "";
+    row["Notes"] = box.notes || "Flow diagramのbox全文書き起こし";
+    push(row);
+  });
+
+  buildFlowInventoryRows(result).forEach((r) => {
+    const row = _blankUnifiedRow("フローチャート数字台帳_全数字", r[7] || "flow number", order++, result, studyId);
+    row["Population"] = r[3] || "";
+    row["Outcome/項目"] = r[5] || "";
+    row["Intervention Value/Events"] = r[4] || "";
+    row["Source Location"] = r[0] || "";
+    row["Page/Figure/Table"] = r[1] || "";
+    row["Source Detail"] = r[2] || "";
+    row["Raw Text"] = r[6] || "";
+    row["Confidence"] = r[8] || "";
+    row["Notes"] = r[9] || "";
+    push(row);
+  });
+
+  buildExtractionSummaryRows(result).forEach((r) => {
+    const row = _blankUnifiedRow("抽出サマリー_Excel内確認用", r[0] || "", order++, result, studyId);
+    row["Outcome/項目"] = r[1] || "";
+    row["Notes"] = r[2] || "";
+    push(row);
+  });
+
+  buildFinalMetaBinaryRows(result, fileName, studyIdOverride).forEach((r) => {
+    const [measure, value] = _effectFromBinaryRow(r);
+    const row = _blankUnifiedRow("最終メタ分析候補_二値", r.population || "", order++, result, studyId);
+    row["Study ID"] = r.study || studyId;
+    row["Population"] = r.population || "";
+    row["Time Point"] = r.timepoint || "";
+    row["Outcome/項目"] = r.outcome || "";
+    row["Outcome Type"] = "Binary";
+    row["Intervention N"] = r.total_intervention || "";
+    row["Intervention Value/Events"] = r.events_intervention || "";
+    row["Intervention Percent"] = r.percent_intervention || "";
+    row["Control N"] = r.total_control || "";
+    row["Control Value/Events"] = r.events_control || "";
+    row["Control Percent"] = r.percent_control || "";
+    row["Effect Measure"] = measure;
+    row["Effect Value"] = value;
+    row["95%CI"] = _ciFromRow(r);
+    row["P-value"] = r.p_value || "";
+    row["Source Location"] = r.sourceLocation || "";
+    row["Page/Figure/Table"] = r.pageNumber || "";
+    row["Source Detail"] = r.sourceDetail || "";
+    row["Evidence Text"] = r.evidenceText || "";
+    row["Evidence Text JA"] = r.evidenceTextJa || "";
+    row["Confidence"] = r.confidence || "";
+    row["Notes"] = r.notes || "";
+    push(row);
+  });
+
+  buildFinalMetaContinuousRows(result, fileName, studyIdOverride).forEach((r) => {
+    const [measure, value] = _effectFromContinuousRow(r);
+    const row = _blankUnifiedRow("最終メタ分析候補_連続", r.population || "", order++, result, studyId);
+    row["Study ID"] = r.study || studyId;
+    row["Population"] = r.population || "";
+    row["Time Point"] = r.timepoint || "";
+    row["Outcome/項目"] = r.outcome || "";
+    row["Outcome Type"] = "Continuous";
+    row["Intervention N"] = r.n_intervention || "";
+    row["Intervention Value/Events"] = r.mean_intervention || "";
+    row["Intervention SD/SE"] = r.sd_intervention || r.se_intervention || "";
+    row["Control N"] = r.n_control || "";
+    row["Control Value/Events"] = r.mean_control || "";
+    row["Control SD/SE"] = r.sd_control || r.se_control || "";
+    row["Effect Measure"] = measure;
+    row["Effect Value"] = value;
+    row["95%CI"] = _ciFromRow(r);
+    row["P-value"] = r.p_value || "";
+    row["Source Location"] = r.sourceLocation || "";
+    row["Page/Figure/Table"] = r.pageNumber || "";
+    row["Source Detail"] = r.sourceDetail || "";
+    row["Evidence Text"] = r.evidenceText || "";
+    row["Evidence Text JA"] = r.evidenceTextJa || "";
+    row["Confidence"] = r.confidence || "";
+    row["Notes"] = [r.notes || "", r.sd_or_se_label ? `SD/SE=${r.sd_or_se_label}` : ""].filter(Boolean).join(" / ");
+    push(row);
+  });
+  return rows;
+}
+
 // R metafor 二値スクリプト
 function toRMetaforBinaryScript(outcomes, paperPICO, fileName, studyIdOverride) {
   const rows = buildBinaryRows(outcomes, paperPICO, fileName, studyIdOverride);
@@ -4495,7 +4806,7 @@ function buildDualLLMResult(resultA, resultB, modelAId, modelBId) {
   if (resultB?.baselineCharacteristics?.length > (resultA?.baselineCharacteristics?.length || 0)) {
     out.baselineCharacteristics = resultB.baselineCharacteristics;
   }
-  if (resultB?.consortFlow && !out.consortFlow) out.consortFlow = resultB.consortFlow;
+  if (resultB?.consortFlow) out.consortFlow = mergeConsortFlow(out.consortFlow, resultB.consortFlow);
   if (resultA?.prismaFlow) out.prismaFlow = resultA.prismaFlow;
   if (resultB?.prismaFlow && !out.prismaFlow) out.prismaFlow = resultB.prismaFlow;
   if (resultB?.expertCommentary && (!out.expertCommentary || resultB.expertCommentary.length > out.expertCommentary.length * 1.3)) {
@@ -4628,7 +4939,7 @@ function mergeResults(primary, secondary) {
   }
 
   // CONSORT flow
-  if (secondary.consortFlow && !result.consortFlow) result.consortFlow = secondary.consortFlow;
+  if (secondary.consortFlow) result.consortFlow = mergeConsortFlow(result.consortFlow, secondary.consortFlow);
   if (secondary.prismaFlow && !result.prismaFlow) result.prismaFlow = secondary.prismaFlow;
 
   // Paper quality
@@ -4832,7 +5143,8 @@ ${sourceText.substring(0, coreTextLimit)}`;
 5. paperQualityAssessment: 論文の質的評価（500文字以内）
 
 【CONSORT Flow結果の読み方】
-- 最初に flowNumberInventory を作る。Flow diagram 内で読める数字を全て、周辺ラベル・群名・box位置・意味候補と一緒に列挙する。その後で下記フィールドへ解釈して割り当てる。
+- 最初に flowBoxTranscription を作る。Flow diagram 内の全boxを読順で書き起こし、rawText と allNumbers を入れる。途中の脱落/除外boxも省略しない。
+- 次に flowNumberInventory を作る。flowBoxTranscription の allNumbers から読める数字を全て、周辺ラベル・群名・box位置・意味候補と一緒に列挙する。flowNumberInventory が allNumbers より少ない場合は不足分を補う。その後で下記フィールドへ解釈して割り当てる。
 - ランダム化/割付直後の2群boxは ITT候補。allocated / randomized / analyzed ITT のNを群別に取り、同じboxまたは直下に success/failure などの結果があれば ittSuccess_* / ittFailure_* に入れる。
 - 一番下の脱落除外後、completed protocol、per protocol、analyzed PP の2群boxは PP候補。analyzedPP_* のNを群別に取り、同じboxに結果があれば ppSuccess_* / ppFailure_* に入れる。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけ書かれている場合は推測で補完せず、記載値だけ入れる（後処理でNが確実な場合だけ N−event 補完する）。
@@ -4855,7 +5167,7 @@ ${sourceText.substring(0, supplementTextLimit)}`;
       onModelUsed: (actualModel) => { stagesUsed.supplement = actualModel; }
     });
     if (supplement) {
-      if (supplement.consortFlow) extracted.consortFlow = supplement.consortFlow;
+      if (supplement.consortFlow) extracted.consortFlow = mergeConsortFlow(extracted.consortFlow, supplement.consortFlow);
       if (supplement.prismaFlow) extracted.prismaFlow = supplement.prismaFlow;
       if (supplement.baselineCharacteristics) extracted.baselineCharacteristics = supplement.baselineCharacteristics;
       if (supplement.expertCommentary) extracted.expertCommentary = supplement.expertCommentary;
@@ -4886,7 +5198,7 @@ ${sourceText.substring(0, supplementTextLimit)}`;
         pdfImages: flowImages,
         onNotice
       });
-      if (flowCheck?.consortFlow) extracted.consortFlow = flowCheck.consortFlow;
+      if (flowCheck?.consortFlow) extracted.consortFlow = mergeConsortFlow(extracted.consortFlow, flowCheck.consortFlow);
       if (flowCheck?.prismaFlow) extracted.prismaFlow = flowCheck.prismaFlow;
       extracted._flowDiagramChecked = true;
       if (flowCheck?.consortFlow || flowCheck?.prismaFlow) {
@@ -5440,7 +5752,9 @@ PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow d
 
 【絶対ルール】
 - 返すのは consortFlow / prismaFlow のみ。通常の本文/表アウトカムは抽出しないが、Flow diagramのbox内に直接書かれた success/failure/response/non-response/変化などの結果は consortFlow の結果フィールドに必ず入れる。
-- まず flowNumberInventory を作る。Flow diagram内で読める全ての数字を、周辺ラベル・群名・box位置・意味候補と一緒に列挙する。解釈が難しい数字も、読めたなら台帳に入れる。
+- まず flowBoxTranscription を作る。Flow diagram内の全boxを読順で書き起こし、rawText と allNumbers を入れる。途中の脱落/除外box、理由別除外box、解析除外boxも省略しない。
+- 次に flowNumberInventory を作る。Flow diagram内で読める全ての数字を、周辺ラベル・群名・box位置・意味候補と一緒に列挙する。解釈が難しい数字も、読めたなら台帳に入れる。n、%、年/月、p値、CI、分母、理由別N、success/failure は全て入れる。
+- flowNumberInventory の件数が flowBoxTranscription の allNumbers 合計より少ない場合は、返答前に不足分を追加する。
 - 次に flowNumberInventory を見ながら randomized / allocated / received / lost / excluded / analyzed ITT / analyzed PP / success / failure / response などへ解釈する。
 - 数字を読み飛ばして、解釈済みフィールドだけを返すことは禁止。
 - ランダム化/割付直後の2群boxはITT候補として扱う。全体randomized、allocated intervention/control、analyzed ITT が読める場合はそれぞれ抽出し、同じ上段boxに成功/失敗があれば ittSuccess_* / ittFailure_* に入れる。
@@ -7483,34 +7797,17 @@ ${pdfText.substring(0, 30000)}`;
   const copyOneCSV = (o) => { clipCopy(toDelimited(OC_HDRS, [outcomeRow(o)], ",")) && showToast("CSVコピー完了"); };
   const buildFullCopyText = (delimiter) => {
     if (!result) return;
-    let t = "";
-    const mainOutcomeRows = buildMainOutcomeRowsForCopy(result);
-    const flowInventoryRows = buildFlowInventoryRows(result);
-    const summaryRows = buildExtractionSummaryRows(result);
     const pdfNameForExport = pdfFile?.name || '';
-    const finalBinaryRows = buildFinalMetaBinaryRows(result, pdfNameForExport, studyIdOverride);
-    const finalContinuousRows = buildFinalMetaContinuousRows(result, pdfNameForExport, studyIdOverride);
-    const addSection = (title, headers, rows) => {
-      if (!rows?.length) return;
-      const normalizedRows = rows.map(r => Array.isArray(r) ? r : headers.map(h => r?.[h] ?? ""));
-      if (t) t += "\n\n";
-      t += `[${title}]\n` + toDelimited(headers, normalizedRows, delimiter);
-    };
-    addSection("患者背景_全一覧", BL_HDRS, result.baselineCharacteristics?.map(baselineRow) || []);
-    addSection("アウトカム_全一覧", OC_HDRS, mainOutcomeRows.map(outcomeRow));
-    addSection("フローチャート数字台帳_全数字", FLOW_INV_HDRS, flowInventoryRows);
-    addSection("抽出サマリー_Excel内確認用", SUMMARY_HDRS, summaryRows);
-    addSection("最終メタ分析候補_二値", REVMAN_BINARY_COLS, finalBinaryRows);
-    addSection("最終メタ分析候補_連続", REVMAN_CONTINUOUS_COLS, finalContinuousRows);
-    return t;
+    const rows = buildUnifiedCopyRows(result, pdfNameForExport, studyIdOverride);
+    return rows.length ? toDelimited(UNIFIED_COPY_HDRS, rows, delimiter) : "";
   };
   const copyAllTSV = () => {
     const t = buildFullCopyText("\t");
-    if (t) clipCopy(t) && showToast("全TSVコピー完了（全一覧・Flow台帳・サマリー・最終候補表を含む）");
+    if (t) clipCopy(t) && showToast("単一TSVコピー完了（全一覧・Flow台帳・サマリー・最終候補表を1表に統合）");
   };
   const copyAllCSV = () => {
     const t = buildFullCopyText(",");
-    if (t) clipCopy(t) && showToast("全CSVコピー完了（全一覧・Flow台帳・サマリー・最終候補表を含む）");
+    if (t) clipCopy(t) && showToast("単一CSVコピー完了（全一覧・Flow台帳・サマリー・最終候補表を1表に統合）");
   };
   const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
 
@@ -8677,14 +8974,26 @@ ${pdfText.substring(0, 30000)}`;
                           <tr><td className="px-2 py-0.5 text-slate-600">Flowその他結果</td><td className="px-2 py-0.5 font-medium">ITT {result.consortFlow.ittOtherOutcomeName || "その他"}: {result.consortFlow.ittOtherResult_intervention || "-"} / {result.consortFlow.ittOtherResult_comparison || "-"}　PP {result.consortFlow.ppOtherOutcomeName || "その他"}: {result.consortFlow.ppOtherResult_intervention || "-"} / {result.consortFlow.ppOtherResult_comparison || "-"}</td></tr>
                         )}
                         <tr><td className="px-2 py-0.5 text-slate-600">脱落 (介入/対照)</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.lostToFollowUp_intervention || "-"} / {result.consortFlow.lostToFollowUp_comparison || "-"}</td></tr>
-                        {Array.isArray(result.consortFlow.flowNumberInventory) && result.consortFlow.flowNumberInventory.length > 0 && (
+                        {Array.isArray(result.consortFlow.flowBoxTranscription) && result.consortFlow.flowBoxTranscription.length > 0 && (
+                          <tr>
+                            <td className="px-2 py-0.5 text-slate-600">box書き起こし</td>
+                            <td className="px-2 py-0.5 font-medium">
+                              {result.consortFlow.flowBoxTranscription.length}件:
+                              <span className="ml-1 text-slate-600 font-normal">
+                                {result.consortFlow.flowBoxTranscription.slice(0, 4).map(x => x.rawText).filter(Boolean).join(" / ")}
+                                {result.consortFlow.flowBoxTranscription.length > 4 ? ` / 他${result.consortFlow.flowBoxTranscription.length - 4}件` : ""}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                        {buildFlowInventoryRows(result).length > 0 && (
                           <tr>
                             <td className="px-2 py-0.5 text-slate-600">数字台帳</td>
                             <td className="px-2 py-0.5 font-medium">
-                              {result.consortFlow.flowNumberInventory.length}件:
+                              {buildFlowInventoryRows(result).length}件:
                               <span className="ml-1 text-slate-600 font-normal">
-                                {result.consortFlow.flowNumberInventory.slice(0, 8).map(x => x.rawText || [x.number, x.label].filter(Boolean).join(" ")).filter(Boolean).join(" / ")}
-                                {result.consortFlow.flowNumberInventory.length > 8 ? ` / 他${result.consortFlow.flowNumberInventory.length - 8}件` : ""}
+                                {buildFlowInventoryRows(result).slice(0, 8).map(x => x[6] || [x[4], x[5]].filter(Boolean).join(" ")).filter(Boolean).join(" / ")}
+                                {buildFlowInventoryRows(result).length > 8 ? ` / 他${buildFlowInventoryRows(result).length - 8}件` : ""}
                               </span>
                             </td>
                           </tr>
