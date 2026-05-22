@@ -1447,15 +1447,21 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
     runNo: 3,
     label: 'Round 3: 参考文献ベース新アルゴリズム',
     shortLabel: 'Round 3 / 文献ベース',
-    description: '参考文献ページで整理した dual-LLM、人間検証、RCT抽出エラー、透明性報告、根拠接地の知見を追加監査として使います。',
+    description: '本文・表・図・Flow diagramを優先し、参考文献ページの知見で根拠接地とエラー検出を強めます。',
     promptBlock: `【追加アルゴリズム: 参考文献ベース新方式】
 以下は参考文献ページの知見を使った追加監査であり、既存スキーマと既存抽出方針を上書きしない。
+- 抄録ファーストではなく本文ファースト: Abstract は候補探索に使うだけ。構造化フィールドへ入れる値は、可能な限り Results本文、Table、Figure、CONSORT/PRISMA flow、Supplement相当テキストで再確認する。
+- 原文確認の優先順位: ①Results本文 ②Table/figure caption/脚注 ③Figure/flow diagram ④Supplement相当テキスト ⑤Abstract。Abstractしか根拠がない場合は sourceLocation に Abstract と明記し confidence を下げる。
+- Abstract と本文・表・図の値が違う場合: 1つに丸めない。本文/表/図の値を優先し、Abstract値は別レコードにするか notes / variationReason に差分を明記する。
 - Vivekanantha 2026: 同じPDFから独立抽出したつもりで、各フィールドを「確実」「部分的」「要確認」に内的分類し、要確認は confidence を下げ notes に理由を書く。
 - Laignelot 2026: LLM抽出精度には幅がある前提で、全ての数値を人間が照合できるよう evidenceText / pageNumber / sourceLocation を優先する。
-- RCT抽出エラー研究・分類: omitted outcome、wrong arm、wrong denominator、wrong time point、SE/SD混同、unit欠落、percentage-only、effect direction逆転を重点チェックする。
+- Fan 2026 / RCT抽出エラー研究・分類: misallocation(フィールド/群/時点への誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。各アウトカムで wrong arm、wrong denominator、wrong time point、SE/SD混同、unit欠落、percentage-only、effect direction逆転、primary/secondary混同を必ず点検する。
+- 見落とし防止: ユーザー指定アウトカムだけでなく、本文Results/Table/Figureにある同じ臨床概念の時点違い・解析集団違い(ITT/PP/mITT/safety)・スケール違いを別レコード候補として確認する。
+- CONSORT 2025/CONSORT flow: randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcome を群別に確認し、アウトカムの分母と矛盾しないか見る。フローチャートのN数はアウトカムに変換せず consortFlow/prismaFlow として保持する。
 - CONSORT-AI / STARD-AI: モデル設定、プロンプト、検証手順、監査可能性を意識し、unclearItems と notes に検証上の注意を残す。
-- RAG/根拠接地: 数値フィールドに入る数字は evidenceText に対応する根拠があるものだけに限定し、本文・表・図で値が異なる場合は統合せず別レコードにする。
-- PRISMA/CONSORT flow: フローチャートのN数はアウトカムに変換せず、consortFlow/prismaFlow として保持する。`
+- RAG/根拠接地: 先に本文内の該当箇所を探し、次に値を抽出し、最後に evidenceText と構造化フィールドが一致するか検証する。数値フィールドに入る数字は evidenceText / sourceLocation / pageNumber に対応するものだけに限定する。
+- OCR/HTML混入対策: evidenceText に "border-radius"、"font-weight"、"padding"、HTMLタグ、CSS断片、文字化けが混ざる場合は引用として不適切。原文として読める短い数値文に清掃し、清掃できない場合は confidence を low にして notes に「OCR要確認」と書く。
+- 派生計算の制限: 成功率から失敗イベント数を逆算する等の計算は、分母と計算式が本文/表/図で明確な場合のみ行う。逆算した場合は calculationMethod と notes に式を残し、原文値とは区別する。`
   }
 ];
 
@@ -1608,11 +1614,24 @@ function buildAlgorithmComparisonRows(algorithmRuns) {
       });
       return;
     }
-    (run.result?.extractedOutcomes || []).forEach((oc, idx) => {
-      const groupKey = outcomeCompareKey(oc) || `unknown-${idx}`;
+    const outcomesForRun = run.result?.extractedOutcomes || [];
+    if (run.result && outcomesForRun.length === 0) {
+      rows.push({
+        key: `empty-${variant.id}`,
+        groupKey: `${variant.runNo}-empty`,
+        groupLabel: variant.shortLabel,
+        runNo: variant.runNo,
+        runLabel: variant.shortLabel,
+        variantLabel: variant.label,
+        error: '抽出アウトカムなし',
+        numericSignature: '-'
+      });
+      return;
+    }
+    outcomesForRun.forEach((oc, idx) => {
       rows.push({
         key: `${variant.id}-${idx}`,
-        groupKey,
+        groupKey: `${variant.runNo}-${idx}`,
         groupLabel: oc.actualOutcomeName || oc.requestedOutcomeName || '(outcome未記載)',
         runNo: variant.runNo,
         runLabel: variant.shortLabel,
@@ -1623,12 +1642,7 @@ function buildAlgorithmComparisonRows(algorithmRuns) {
       });
     });
   });
-  rows.sort((a, b) =>
-    a.groupKey.localeCompare(b.groupKey) ||
-    a.numericSignature.localeCompare(b.numericSignature) ||
-    a.runNo - b.runNo ||
-    (a.outcomeIndex || 0) - (b.outcomeIndex || 0)
-  );
+  rows.sort((a, b) => a.runNo - b.runNo || (a.outcomeIndex || 0) - (b.outcomeIndex || 0));
   return rows;
 }
 
@@ -3639,6 +3653,10 @@ async function runExtractionPipeline({ apiKeys, model, getModel, pdfFile, pico, 
   // 出力長制約：モデルの出力上限に応じて引用文の最大長を変える
   // 出力上限が小さいモデル(<16K)では evidenceText を120文字に制限し、全アウトカムが入りきるよう調整
   const evidenceCap = (initialModelInfo.maxOut || 8192) < 16000 ? 120 : 250;
+  const isReferenceEnhanced = algorithmVariantInfo.id === 'reference-enhanced';
+  const coreTextLimit = isReferenceEnhanced ? (isMultimodal ? 80000 : 120000) : (isMultimodal ? 40000 : 80000);
+  const supplementTextLimit = isReferenceEnhanced ? 70000 : 40000;
+  const criticTextLimit = isReferenceEnhanced ? 70000 : 40000;
 
   const userPrompt = `${picoBlock}${algorithmPromptBlock}${pilotMode ? '\n\n【🧪 PILOT MODE】 これはパイロット実行です。**最初に発見できた最重要 2-3 アウトカムのみ**を抽出してください。本実行前のテスト目的のため、後でユーザーがプロンプトを調整できるよう、抽出戦略がうまく機能するか確認してください。\n' : ''}
 \n【タスク】
@@ -3666,7 +3684,7 @@ evidenceText だけ書いて数値フィールドが空のレコードは絶対�
 - pageNumber, sourceLocation, confidence
 
 \n【参照テキスト（OCR済みPDF本文）】
-${sourceText.substring(0, isMultimodal ? 40000 : 80000)}`;
+${sourceText.substring(0, coreTextLimit)}`;
 
   // === Stage 2: 核心抽出 ===
   const stage2Info = stageModelInfo("Stage2 核心抽出");
@@ -3707,7 +3725,7 @@ ${sourceText.substring(0, isMultimodal ? 40000 : 80000)}`;
 【⚠ 出力サイズ厳守】expertCommentary 800文字以内、paperQualityAssessment 500文字以内、各 baseline 行の文字列値は短く
 
 【参照テキスト】
-${sourceText.substring(0, 40000)}`;
+${sourceText.substring(0, supplementTextLimit)}`;
 
     const supplement = await callGemini({
       rotator, model: stage3Info.id,
@@ -3845,7 +3863,7 @@ ${pico.cohortFilter ? `   - 上記コホートフィルタ ("${pico.cohortFilter
 ${truncatedOutcomes}
 
 【参照テキスト（原論文）】
-${sourceText.substring(0, 40000)}`;
+${sourceText.substring(0, criticTextLimit)}`;
 
       // ★ Critic はテキスト主体（images/PDF を送らない）→ TPM 大幅節約
       // outcomes JSON + pdfText だけで十分。画像はStage2で活用済み
@@ -4319,7 +4337,7 @@ function AlgorithmRunComparison({ algorithmRuns, rows, fontSize, onHighlight, on
       <div className="bg-indigo-50 border-b border-indigo-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-bold text-indigo-900 flex items-center gap-1.5"><LayersIcon size={14}/>Round抽出 比較ビュー</div>
-          <div className="text-[11px] text-indigo-800">同じアウトカムと同じ数値キーが隣に並ぶように表示します。Round 1を実行した場合は通常カード/TSV/CSVの基準になります。</div>
+          <div className="text-[11px] text-indigo-800">Round 1/2/3 の抽出結果をここに統一表示します。並びは Round順 → 抽出順です。</div>
         </div>
         <div className="flex flex-wrap gap-1">
           {selectedVariants.map(v => {
@@ -4334,7 +4352,7 @@ function AlgorithmRunComparison({ algorithmRuns, rows, fontSize, onHighlight, on
         </div>
       </div>
       <div className="px-3 py-2 text-[11px] text-slate-600 border-b border-slate-100">
-        完了 {completed}/{selectedVariants.length}{failed ? ` / 失敗 ${failed}` : ''}。Round 2は <a className="text-indigo-700 underline font-semibold" href="https://github.com/masa-med-ai/pubmed-systematic-review" target="_blank" rel="noopener">masa-med-ai/pubmed-systematic-review</a> の安全策、Round 3は参考文献ページの知見を追加しています。
+        完了 {completed}/{selectedVariants.length}{failed ? ` / 失敗 ${failed}` : ''}。通常のアウトカムカードはこのビューへ統一しました。Round 2は <a className="text-indigo-700 underline font-semibold" href="https://github.com/masa-med-ai/pubmed-systematic-review" target="_blank" rel="noopener">masa-med-ai/pubmed-systematic-review</a> の安全策、Round 3は参考文献ページの知見を追加しています。
       </div>
       <div className="overflow-auto max-h-[46vh]">
         <table className="w-full border-collapse" style={{fontSize:`${Math.max(10, fontSize * 0.82)}px`}}>
@@ -4354,14 +4372,14 @@ function AlgorithmRunComparison({ algorithmRuns, rows, fontSize, onHighlight, on
             )}
             {rows.map((row, idx) => {
               const oc = row.oc;
-              const showGroup = row.groupKey !== rows[idx - 1]?.groupKey;
+              const showGroup = row.runNo !== rows[idx - 1]?.runNo;
               return (
                 <React.Fragment key={row.key}>
                   {showGroup && (
                     <tr className="bg-slate-50">
                       <td colSpan="6" className="px-2 py-1 border-y border-slate-200 font-bold text-slate-700">
-                        {row.groupLabel}
-                        {!row.error && <span className="ml-2 text-[10px] font-normal text-slate-500">時点: {value(oc?.timePoint)} / 集団: {value(oc?.populationType)} / 型: {value(oc?.variableType)}</span>}
+                        {row.runLabel}
+                        <span className="ml-2 text-[10px] font-normal text-slate-500">{row.variantLabel}</span>
                       </td>
                     </tr>
                   )}
@@ -6100,6 +6118,7 @@ ${pdfText.substring(0, 30000)}`;
   // 結果フィルター/ソート/ハイライト
   const [resultFilter, setResultFilter] = useState({ severity: 'all', sortBy: 'order', highlightKw: true });
   const [showSessions, setShowSessions] = useState(false);  // 複数論文集約ビュー
+  const showUnifiedRoundResults = !!algorithmRuns;
   // 結果ペインの outcomes をフィルター/ソート (UI 表示用)
   const filteredOutcomes = useMemo(() => {
     if (!result?.extractedOutcomes) return [];
@@ -7297,7 +7316,7 @@ ${pdfText.substring(0, 30000)}`;
                 )}
 
                 {/* Tag Table view (Nested Knowledge 方式) — トグルで OutcomeCard と切替 */}
-                {showTagTable && result.extractedOutcomes?.length > 0 && (() => {
+                {!showUnifiedRoundResults && showTagTable && result.extractedOutcomes?.length > 0 && (() => {
                   const tag = buildTagTable(result.extractedOutcomes);
                   return (
                     <section className="bg-white border-2 border-indigo-300 rounded-lg overflow-hidden shadow">
@@ -7386,7 +7405,7 @@ ${pdfText.substring(0, 30000)}`;
                 })()}
 
                 {/* フィルター/ソート/ハイライトバー */}
-                {!showTagTable && result.extractedOutcomes?.length > 0 && (
+                {!showUnifiedRoundResults && !showTagTable && result.extractedOutcomes?.length > 0 && (
                   <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2" style={{fontSize:`${Math.max(10,leftFontSize*0.85)}px`}}>
                     <span className="font-bold text-slate-700">🔎 フィルター:</span>
                     <select value={resultFilter.severity} onChange={e => setResultFilter({...resultFilter, severity: e.target.value})}
@@ -7411,7 +7430,7 @@ ${pdfText.substring(0, 30000)}`;
                   </div>
                 )}
 
-                <div className={`space-y-3 ${showTagTable ? 'hidden' : ''}`}>
+                <div className={`space-y-3 ${showTagTable || showUnifiedRoundResults ? 'hidden' : ''}`}>
                   {filteredOutcomes.map((oc, idx) => {
                     // 元のインデックスを取得 (editOutcome に渡すため)
                     const origIdx = result.extractedOutcomes.indexOf(oc);
