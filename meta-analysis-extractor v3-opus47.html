@@ -174,6 +174,7 @@ overall cohort summary がある場合は、それを優先採用すること。
   → 必ず: interventionGroup.n_total="114", comparisonGroup.n_total="115"
 - 数値が "%" や "0.80" の割合のみでも、events_or_mean に "80%" や "0.80" だけを書かない。分母があればイベント数を計算して "97 (80%)" 形式にし、分母不明なら "不明 (80%)" として notes に "[%のみ報告 - イベント数不明]" と書く
 - 成功率(success/successes)と失敗率(failure/failures)は表裏一体でも、原文・表・図に片方または両方が読み取れる場合は**必ず別レコードで両方出す**。片方だけ明示され、分母Nとイベント数が確実な場合のみ、もう片方を N−event で計算し、calculationMethod と notes に式を残す。効果量/P値は方向が変わる可能性があるため、原文でその方向に明示されていない限りコピーしない
+- 1つの extractedOutcomes は「1つの根拠箇所」だけから作る。Flow diagram のN/イベント数と、本文・表・KM図のHR/CI/P値を同じ行に混ぜない。出処が違えば行を分け、Flow由来行の effectEstimate は空欄にする。
 - 本文中の右肩文献番号・脚注番号・図表番号をイベント数として抽出しない。群名、アウトカム名、分母、単位、%などと結びつかない孤立小数字はデータではない
 - "p < 0.001" → effectEstimate.pValue="<0.001"
 - 95%CI が "0.21-4.08" → effectEstimate.ci95="0.21-4.08"
@@ -191,7 +192,7 @@ overall cohort summary がある場合は、それを優先採用すること。
   "effectEstimate": { "measureType": "IRR", "value": "0.38", "ci95": "0.23-0.63", "pValue": "0.001" },
   "evidenceText": "Survival analysis showed success rates of 80% in PCR group (91/114) and 56% in SW group (64/115), IRR 0.38 (95%CI 0.23-0.63, p=0.001)",
   "evidenceTextJa": "生存解析では PCR群80% (91/114)、SW群56% (64/115)、IRR 0.38 (95%CI 0.23-0.63, p=0.001)",
-  "sourceLocation": "本文 p.5 段落2 + Table 2",
+  "sourceLocation": "本文 p.5 段落2",
   "pageNumber": 5,
   "confidence": "high",
   "sdOrSe": "-",
@@ -216,7 +217,7 @@ overall cohort summary がある場合は、それを優先採用すること。
   "figureType": "None"
 }
 
-例3（Time-to-event / KMカーブ + Table 併記）:
+例3（Time-to-event / 単一根拠のTable行）:
 {
   "actualOutcomeName": "全死亡（Time-to-event）",
   "timePoint": "中央値追跡 36ヶ月",
@@ -227,7 +228,7 @@ overall cohort summary がある場合は、それを優先採用すること。
   "effectEstimate": { "measureType": "HR", "value": "0.72", "ci95": "0.54-0.96", "pValue": "0.026" },
   "evidenceText": "All-cause mortality occurred in 85/500 (17.0%) intervention vs 112/503 (22.3%) control patients (HR 0.72, 95%CI 0.54-0.96, log-rank p=0.026, median follow-up 36 months)",
   "evidenceTextJa": "全死亡は介入群 85/500 (17.0%)、対照群 112/503 (22.3%) で発生（HR 0.72, 95%CI 0.54-0.96, log-rank p=0.026, 中央値追跡36ヶ月）",
-  "sourceLocation": "Figure 2 KMカーブ + Table 4",
+  "sourceLocation": "Table 4",
   "pageNumber": 8,
   "confidence": "high",
   "sdOrSe": "-",
@@ -262,6 +263,7 @@ overall cohort summary がある場合は、それを優先採用すること。
 【出処の厳密な分離】
 sourceLocationには単一の出処のみ記載（例: "Table 2", "Abstract Results", "Figure 2", "本文p.5段落3"）。
 記載場所が違えば必ず別レコード。「Table 2 / Figure 2」のような複合記載は禁止。
+Flow diagramから読んだN/イベントと、本文・表・KM図から読んだHR/CI/P値は必ず別レコード。各行の evidenceText は、その行に入れた数値だけを支える1文・1表セル・1図boxに限定する。
 ただし notes には「同じアウトカムの別レコードとして Abstract値 / 本文値 / Flow由来N / ITT / PP が存在する」ことを記載してよい。
 
 【データ抽出の厳密ルール】
@@ -660,7 +662,7 @@ const EXTRACT_SCHEMA_JSON = {
           evidenceText: { type: "string", description: "原文の英語(または論文言語)を改変せず引用。表/図からの場合は表セル・軸ラベル等を文字起こし" },
           evidenceTextJa: { type: "string", description: "evidenceText の日本語訳（数値はそのまま、医学用語は適切に訳出）" },
           figureType: { type: "string", description: "出典が図表の場合の種別: Table | BarChart | LineChart | KaplanMeier | ForestPlot | Boxplot | FlowDiagram | PRISMAFlow | None" },
-          sourceLocation: { type: "string" },
+          sourceLocation: { type: "string", description: "単一の根拠箇所のみ。複数出処や '+' は禁止。出処が異なる数値は別レコードに分ける" },
           notes: { type: "string" }, pageNumber: { type: "integer" },
           confidence: { type: "string" }, sdOrSe: { type: "string" }
         },
@@ -1536,6 +1538,7 @@ Round 1 方針:
 - §6エラーパターンを必ず確認する: 分散値欠落、アームスワップ、単位欠落、SE/SD混同、分母欠落、ハルシネーション疑い。
 - ITT / mITT / PP / safety集団、術前値・術後値・変化量、時点違いを混同せず、必要なら別レコードにする。
 - 同じアウトカムでも、Abstract値、本文値、Table値、Figure値、CONSORT/PRISMA Flow由来N、ITT、PP、mITT、available case が複数ある場合は、最も良さそうな1つに絞らず全て別行で出す。
+- 1行=1根拠箇所。Flow diagramから得たN/イベントと、本文・表・KM図から得たHR/CI/P値を同じ行に混ぜない。出処が違えば、群別N/イベント行と効果量/CI/P値行に分ける。
 - 成功率と失敗率、累積成功数と累積失敗数などの表裏ペアは、同じ分母から両方が成立する場合、必ず両方を別行で出す。片方を N−event で補完した場合は、Notesに計算式と「派生値」であることを書き、効果量/P値は原文でその方向に明示されていなければ空欄にする。
 - 各行のNotesには「採用根拠」を必ず書く。例: "採用根拠: PP解析、Table 2、分母はcompleted protocol N=88。ITT解析は別行。"
 - 全アウトカムを網羅する。指定アウトカム以外でも、メタ解析に使える主要・副次アウトカムは候補として抽出する。
@@ -1553,6 +1556,7 @@ Round 3 方針:
 - 抄録ファーストではなく本文ファースト。Abstractは候補探索に使い、構造化フィールドへ入れる値はResults本文、Table、Figure、CONSORT/PRISMA flow、Supplementで再確認する。
 - Abstractと本文・表・図の値が違う場合は丸めない。本文/表/図を優先し、差分をnotesに明記する。
 - Flow diagramのNと本文/表のNが違う場合も丸めない。フローチャート由来のITT/PP/割付/脱落Nは、独立したFlow TSVを作らずOutcome TSVの別行に統一し、Notesに差分と取得boxを書く。
+- Flow diagram由来の行では、同じFlow box内に直接書かれた結果以外のHR/CI/P値を入れない。本文・表・KM図のHR/CI/P値は別行にし、その行ではFlow由来N/イベントを空欄にする。
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
@@ -1584,7 +1588,7 @@ PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I�
 3. 次にExcelへそのまま貼れるOutcome TSV表を出す。列はタブ区切りにする。通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行もOutcome TSV内に入れる。独立したFlow TSVは出さない。
 
 Outcome TSVヘッダー:
-Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
+Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tSource Detail\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
 
 4. 最後に自己検証チェックリストを出す:
 - 解析対象Nか
@@ -2433,7 +2437,7 @@ function aggregateSessionsBinaryTSV(sessions) {
   sessions.forEach(s => {
     const ocs = s.result?.extractedOutcomes || [];
     const studyId = (s.metadata?.studyId) || deriveStudyId(s.result?.paperPICO, s.metadata?.pdfName, '');
-    ocs.filter(_isBinary).forEach(o => allRows.push(_binaryRow(o, studyId)));
+    allRows.push(...buildBinaryRows(ocs, s.result?.paperPICO, s.metadata?.pdfName, studyId));
     allRows.push(...buildFlowMetaOutcomeRows(s.result, studyId));
   });
   return rowsToTSV(REVMAN_BINARY_COLS, allRows);
@@ -2443,7 +2447,7 @@ function aggregateSessionsContinuousTSV(sessions) {
   sessions.forEach(s => {
     const ocs = s.result?.extractedOutcomes || [];
     const studyId = (s.metadata?.studyId) || deriveStudyId(s.result?.paperPICO, s.metadata?.pdfName, '');
-    ocs.filter(_isContinuous).forEach(o => allRows.push(_continuousRow(o, studyId)));
+    allRows.push(...buildContinuousRows(ocs, s.result?.paperPICO, s.metadata?.pdfName, studyId));
   });
   return rowsToTSV(REVMAN_CONTINUOUS_COLS, allRows);
 }
@@ -2628,6 +2632,151 @@ function _appendExtractionNote(existing, note) {
   const current = String(existing || '').trim();
   if (current.includes(clean)) return current;
   return current ? `${current}; ${clean}` : clean;
+}
+
+function _hasMeaningfulValue(v) {
+  const s = String(v ?? '').trim();
+  return !!s
+    && s !== '-'
+    && s !== '不明'
+    && !/^n\/?a$/i.test(s)
+    && !/^nr$/i.test(s)
+    && !/^none$/i.test(s)
+    && !/^not\s+reported$/i.test(s);
+}
+
+function _cleanOneLine(v) {
+  return String(v || '').replace(/[\t\r\n]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function _outcomeHasGroupData(o) {
+  return ['interventionGroup', 'comparisonGroup', 'thirdGroup'].some(g => {
+    const group = o?.[g];
+    return _hasMeaningfulValue(group?.n_total)
+      || _hasMeaningfulValue(group?.events_or_mean)
+      || _hasMeaningfulValue(group?.sd_or_se);
+  });
+}
+
+function _outcomeHasEffectData(o) {
+  const e = o?.effectEstimate || {};
+  return _hasMeaningfulValue(e.measureType)
+    || _hasMeaningfulValue(e.value)
+    || _hasMeaningfulValue(e.ci95)
+    || _hasMeaningfulValue(e.pValue);
+}
+
+function _splitSourceLocationParts(sourceLocation) {
+  const src = String(sourceLocation || '').trim();
+  if (!src) return [];
+  return src.split(/\s*(?:\+|；|;|\s+\/\s+)\s*/g).map(s => s.trim()).filter(Boolean);
+}
+
+function _looksFlowSource(text) {
+  return /flow|consort|prisma|フロー|割付|randomi[sz]ed|allocated|analy[sz]ed\s+(?:itt|pp)|completed\s+protocol|per[-\s]?protocol/i.test(String(text || ''));
+}
+
+function _looksEffectSource(text) {
+  return /\b(?:HR|RR|OR|IRR|RD)\b|hazard\s+ratio|risk\s+ratio|odds\s+ratio|confidence\s+interval|95\s*%?\s*CI|log[-\s]?rank|p\s*[<=>]|table|results?|本文|結果|kaplan|km|figure|fig\./i.test(String(text || ''));
+}
+
+function _pickSourcePart(parts, kind, fallback) {
+  if (!parts?.length) return fallback || '';
+  if (kind === 'group') return parts.find(_looksFlowSource) || parts[0];
+  return parts.find(p => !_looksFlowSource(p) && _looksEffectSource(p))
+    || parts.find(p => !_looksFlowSource(p))
+    || parts[parts.length - 1]
+    || fallback
+    || '';
+}
+
+function _extractEvidenceSnippet(evidenceText, kind) {
+  const s = _cleanOneLine(evidenceText);
+  if (!s) return '';
+  const marked = s
+    .replace(/([。.!?])\s+/g, '$1|||')
+    .replace(/\s+;\s+/g, ';|||');
+  const chunks = marked.split('|||').map(x => x.trim()).filter(Boolean);
+  const effectRe = /\b(?:HR|RR|OR|IRR|RD)\b|hazard\s+ratio|risk\s+ratio|odds\s+ratio|95\s*%?\s*CI|confidence\s+interval|log[-\s]?rank|p\s*[<=>]/i;
+  const groupRe = /n\s*=?\s*\d+|\d+\s*\/\s*\d+|\d+(?:\.\d+)?\s*%|success|failure|event|respond|non[-\s]?response|allocated|analy[sz]ed|randomi[sz]ed|completed|per[-\s]?protocol|成功|失敗|イベント|群/i;
+  const re = kind === 'effect' ? effectRe : groupRe;
+  return chunks.find(x => re.test(x)) || s;
+}
+
+function _blankOutcomeGroup(group) {
+  return { ...(group || {}), n_total: '', events_or_mean: '', sd_or_se: '' };
+}
+
+function _blankEffectEstimate() {
+  return { measureType: '-', value: '', ci95: '', pValue: '' };
+}
+
+function _shouldSplitMixedEvidenceOutcome(o) {
+  if (o?._evidenceSplit) return false;
+  if (!_outcomeHasGroupData(o) || !_outcomeHasEffectData(o)) return false;
+  const parts = _splitSourceLocationParts(o.sourceLocation);
+  if (parts.length > 1) return true;
+  const combined = `${o?.sourceLocation || ''} ${o?.evidenceText || ''} ${o?.notes || ''}`;
+  return _looksFlowSource(combined) && _looksEffectSource(combined);
+}
+
+function _splitMixedEvidenceOutcome(o) {
+  if (!_shouldSplitMixedEvidenceOutcome(o)) return [o];
+  const parts = _splitSourceLocationParts(o.sourceLocation);
+  const originalSource = _cleanOneLine(o.sourceLocation);
+  const groupSource = _pickSourcePart(parts, 'group', o.sourceLocation);
+  const effectSource = _pickSourcePart(parts, 'effect', o.sourceLocation);
+  const baseName = o.actualOutcomeName || o.requestedOutcomeName || 'Outcome';
+  const groupRow = {
+    ...JSON.parse(JSON.stringify(o)),
+    actualOutcomeName: `${baseName}（群別N/イベント）`,
+    effectEstimate: _blankEffectEstimate(),
+    sourceLocation: groupSource,
+    evidenceText: _extractEvidenceSnippet(o.evidenceText, 'group'),
+    evidenceTextJa: o.evidenceTextJa || '',
+    notes: _appendExtractionNote(o.notes, `[根拠単位分離] この行は群別N/イベント/割合のみ。効果量・CI・P値は別行へ分離。元sourceLocation="${originalSource || '-'}"`),
+    _evidenceSplit: 'group-data',
+    _sourceLocationOriginal: originalSource
+  };
+  const effectRow = {
+    ...JSON.parse(JSON.stringify(o)),
+    actualOutcomeName: `${baseName}（効果量/CI/P値）`,
+    interventionGroup: _blankOutcomeGroup(o.interventionGroup),
+    comparisonGroup: _blankOutcomeGroup(o.comparisonGroup),
+    thirdGroup: o.thirdGroup ? _blankOutcomeGroup(o.thirdGroup) : o.thirdGroup,
+    sourceLocation: effectSource,
+    evidenceText: _extractEvidenceSnippet(o.evidenceText, 'effect'),
+    evidenceTextJa: o.evidenceTextJa || '',
+    notes: _appendExtractionNote(o.notes, `[根拠単位分離] この行は効果量・CI・P値のみ。群別N/イベントは出処が異なるため空欄化。元sourceLocation="${originalSource || '-'}"`),
+    _evidenceSplit: 'effect-estimate',
+    _sourceLocationOriginal: originalSource
+  };
+  return [groupRow, effectRow];
+}
+
+function splitMixedEvidenceOutcomes(outcomes) {
+  if (!Array.isArray(outcomes)) return { outcomes: outcomes || [], splitCount: 0 };
+  const rows = [];
+  let splitCount = 0;
+  outcomes.forEach(o => {
+    const split = _splitMixedEvidenceOutcome(o);
+    if (split.length > 1) splitCount++;
+    rows.push(...split);
+  });
+  return { outcomes: rows, splitCount };
+}
+
+function _outcomeSourceDetail(o, numericKind) {
+  const src = _cleanOneLine(o?.sourceLocation) || '-';
+  const quote = _cleanOneLine(o?.evidenceText);
+  const original = _cleanOneLine(o?._sourceLocationOriginal);
+  if (o?._evidenceSplit === 'group-data') {
+    return `群別N/イベント/割合: ${src}; 効果量は別行。${original ? `元出処: ${original}; ` : ''}${quote ? `根拠: ${quote}` : ''}`;
+  }
+  if (o?._evidenceSplit === 'effect-estimate') {
+    return `効果量/CI/P値: ${src}; 群別N/イベントは別行。${original ? `元出処: ${original}; ` : ''}${quote ? `根拠: ${quote}` : ''}`;
+  }
+  return `${numericKind || '全数値'}: ${src}${quote ? `; 根拠: ${quote}` : ''}`;
 }
 
 function _isRateOnlyForEventDerivation(val) {
@@ -2879,7 +3028,7 @@ function validateQuoteAgainstPdf(evidenceText, pdfTextLower) {
 function postProcessExtraction(result, pdfTextLower) {
   if (!result || !Array.isArray(result.extractedOutcomes)) return result;
   const normalized = JSON.parse(JSON.stringify(result));
-  let nFmtChanges = 0, nQuoteFails = 0, nPercentOnlyWarn = 0, nTotalFilled = 0, nComplementAdded = 0;
+  let nFmtChanges = 0, nQuoteFails = 0, nPercentOnlyWarn = 0, nTotalFilled = 0, nComplementAdded = 0, nEvidenceSplits = 0;
   // CONSORT flow から推定可能な n_total
   // analyzed > randomized > allocated の優先順位
   const consort = result.consortFlow || {};
@@ -2961,6 +3110,24 @@ function postProcessExtraction(result, pdfTextLower) {
     }
     return out;
   });
+  const evidenceSplitResult = splitMixedEvidenceOutcomes(normalized.extractedOutcomes);
+  normalized.extractedOutcomes = evidenceSplitResult.outcomes;
+  nEvidenceSplits = evidenceSplitResult.splitCount;
+  if (pdfTextLower) {
+    nQuoteFails = 0;
+    normalized.extractedOutcomes = normalized.extractedOutcomes.map(out => {
+      const checked = { ...out };
+      checked._flags = (checked._flags || []).filter(f => f.code !== 'quote-not-in-pdf');
+      const v = validateQuoteAgainstPdf(checked.evidenceText, pdfTextLower);
+      checked._quoteValidated = v.ok;
+      checked._quoteScore = v.score;
+      if (v.ok === false) {
+        nQuoteFails++;
+        checked._flags = [...(checked._flags || []), { code: 'quote-not-in-pdf', severity: 'critical', msg: `⚠ evidenceText が PDF テキストに見つかりません (一致率 ${(v.score*100).toFixed(0)}%) — ハルシネーション疑い (根拠単位分離後の引用チェック)` }];
+      }
+      return checked;
+    });
+  }
   const complementResult = addSuccessFailureComplementOutcomes(normalized.extractedOutcomes);
   normalized.extractedOutcomes = complementResult.outcomes;
   nComplementAdded = complementResult.added;
@@ -2971,14 +3138,15 @@ function postProcessExtraction(result, pdfTextLower) {
     quoteFails: nQuoteFails,
     percentOnlyWarnings: nPercentOnlyWarn,
     nTotalAutoFilled: nTotalFilled,
-    successFailureComplementsAdded: nComplementAdded
+    successFailureComplementsAdded: nComplementAdded,
+    evidenceUnitSplits: nEvidenceSplits
   };
   return normalized;
 }
 
 /* ============================================================
    SECTION 9.4: META-ANALYSIS SOFT EXPORT (RevMan / R metafor)
-   既存の TSV/CSV エクスポートには一切触れない。
+   TSV/CSV エクスポートは抽出結果を破壊せず、根拠単位の行分離と出典列を追加する。
    全て純粋関数で副作用なし。抽出できなかった値は必ず空白。
    ============================================================ */
 
@@ -3222,7 +3390,7 @@ function _binaryRow(o, studyId) {
   // 警告フラグ: %のみで実カウント不明 → 利用者に通知
   const warnI = isPercentOnly(o.interventionGroup?.events_or_mean, totalI);
   const warnC = isPercentOnly(o.comparisonGroup?.events_or_mean, totalC);
-  const baseNotes = (o.notes || '').replace(/[\t\r\n]/g, ' ');
+  const baseNotes = _cleanOneLine(o.notes);
   const warnNotes = [];
   if (warnI) warnNotes.push('[介入群: %のみで実カウント不明 - n_total から推定不可]');
   if (warnC) warnNotes.push('[対照群: %のみで実カウント不明 - n_total から推定不可]');
@@ -3248,6 +3416,9 @@ function _binaryRow(o, studyId) {
     p_value: o.effectEstimate?.pValue || '',
     sourceLocation: o.sourceLocation || '',
     pageNumber: o.pageNumber || '',
+    sourceDetail: _outcomeSourceDetail(o, 'events/total/effect'),
+    evidenceText: _cleanOneLine(o.evidenceText),
+    evidenceTextJa: _cleanOneLine(o.evidenceTextJa),
     confidence: o.confidence || '',
     notes: warnNotes.length ? `${warnNotes.join(' ')} ${baseNotes}`.trim() : baseNotes
   };
@@ -3294,8 +3465,11 @@ function _continuousRow(o, studyId) {
     sd_or_se_label: sdSeLabel,
     sourceLocation: o.sourceLocation || '',
     pageNumber: o.pageNumber || '',
+    sourceDetail: _outcomeSourceDetail(o, 'N/mean/SD/effect'),
+    evidenceText: _cleanOneLine(o.evidenceText),
+    evidenceTextJa: _cleanOneLine(o.evidenceTextJa),
     confidence: o.confidence || '',
-    notes: (o.notes || '').replace(/[\t\r\n]/g, ' ')
+    notes: _cleanOneLine(o.notes)
   };
 }
 
@@ -3308,7 +3482,7 @@ const REVMAN_BINARY_COLS = [
   'events_control','total_control','percent_control',
   'reported_RR','reported_OR','reported_HR','reported_RD',
   'ci95_lower','ci95_upper','log_HR','SE_log_HR','p_value',
-  'sourceLocation','pageNumber','confidence','notes'
+  'sourceLocation','pageNumber','sourceDetail','evidenceText','evidenceTextJa','confidence','notes'
 ];
 const REVMAN_CONTINUOUS_COLS = [
   'outcome','study','timepoint','population','metric','scaleInfo',
@@ -3316,18 +3490,20 @@ const REVMAN_CONTINUOUS_COLS = [
   'n_control','mean_control','sd_control','se_control',
   'reported_MD','reported_SMD','reported_AdjMD',
   'ci95_lower','ci95_upper','SE_from_CI','p_value','sd_or_se_label',
-  'sourceLocation','pageNumber','confidence','notes'
+  'sourceLocation','pageNumber','sourceDetail','evidenceText','evidenceTextJa','confidence','notes'
 ];
 
 // 二値アウトカムの行リストを生成 (UI プレビューと export 両方で使用)
 function buildBinaryRows(outcomes, paperPICO, fileName, studyIdOverride) {
   const studyId = deriveStudyId(paperPICO, fileName, studyIdOverride);
-  const rows = (outcomes || []).filter(_isBinary).map(o => _binaryRow(o, studyId));
+  const split = splitMixedEvidenceOutcomes(outcomes || []);
+  const rows = split.outcomes.filter(_isBinary).map(o => _binaryRow(o, studyId));
   return rows;
 }
 function buildContinuousRows(outcomes, paperPICO, fileName, studyIdOverride) {
   const studyId = deriveStudyId(paperPICO, fileName, studyIdOverride);
-  const rows = (outcomes || []).filter(_isContinuous).map(o => _continuousRow(o, studyId));
+  const split = splitMixedEvidenceOutcomes(outcomes || []);
+  const rows = split.outcomes.filter(_isContinuous).map(o => _continuousRow(o, studyId));
   return rows;
 }
 
@@ -3422,6 +3598,9 @@ function buildFlowMetaOutcomeRows(result, studyId) {
       p_value: '',
       sourceLocation: src,
       pageNumber: page,
+      sourceDetail: `[フローチャートから] ${sourceNote} 介入群=${cleanRaw(intervention)} / 対照群=${cleanRaw(control)}。${countMeaning || 'Flow由来Nとして保持。'}`,
+      evidenceText: flow.evidenceText || '',
+      evidenceTextJa: flow.evidenceText ? `CONSORTフローチャートから抽出: ${flow.evidenceText}` : '',
       confidence: 'medium',
       notes: note
     });
@@ -3490,6 +3669,9 @@ function buildFlowMetaOutcomeRows(result, studyId) {
       p_value: '',
       sourceLocation: src,
       pageNumber: page,
+      sourceDetail: `[フローチャートから] ${sourceNote} 介入群=${cleanRaw(eventI)} / 対照群=${cleanRaw(eventC)}。効果量・CI・P値はFlow内に直接同一根拠でない限り空欄。`,
+      evidenceText: flow.flowOutcomeEvidenceText || flow.evidenceText || '',
+      evidenceTextJa: `CONSORTフローチャートから抽出: ${flow.flowOutcomeEvidenceText || flow.evidenceText || ''}`,
       confidence: derived?.length ? 'medium' : 'high',
       notes: note
     });
@@ -3610,7 +3792,7 @@ function rowsToRDataFrame(varName, cols, rows, numericCols) {
 // RevMan用 二値アウトカム TSV 生成
 function toRevManBinaryTSV(outcomes, paperPICO, fileName, studyIdOverride, resultForFlow = null) {
   const studyId = deriveStudyId(paperPICO, fileName, studyIdOverride);
-  const outcomeRows = (outcomes || []).filter(_isBinary).map(o => _binaryRow(o, studyId));
+  const outcomeRows = buildBinaryRows(outcomes || [], paperPICO, fileName, studyIdOverride);
   const flowRows = buildFlowMetaOutcomeRows(resultForFlow, studyId);
   const rows = outcomeRows.concat(flowRows);
   return { tsv: rowsToTSV(REVMAN_BINARY_COLS, rows), rows, count: rows.length, total: outcomeRows.length + flowRows.length, flowCount: flowRows.length };
@@ -3619,7 +3801,7 @@ function toRevManBinaryTSV(outcomes, paperPICO, fileName, studyIdOverride, resul
 // RevMan用 連続アウトカム TSV 生成
 function toRevManContinuousTSV(outcomes, paperPICO, fileName, studyIdOverride) {
   const rows = buildContinuousRows(outcomes, paperPICO, fileName, studyIdOverride);
-  return { tsv: rowsToTSV(REVMAN_CONTINUOUS_COLS, rows), count: rows.length, total: (outcomes || []).filter(_isContinuous).length };
+  return { tsv: rowsToTSV(REVMAN_CONTINUOUS_COLS, rows), count: rows.length, total: rows.length };
 }
 
 // R metafor 二値スクリプト
@@ -4365,6 +4547,7 @@ evidenceText だけ書いて数値フィールドが空のレコードは絶対�
 - 二値アウトカムで "80%" や "0.80" だけを events_or_mean に入れない。必ず分母Nからイベント数を計算し "92 (80%)" のように書く。パーセント/割合から計算した場合は calculationMethod と notes に計算式を残す。
 - 成功率/成功数と失敗率/失敗数は片方だけで終わらせない。原文に両方がある場合は両方を別 extractedOutcomes にする。片方しかないが N とイベント数が確実な場合は、もう片方を N−event で計算した別レコードとして追加し、効果量/P値は原文にその方向で書かれていない限り空欄にする。
 - 右肩の文献番号・脚注番号・図表番号をイベント数として扱わない。群名、分母、アウトカム名、%/単位と結びつく数値だけを採用する。
+- 1レコード=1根拠箇所。sourceLocation に "+" や "Figure/Table" のような複数出処を書かない。Flow diagram のN/イベントと、本文・表・KM図のHR/CI/P値が別の場所なら必ず別 extractedOutcomes に分ける。Flow由来の行では effectEstimate を空欄にし、HR/CI/P値の行では群別N/イベントを空欄にする。
 
 【⚠ 出力サイズ厳守 — 応答が途中で切れるのを防ぐ】
 - evidenceText: ${evidenceCap}文字以内に**要約抜粋**（数値を含む核心部分のみ）。長文の場合は "..." で省略
@@ -4376,7 +4559,7 @@ evidenceText だけ書いて数値フィールドが空のレコードは絶対�
 - interventionGroup / comparisonGroup の N・イベント数や平均・SD/SE（必須）
 - effectEstimate（測定型・値・CI・P値）
 - evidenceText（${evidenceCap}文字以内）+ evidenceTextJa（${evidenceCap}文字以内）
-- pageNumber, sourceLocation, confidence
+- pageNumber, sourceLocation（単一箇所のみ）, confidence
 
 \n【参照テキスト（OCR済みPDF本文）】
 ${sourceText.substring(0, coreTextLimit)}`;
@@ -4555,6 +4738,7 @@ ${pico.cohortFilter ? `   - 上記コホートフィルタ ("${pico.cohortFilter
 7. **figureType の妥当性**: KMカーブからの抽出なら "KaplanMeier"、表からなら "Table" を必ず記録
 8. **evidenceText / evidenceTextJa**: 原文と日本語訳の整合性、両方とも 250 文字以内
 9. **evidenceText の物理存在**: 引用文が論文原文に literally 存在するか (ハルシネーション検出)。捏造されていれば該当レコードの notes に "[捏造疑い: 原文未確認]" を追加
+10. **根拠単位の分離**: Flow diagramのN/イベントと本文・表・KM図のHR/CI/P値が混在していれば、同一アウトカムでも別レコードに分ける。sourceLocation に "+" を使わない。
 
 【重要な出力ルール】
 - correctedOutcomes には **元のリストを修正した完全版** を入れる（差分でなく全件）
@@ -4608,6 +4792,7 @@ ${sourceText.substring(0, criticTextLimit)}`;
       const msgs = [];
       if (pp.nPercentNormalizations > 0) msgs.push(`n(%) 正規化 ${pp.nPercentNormalizations}件`);
       if (pp.nTotalAutoFilled > 0) msgs.push(`Flow由来N補完 ${pp.nTotalAutoFilled}件`);
+      if (pp.evidenceUnitSplits > 0) msgs.push(`根拠単位分離 ${pp.evidenceUnitSplits}件`);
       if (pp.successFailureComplementsAdded > 0) msgs.push(`成功/失敗ペア補完 ${pp.successFailureComplementsAdded}件`);
       if (pp.percentOnlyWarnings > 0) msgs.push(`イベント数不明の% ${pp.percentOnlyWarnings}件`);
       if (pp.quoteFails > 0) msgs.push(`引用文 PDF 不一致 ${pp.quoteFails}件 (ハルシネーション疑い)`);
@@ -4929,8 +5114,9 @@ function buildFlowOutcomeRows(result) {
 }
 
 function buildMainOutcomeRowsForCopy(result) {
+  const split = splitMixedEvidenceOutcomes(result?.extractedOutcomes || []);
   return [
-    ...(result?.extractedOutcomes || []),
+    ...split.outcomes,
     ...buildFlowOutcomeRows(result)
   ];
 }
