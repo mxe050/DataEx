@@ -1464,7 +1464,7 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
 - Fan 2026 / RCT抽出エラー研究・分類: misallocation(フィールド/群/時点への誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。各アウトカムで wrong arm、wrong denominator、wrong time point、SE/SD混同、unit欠落、percentage-only、effect direction逆転、primary/secondary混同を必ず点検する。
 - 見落とし防止: ユーザー指定アウトカムだけでなく、本文Results/Table/Figureにある同じ臨床概念の時点違い・解析集団違い(ITT/PP/mITT/safety)・スケール違いを別レコード候補として確認する。
 - 同一アウトカム内の複数候補: Abstract値、本文値、Table値、Figure値、Flow由来N、ITT、PP、mITT、available case が複数ある場合は全候補を出し、notes に採用根拠と差分理由を書く。
-- CONSORT 2025/CONSORT flow: randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcome を群別に確認し、アウトカムの分母と矛盾しないか見る。フローチャートのN数は consortFlow/prismaFlow として保持しつつ、Excel貼付用にはFlow由来N/脱落数の別行もOutcome TSVへ併記する。
+- CONSORT 2025/CONSORT flow: randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcome を群別に確認し、アウトカムの分母と矛盾しないか見る。フローチャートのN数は consortFlow/prismaFlow として保持しつつ、Excel貼付用にはフローチャート由来N/脱落数の別行もOutcome TSVへ併記する。
 - CONSORT-AI / STARD-AI: モデル設定、プロンプト、検証手順、監査可能性を意識し、unclearItems と notes に検証上の注意を残す。
 - RAG/根拠接地: 先に本文内の該当箇所を探し、次に値を抽出し、最後に evidenceText と構造化フィールドが一致するか検証する。数値フィールドに入る数字は evidenceText / sourceLocation / pageNumber に対応するものだけに限定する。
 - OCR/HTML混入対策: evidenceText に "border-radius"、"font-weight"、"padding"、HTMLタグ、CSS断片、文字化けが混ざる場合は引用として不適切。原文として読める短い数値文に清掃し、清掃できない場合は confidence を low にして notes に「OCR要確認」と書く。
@@ -1530,7 +1530,7 @@ Round 2 方針:
 Round 3 方針:
 - 抄録ファーストではなく本文ファースト。Abstractは候補探索に使い、構造化フィールドへ入れる値はResults本文、Table、Figure、CONSORT/PRISMA flow、Supplementで再確認する。
 - Abstractと本文・表・図の値が違う場合は丸めない。本文/表/図を優先し、差分をnotesに明記する。
-- Flow diagramのNと本文/表のNが違う場合も丸めない。Flow結果はFlow TSVに独立保存し、ITT/PP/割付/脱落などメタ解析の分母確認に必要なFlow由来NはOutcome TSVにも別行で併記し、Notesに差分を書く。
+- Flow diagramのNと本文/表のNが違う場合も丸めない。フローチャート由来のITT/PP/割付/脱落Nは、独立したFlow TSVを作らずOutcome TSVの別行に統一し、Notesに差分と取得boxを書く。
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
@@ -1558,10 +1558,7 @@ PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I�
 【出力形式】
 1. まず自動設定したPICOと、比較した2群を短く示す。
 2. 次にCONSORT/PRISMAフローチャート確認結果を、群別Nの短い表で示す。
-3. 次にExcelへそのまま貼れるTSV表を出す。列はタブ区切りにする。アウトカムTSVには通常アウトカムに加えて、Flow TSVから得たITT/PP/割付/脱落の行も入れる。フローチャートTSVも独立して必ず出す。
-
-Flow TSVヘッダー:
-Flow種別\t項目\t介入群\t対照群\t第3群/合計\t値\t出処\tページ\t根拠/注記
+3. 次にExcelへそのまま貼れるOutcome TSV表を出す。列はタブ区切りにする。通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行もOutcome TSV内に入れる。独立したFlow TSVは出さない。
 
 Outcome TSVヘッダー:
 Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
@@ -2694,7 +2691,7 @@ function annotateFlowDenominatorDifferences(out, consort) {
     const flowN = extractNumber(flowVal);
     if (outcomeN && flowN && outcomeN !== flowN) {
       const popLabel = isPP ? 'PP' : isITT ? 'ITT/mITT/FAS' : '解析集団不明';
-      out.notes = _appendExtractionNote(out.notes, `[n差異: ${label} ${popLabel} outcome N=${outcomeN}, CONSORT Flow=${flowN} (${source})。Flow値はフローチャートTSVにも保持]`);
+      out.notes = _appendExtractionNote(out.notes, `[n差異: ${label} ${popLabel} outcome N=${outcomeN}, CONSORT Flow=${flowN} (${source})。フローチャート由来NはOutcome TSV内の別行にも保持]`);
       out.variationReason = out.variationReason || 'Flow diagramと本文/表の分母Nが異なるため要照合';
     }
   });
@@ -3189,7 +3186,7 @@ function buildFlowMetaOutcomeRows(result, studyId) {
       `[フローチャートから] ${sourceNote}`,
       `介入群=${cleanRaw(intervention)} / 対照群=${cleanRaw(control)}`,
       `出処=${src}${page ? ` p.${page}` : ''}`,
-      `${countMeaning || 'events_* と total_* にはFlow TSV由来の該当Nを便宜的に併記。臨床アウトカムイベントではないため、統合前に本文/表アウトカム行と照合してください。'}`
+      `${countMeaning || 'events_* と total_* にはフローチャート由来の該当Nを便宜的に併記。臨床アウトカムイベントではないため、統合前に本文/表アウトカム行と照合してください。'}`
     ].join(' ');
     rows.push({
       outcome: `CONSORT Flow - ${label}`,
@@ -4401,47 +4398,9 @@ ${pdfText.substring(0, 30000)}
   return extracted;
 }
 
-const FLOW_HDRS = ["Flow種別", "項目", "介入群", "対照群", "第3群/合計", "値", "出処", "ページ", "根拠/注記"];
-
 function _hasFlowValue(v) {
   const s = String(v ?? '').trim();
   return !!s && s !== '-' && s !== '不明' && s !== '未抽出';
-}
-
-function _pairFlowValue(a, b) {
-  if (!_hasFlowValue(a) && !_hasFlowValue(b)) return "";
-  return `${a || "-"} / ${b || "-"}`;
-}
-
-function buildFlowRows(result) {
-  const rows = [];
-  const add = (type, item, intervention, comparison, thirdOrTotal, value, source, page, note) => {
-    if (![_hasFlowValue(intervention), _hasFlowValue(comparison), _hasFlowValue(thirdOrTotal), _hasFlowValue(value)].some(Boolean)) return;
-    rows.push([type, item, intervention || "-", comparison || "-", thirdOrTotal || "-", value || "-", source || "-", page || "-", note || "-"]);
-  };
-  const c = result?.consortFlow;
-  if (c) {
-    const src = c.sourceLocation || "CONSORT Flow Diagram";
-    const page = c.pageNumber || "-";
-    add("CONSORT", "無作為化 N", "-", "-", c.randomized || "-", c.randomized || "-", src, page, "Flow diagramから抽出した総ランダム化数");
-    add("CONSORT", "割付 N", c.allocatedIntervention || "-", c.allocatedComparison || "-", c.allocatedThird || "-", "-", src, page, "Flow diagramから抽出した群別割付数");
-    add("CONSORT", "ITT解析 N", c.analyzedITT_intervention || "-", c.analyzedITT_comparison || "-", "-", "-", src, page, "Flow diagramから抽出した群別ITT解析対象数");
-    add("CONSORT", "PP解析 N", c.analyzedPP_intervention || "-", c.analyzedPP_comparison || "-", "-", "-", src, page, "Flow diagramから抽出した群別PP解析対象数");
-    add("CONSORT", "脱落 N", c.lostToFollowUp_intervention || "-", c.lostToFollowUp_comparison || "-", "-", "-", src, page, "Flow diagramから抽出した群別脱落数");
-  }
-  const p = result?.prismaFlow;
-  if (p) {
-    const src = p.sourceLocation || "PRISMA Flow Diagram";
-    const page = p.pageNumber || "-";
-    add("PRISMA", "Records identified", "-", "-", "-", p.recordsIdentified || "-", src, page, p.evidenceText || "Flow diagramから抽出");
-    add("PRISMA", "From databases/registers/other", "-", "-", "-", [p.recordsFromDatabases, p.recordsFromRegisters, p.recordsFromOtherSources].filter(_hasFlowValue).join(" / "), src, page, "databases / registers / other sources");
-    add("PRISMA", "Duplicates removed", "-", "-", "-", p.duplicatesRemoved || "-", src, page, "重複除外");
-    add("PRISMA", "Screened / excluded", "-", "-", "-", _pairFlowValue(p.recordsScreened, p.recordsExcluded), src, page, "スクリーニング/除外");
-    add("PRISMA", "Retrieval sought / not retrieved", "-", "-", "-", _pairFlowValue(p.reportsSoughtForRetrieval, p.reportsNotRetrieved), src, page, "入手試行/未入手");
-    add("PRISMA", "Eligibility assessed / excluded", "-", "-", "-", _pairFlowValue(p.reportsAssessedForEligibility, p.reportsExcluded), src, page, "適格性評価/除外");
-    add("PRISMA", "Included review / meta-analysis", "-", "-", "-", _pairFlowValue(p.studiesIncludedInReview, p.studiesIncludedInMetaAnalysis), src, page, p.notes || "レビュー/メタ解析に含まれた研究数");
-  }
-  return rows;
 }
 
 function buildFlowOutcomeRows(result) {
@@ -6663,9 +6622,7 @@ ${pdfText.substring(0, 30000)}`;
   const copyAllTSV = () => {
     if (!result) return;
     let t = "";
-    const flowRows = buildFlowRows(result);
     const mainOutcomeRows = buildMainOutcomeRowsForCopy(result);
-    if (flowRows.length) t += "[フローチャート]\n" + toDelimited(FLOW_HDRS, flowRows, "\t") + "\n\n";
     if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t") + "\n\n";
     if (mainOutcomeRows.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, mainOutcomeRows.map(outcomeRow), "\t");
     clipCopy(t) && showToast("全TSVコピー完了");
@@ -6673,17 +6630,10 @@ ${pdfText.substring(0, 30000)}`;
   const copyAllCSV = () => {
     if (!result) return;
     let t = "";
-    const flowRows = buildFlowRows(result);
     const mainOutcomeRows = buildMainOutcomeRowsForCopy(result);
-    if (flowRows.length) t += "[フローチャート]\n" + toDelimited(FLOW_HDRS, flowRows, ",") + "\n\n";
     if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), ",") + "\n\n";
     if (mainOutcomeRows.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, mainOutcomeRows.map(outcomeRow), ",");
     clipCopy(t) && showToast("全CSVコピー完了");
-  };
-  const copyFlowTSV = () => {
-    const rows = buildFlowRows(result);
-    if (!rows.length) { showToast("フローチャート抽出データがありません", "info"); return; }
-    clipCopy(toDelimited(FLOW_HDRS, rows, "\t")) && showToast("フローチャートTSVコピー完了");
   };
   const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
 
@@ -7535,7 +7485,7 @@ ${pdfText.substring(0, 30000)}`;
                     className="text-[9px] bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded font-bold cursor-pointer border-2 border-emerald-700">
                     <option value="">📊 メタ分析用 ▼</option>
                     <optgroup label="RevMan">
-                      <option value="revman-binary">Outcome TSV - 二値 + Flow (events/total)</option>
+                      <option value="revman-binary">Outcome TSV - 二値 + フローチャート (events/total)</option>
                       <option value="revman-continuous">RevMan TSV - 連続 (全パターン)</option>
                       <option value="revman-xml">RevMan XML (.rm5互換)</option>
                     </optgroup>
@@ -7615,7 +7565,7 @@ ${pdfText.substring(0, 30000)}`;
                         <span className="font-bold truncate">📊 {metaExportPreview.label} プレビュー</span>
                         <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-mono">{metaExportPreview.count} 件</span>
                         {metaExportPreview.flowCount > 0 && (
-                          <span className="text-[10px] bg-cyan-200 text-cyan-950 px-2 py-0.5 rounded font-bold">Flow由来 {metaExportPreview.flowCount}件</span>
+                          <span className="text-[10px] bg-cyan-200 text-cyan-950 px-2 py-0.5 rounded font-bold">フローチャート由来 {metaExportPreview.flowCount}件</span>
                         )}
                         {metaExportPreview.count !== metaExportPreview.total && (
                           <span className="text-[10px] bg-amber-300 text-amber-900 px-2 py-0.5 rounded font-bold">⚠ 抽出元 {metaExportPreview.total}件中 {metaExportPreview.count}件のみ</span>
@@ -7694,7 +7644,7 @@ ${pdfText.substring(0, 30000)}`;
                       <div className="space-y-0.5">
                         <div><b>赤背景セル「—」</b>は抽出できなかった項目（推測値は入れず空白で出力）。<b>左4列</b>=識別 / <b>群データ</b>=青系 / <b>派生計算</b>=log_HR・SE_from_CI 等</div>
                         {metaExportPreview.type === 'revman-binary' && (
-                          <div className="text-emerald-900"><b>🚨 events_intervention/control は「実イベント数(整数)」のみ</b>。"80%" のような % 値は <b>events_* には入りません</b> (空白)。% は <code className="bg-white px-1 rounded">percent_intervention/control</code> 列に分離保存。Flow由来行はITT/PP/割付/脱落の確認用として同じTSVに併記し、notesに取得boxを明記します。Flow由来のevents_*は臨床アウトカムではないため、統合前に本文/表アウトカム行と照合してください。</div>
+                          <div className="text-emerald-900"><b>🚨 events_intervention/control は「実イベント数(整数)」のみ</b>。"80%" のような % 値は <b>events_* には入りません</b> (空白)。% は <code className="bg-white px-1 rounded">percent_intervention/control</code> 列に分離保存。フローチャート由来行はITT/PP/割付/脱落の確認用としてOutcome TSVに併記し、notesに取得boxを明記します。フローチャート由来のevents_*は臨床アウトカムではないため、統合前に本文/表アウトカム行と照合してください。</div>
                         )}
                       </div>
                     </div>
@@ -7832,7 +7782,7 @@ ${pdfText.substring(0, 30000)}`;
                   <section className="border border-indigo-200 rounded-lg overflow-hidden">
                     <div className="bg-indigo-50 px-2 py-1 border-b border-indigo-200 flex items-center justify-between gap-2">
                       <h3 className="font-semibold text-indigo-800">🌀 CONSORT Flow</h3>
-                      <button onClick={copyFlowTSV} className="bg-white border border-indigo-300 px-1.5 py-0.5 rounded font-medium text-indigo-700 hover:bg-indigo-100" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}><CopyIcon size={9} className="inline mr-0.5"/>Flow TSV</button>
+                      <span className="text-[9px] text-indigo-700 bg-white border border-indigo-200 rounded px-1.5 py-0.5">Outcome TSVに統合</span>
                     </div>
                     <table className="w-full" style={{fontSize:`${Math.max(9,leftFontSize*0.9)}px`}}>
                       <tbody className="divide-y divide-slate-100">
@@ -7850,7 +7800,7 @@ ${pdfText.substring(0, 30000)}`;
                   <section className="border border-violet-200 rounded-lg overflow-hidden">
                     <div className="bg-violet-50 px-2 py-1 border-b border-violet-200 flex items-center justify-between gap-2">
                       <h3 className="font-semibold text-violet-800">🔎 PRISMA Flow</h3>
-                      <button onClick={copyFlowTSV} className="bg-white border border-violet-300 px-1.5 py-0.5 rounded font-medium text-violet-700 hover:bg-violet-100" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}><CopyIcon size={9} className="inline mr-0.5"/>Flow TSV</button>
+                      <span className="text-[9px] text-violet-700 bg-white border border-violet-200 rounded px-1.5 py-0.5">Outcome TSVに統合</span>
                     </div>
                     <table className="w-full" style={{fontSize:`${Math.max(9,leftFontSize*0.9)}px`}}>
                       <tbody className="divide-y divide-slate-100">
