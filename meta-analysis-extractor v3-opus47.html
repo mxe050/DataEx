@@ -173,6 +173,7 @@ overall cohort summary がある場合は、それを優先採用すること。
 - evidence: "229 teeth randomized; PCR group n=114, SW group n=115"
   → 必ず: interventionGroup.n_total="114", comparisonGroup.n_total="115"
 - 数値が "%" や "0.80" の割合のみでも、events_or_mean に "80%" や "0.80" だけを書かない。分母があればイベント数を計算して "97 (80%)" 形式にし、分母不明なら "不明 (80%)" として notes に "[%のみ報告 - イベント数不明]" と書く
+- 成功率(success/successes)と失敗率(failure/failures)は表裏一体でも、原文・表・図に片方または両方が読み取れる場合は**必ず別レコードで両方出す**。片方だけ明示され、分母Nとイベント数が確実な場合のみ、もう片方を N−event で計算し、calculationMethod と notes に式を残す。効果量/P値は方向が変わる可能性があるため、原文でその方向に明示されていない限りコピーしない
 - 本文中の右肩文献番号・脚注番号・図表番号をイベント数として抽出しない。群名、アウトカム名、分母、単位、%などと結びつかない孤立小数字はデータではない
 - "p < 0.001" → effectEstimate.pValue="<0.001"
 - 95%CI が "0.21-4.08" → effectEstimate.ci95="0.21-4.08"
@@ -1446,6 +1447,7 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
 - P値・RR・OR・IRR・HRなどの統計量は原文の表記をそのまま保持する。p<0.05 と p>=0.05 の判定が矛盾しないか確認する。
 - 同一著者の別研究、別コホート、ITT/PP/mITT/Safety集団を混同しない。集団が違う値は別レコードにする。
 - 同じアウトカムで Abstract、本文Results、Table、Figure、Flow diagram、ITT、PP の値や分母が違う場合は、1つに選別せず全て別レコードとして残す。notes には「採用根拠」と「他候補の存在」を書く。
+- success/successes と failure/failures が同じ分母から計算できる場合、片方だけで終わらせず両方を別レコードにする。補完側は必ず N−event の式を notes に残し、効果量/P値は原文にその方向で明示されなければ空欄にする。
 - 抽出後に自己検証する: N、primary endpoint、群方向、P値/有意性、NR補完、デバイス/介入名、evidenceTextの存在。`
   },
   {
@@ -1463,6 +1465,7 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
 - Laignelot 2026: LLM抽出精度には幅がある前提で、全ての数値を人間が照合できるよう evidenceText / pageNumber / sourceLocation を優先する。
 - Fan 2026 / RCT抽出エラー研究・分類: misallocation(フィールド/群/時点への誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。各アウトカムで wrong arm、wrong denominator、wrong time point、SE/SD混同、unit欠落、percentage-only、effect direction逆転、primary/secondary混同を必ず点検する。
 - 見落とし防止: ユーザー指定アウトカムだけでなく、本文Results/Table/Figureにある同じ臨床概念の時点違い・解析集団違い(ITT/PP/mITT/safety)・スケール違いを別レコード候補として確認する。
+- 成功/失敗の表裏ペア: success rate / failure rate / cumulative successes / cumulative failures などは、同じ分母から両方が成立する場合に必ず両方を別レコード化する。片方を派生計算する場合は N−event の式と「派生値」であることを notes に明記する。
 - 同一アウトカム内の複数候補: Abstract値、本文値、Table値、Figure値、Flow由来N、ITT、PP、mITT、available case が複数ある場合は全候補を出し、notes に採用根拠と差分理由を書く。
 - CONSORT 2025/CONSORT flow: randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcome を群別に確認し、アウトカムの分母と矛盾しないか見る。フローチャートのN数は consortFlow/prismaFlow として保持しつつ、Excel貼付用にはフローチャート由来N/脱落数の別行もOutcome TSVへ併記する。
 - CONSORT-AI / STARD-AI: モデル設定、プロンプト、検証手順、監査可能性を意識し、unclearItems と notes に検証上の注意を残す。
@@ -1515,6 +1518,7 @@ Round 1 方針:
 - §6エラーパターンを必ず確認する: 分散値欠落、アームスワップ、単位欠落、SE/SD混同、分母欠落、ハルシネーション疑い。
 - ITT / mITT / PP / safety集団、術前値・術後値・変化量、時点違いを混同せず、必要なら別レコードにする。
 - 同じアウトカムでも、Abstract値、本文値、Table値、Figure値、CONSORT/PRISMA Flow由来N、ITT、PP、mITT、available case が複数ある場合は、最も良さそうな1つに絞らず全て別行で出す。
+- 成功率と失敗率、累積成功数と累積失敗数などの表裏ペアは、同じ分母から両方が成立する場合、必ず両方を別行で出す。片方を N−event で補完した場合は、Notesに計算式と「派生値」であることを書き、効果量/P値は原文でその方向に明示されていなければ空欄にする。
 - 各行のNotesには「採用根拠」を必ず書く。例: "採用根拠: PP解析、Table 2、分母はcompleted protocol N=88。ITT解析は別行。"
 - 全アウトカムを網羅する。指定アウトカム以外でも、メタ解析に使える主要・副次アウトカムは候補として抽出する。
 
@@ -2625,6 +2629,133 @@ function extractDenominatorFromEventsValue(val) {
   return '';
 }
 
+function _binaryPolarityText(o) {
+  return [
+    o?.actualOutcomeName,
+    o?.requestedOutcomeName,
+    o?.populationDescription,
+    o?.variationReason,
+    o?.calculationMethod,
+    o?.notes
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function detectSuccessFailurePolarity(o) {
+  const nameText = `${o?.actualOutcomeName || ''} ${o?.requestedOutcomeName || ''}`.toLowerCase();
+  const allText = _binaryPolarityText(o);
+  const successRe = /\b(success(?:es|ful)?|treatment success|clinical success)\b|成功|治療成功/iu;
+  const failureRe = /\b(failure(?:s)?|failed|unsuccess(?:ful)?|non[-\s]?success|treatment failure|clinical failure)\b|失敗|不成功|治療失敗/iu;
+  if (/^\s*(失敗|failure)/iu.test(nameText)) return 'failure';
+  if (/^\s*(成功|success)/iu.test(nameText)) return 'success';
+  if (successRe.test(nameText)) return 'success';
+  if (failureRe.test(nameText)) return 'failure';
+  if (successRe.test(allText) && !failureRe.test(allText)) return 'success';
+  if (failureRe.test(allText) && !successRe.test(allText)) return 'failure';
+  return '';
+}
+
+function _isBinaryComplementCandidate(o) {
+  return !o?._derivedComplement
+    && /binary|二値|time.?to.?event|tte/i.test(o?.variableType || '')
+    && !!detectSuccessFailurePolarity(o);
+}
+
+function _asIntegerCount(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const rounded = Math.round(n);
+  return Math.abs(n - rounded) < 1e-6 ? rounded : null;
+}
+
+function _formatNPercent(n, total) {
+  if (!Number.isFinite(n) || !Number.isFinite(total) || total <= 0) return '';
+  const pct = ((n / total) * 100).toFixed(1).replace(/\.0$/, '');
+  return `${n} (${pct}%)`;
+}
+
+function _complementGroupData(group) {
+  const total = _asIntegerCount(extractNumber(group?.n_total));
+  const events = _asIntegerCount(extractEventsCount(group?.events_or_mean, group?.n_total));
+  if (total === null || events === null || total < 0 || events < 0 || events > total) return null;
+  const complement = total - events;
+  return {
+    group: {
+      ...(group || {}),
+      n_total: String(total),
+      events_or_mean: _formatNPercent(complement, total),
+      sd_or_se: group?.sd_or_se || '-'
+    },
+    total,
+    events,
+    complement
+  };
+}
+
+function _complementOutcomeName(o, polarity) {
+  const base = o?.actualOutcomeName || o?.requestedOutcomeName || 'Binary outcome';
+  return polarity === 'success'
+    ? `失敗数/失敗率（${base} から N−成功数で補完）`
+    : `成功数/成功率（${base} から N−失敗数で補完）`;
+}
+
+function _outcomeMatchesComplement(candidate, existing, targetPolarity) {
+  if (!existing) return false;
+  if (detectSuccessFailurePolarity(existing) !== targetPolarity) return false;
+  const sameTime = String(candidate.timePoint || '').trim().toLowerCase() === String(existing.timePoint || '').trim().toLowerCase();
+  const samePop = String(candidate.populationType || '').trim().toLowerCase() === String(existing.populationType || '').trim().toLowerCase();
+  if (!sameTime || !samePop) return false;
+  const groups = ['interventionGroup', 'comparisonGroup'];
+  return groups.every(g => {
+    const cTotal = extractNumber(candidate[g]?.n_total);
+    const eTotal = extractNumber(existing[g]?.n_total);
+    const cEvent = extractEventsCount(candidate[g]?.events_or_mean, candidate[g]?.n_total);
+    const eEvent = extractEventsCount(existing[g]?.events_or_mean, existing[g]?.n_total);
+    return cTotal && eTotal && cEvent && eEvent && cTotal === eTotal && cEvent === eEvent;
+  });
+}
+
+function addSuccessFailureComplementOutcomes(outcomes) {
+  if (!Array.isArray(outcomes) || outcomes.length === 0) return { outcomes: outcomes || [], added: 0 };
+  const additions = [];
+  outcomes.forEach(o => {
+    if (!_isBinaryComplementCandidate(o)) return;
+    const polarity = detectSuccessFailurePolarity(o);
+    const targetPolarity = polarity === 'success' ? 'failure' : 'success';
+    const intData = _complementGroupData(o.interventionGroup);
+    const cmpData = _complementGroupData(o.comparisonGroup);
+    if (!intData || !cmpData) return;
+    const thirdData = o.thirdGroup ? _complementGroupData(o.thirdGroup) : null;
+    const formula = [
+      `介入群: ${intData.total} - ${intData.events} = ${intData.complement}`,
+      `対照群: ${cmpData.total} - ${cmpData.events} = ${cmpData.complement}`,
+      thirdData && `第3群: ${thirdData.total} - ${thirdData.events} = ${thirdData.complement}`
+    ].filter(Boolean).join(' / ');
+    const candidate = {
+      ...JSON.parse(JSON.stringify(o)),
+      requestedOutcomeName: o.requestedOutcomeName || '成功/失敗ペア補完',
+      actualOutcomeName: _complementOutcomeName(o, polarity),
+      variationReason: _appendExtractionNote(o.variationReason, '成功率と失敗率は表裏一体のため、片側のみ抽出された場合に別レコードとして保持'),
+      calculationMethod: _appendExtractionNote(o.calculationMethod, `[成功/失敗ペア補完] ${formula}`),
+      interventionGroup: intData.group,
+      comparisonGroup: cmpData.group,
+      thirdGroup: thirdData ? thirdData.group : (o.thirdGroup ? { ...(o.thirdGroup || {}), events_or_mean: '不明', sd_or_se: o.thirdGroup?.sd_or_se || '-' } : o.thirdGroup),
+      effectEstimate: { measureType: '-', value: '', ci95: '', pValue: '' },
+      confidence: o.confidence === 'high' ? 'medium' : (o.confidence || 'medium'),
+      notes: _appendExtractionNote(
+        o.notes,
+        `[成功/失敗ペア補完] ${polarity === 'success' ? '成功数から失敗数' : '失敗数から成功数'}を N−event で計算: ${formula}。効果量/P値は方向が変わる可能性があるためコピーせず空欄。原文値ではなく派生値として要照合。`
+      ),
+      _derivedComplement: true,
+      _derivedFromOutcome: o.actualOutcomeName || o.requestedOutcomeName || ''
+    };
+    if (!outcomes.some(existing => _outcomeMatchesComplement(candidate, existing, targetPolarity))
+      && !additions.some(existing => _outcomeMatchesComplement(candidate, existing, targetPolarity))) {
+      additions.push(candidate);
+    }
+  });
+  return { outcomes: outcomes.concat(additions), added: additions.length };
+}
+
 function _variantOutcomeKey(o) {
   const raw = `${o?.requestedOutcomeName || ''} ${o?.actualOutcomeName || ''}`.toLowerCase();
   const normalizedName = raw
@@ -2729,7 +2860,7 @@ function validateQuoteAgainstPdf(evidenceText, pdfTextLower) {
 function postProcessExtraction(result, pdfTextLower) {
   if (!result || !Array.isArray(result.extractedOutcomes)) return result;
   const normalized = JSON.parse(JSON.stringify(result));
-  let nFmtChanges = 0, nQuoteFails = 0, nPercentOnlyWarn = 0, nTotalFilled = 0;
+  let nFmtChanges = 0, nQuoteFails = 0, nPercentOnlyWarn = 0, nTotalFilled = 0, nComplementAdded = 0;
   // CONSORT flow から推定可能な n_total
   // analyzed > randomized > allocated の優先順位
   const consort = result.consortFlow || {};
@@ -2811,13 +2942,17 @@ function postProcessExtraction(result, pdfTextLower) {
     }
     return out;
   });
+  const complementResult = addSuccessFailureComplementOutcomes(normalized.extractedOutcomes);
+  normalized.extractedOutcomes = complementResult.outcomes;
+  nComplementAdded = complementResult.added;
   normalized.extractedOutcomes = annotateOutcomeVariantRationales(normalized.extractedOutcomes);
   normalized._postProcess = {
     nPercentNormalizations: nFmtChanges,
     quoteValidations: pdfTextLower ? normalized.extractedOutcomes.length : 0,
     quoteFails: nQuoteFails,
     percentOnlyWarnings: nPercentOnlyWarn,
-    nTotalAutoFilled: nTotalFilled
+    nTotalAutoFilled: nTotalFilled,
+    successFailureComplementsAdded: nComplementAdded
   };
   return normalized;
 }
@@ -2945,6 +3080,16 @@ function extractPercent(eventsOrMean, nTotal) {
   m = s.match(/^\s*(0?\.\d+)\s*$/);
   if (m) return (parseFloat(m[1]) * 100).toFixed(1).replace(/\.0$/, '');
   return '';
+}
+
+function extractExplicitPercent(eventsOrMean) {
+  if (eventsOrMean == null) return null;
+  const s = String(eventsOrMean).trim();
+  let m = s.match(/\(\s*(\d+(?:\.\d+)?)\s*%\s*\)/);
+  if (m) return parseFloat(m[1]);
+  m = s.match(/^\s*(?:不明\s*\()?\s*(\d+(?:\.\d+)?)\s*%\s*\)?\s*$/);
+  if (m) return parseFloat(m[1]);
+  return null;
 }
 
 // events_or_mean が「パーセント値のみ (実カウント不明)」かどうか判定
@@ -3637,6 +3782,18 @@ function detectExtractionErrors(o) {
         if (events < 0) {
           flags.push({ code: 'events-negative', severity: 'critical', msg: `⚠ ${g}: イベント数が負値 (${events})` });
         }
+        const explicitPct = extractExplicitPercent(o[g].events_or_mean);
+        if (explicitPct !== null && !isNaN(explicitPct)) {
+          const calculatedPct = (events / total) * 100;
+          const tolerance = Math.max(1.5, 50 / total);
+          if (Math.abs(calculatedPct - explicitPct) > tolerance) {
+            flags.push({
+              code: 'count-percent-mismatch',
+              severity: 'warning',
+              msg: `⚠ ${g === 'interventionGroup' ? '介入群' : g === 'comparisonGroup' ? '対照群' : '第3群'}: イベント数/N (${events}/${total}=${calculatedPct.toFixed(1)}%) と記載% (${explicitPct}%) が不一致 — 数値転記または分母取り違えを再確認`
+            });
+          }
+        }
       }
     });
   }
@@ -4026,6 +4183,7 @@ evidenceText だけ書いて数値フィールドが空のレコードは絶対�
   → comparisonGroup.n_total="115", events_or_mean="64 (56%)"
   → effectEstimate.value="0.38", ci95="0.23-0.63", pValue="0.001"
 - 二値アウトカムで "80%" や "0.80" だけを events_or_mean に入れない。必ず分母Nからイベント数を計算し "92 (80%)" のように書く。パーセント/割合から計算した場合は calculationMethod と notes に計算式を残す。
+- 成功率/成功数と失敗率/失敗数は片方だけで終わらせない。原文に両方がある場合は両方を別 extractedOutcomes にする。片方しかないが N とイベント数が確実な場合は、もう片方を N−event で計算した別レコードとして追加し、効果量/P値は原文にその方向で書かれていない限り空欄にする。
 - 右肩の文献番号・脚注番号・図表番号をイベント数として扱わない。群名、分母、アウトカム名、%/単位と結びつく数値だけを採用する。
 
 【⚠ 出力サイズ厳守 — 応答が途中で切れるのを防ぐ】
@@ -4191,10 +4349,11 @@ F. **n(%) 形式違反 + イベント数 vs % の混同** (Vivekanantha A2 / Rev
    - 同様に: events_or_mean に "0.80" のような proportion が直接入っているのも誤り → "92 (80%)" 形式に修正
 
 G. **複数metric同時報告漏れ**  (Vivekanantha A2 必須ルール)
-   - 同じアウトカムで mean と median 両方が報告されているのに片方しか抽出されていない → 両方を別レコードで保持
-   - Pre と Post の両方が報告されているのに片方しか無い → 両方を別レコードで保持
-   - Abstract と本文で値が違うのに統一されている → 両方を別レコードで保持 (variationReason に明記)
-   - Flow diagram の解析対象Nと本文/表の分母Nが違う → Flowは consortFlow に残し、アウトカム側は本文/表の分母で別レコード化。notes に "[n差異: Flow analyzed ITT=..., Table outcome denominator=...]" と書く
+    - 同じアウトカムで mean と median 両方が報告されているのに片方しか抽出されていない → 両方を別レコードで保持
+    - Pre と Post の両方が報告されているのに片方しか無い → 両方を別レコードで保持
+    - Abstract と本文で値が違うのに統一されている → 両方を別レコードで保持 (variationReason に明記)
+    - Flow diagram の解析対象Nと本文/表の分母Nが違う → Flowは consortFlow に残し、アウトカム側は本文/表の分母で別レコード化。notes に "[n差異: Flow analyzed ITT=..., Table outcome denominator=...]" と書く
+    - success/successes と failure/failures、成功率と失敗率、累積成功数と累積失敗数の表裏ペアが片方だけになっていないか確認。N と event が確実なら N−event で補完行を追加し、calculationMethod/notes に式を残す。効果量/P値は原文に補完側の方向で明示がなければコピーしない
 
 H. **コホート違反** (Vivekanantha A2 cohort filter)
 ${pico.cohortFilter ? `   - 上記コホートフィルタ ("${pico.cohortFilter.trim().substring(0,200)}...") に従い、対象外群からの抽出が混入していないか確認\n   - 違反していれば該当レコードを削除 (correctedOutcomes に含めない)` : '   - PICO の I/C 群以外からの抽出が混入していないか確認'}
@@ -4204,7 +4363,7 @@ ${pico.cohortFilter ? `   - 上記コホートフィルタ ("${pico.cohortFilter
 2. **空欄の補完**: 数値フィールドが "-" "不明" "" のままになっていて、原文に該当数値があれば必ず補完
 3. **集団タイプの分離**: ITT/PP/mITT/Safety が混ざっていないか、populationType が正しいか
 4. **時点違いの分離**: 同一アウトカムが複数時点で報告されている場合、別レコードになっているか
-5. **見落としアウトカム**: 元のリストに含まれていない重要アウトカムが論文中に存在しないか
+5. **見落としアウトカム**: 元のリストに含まれていない重要アウトカムが論文中に存在しないか。特に成功率/失敗率の片側だけ、ITT/PPの片側だけ、本文/図表の片側だけになっていないか確認
 6. **同一アウトカムの複数候補保持**: Abstract値、本文値、Table値、Figure値、Flow由来N、ITT、PP、mITT、available case が複数ある場合、選別せず全候補を correctedOutcomes に残す。各行の notes に採用根拠と他候補の存在を書く
 7. **figureType の妥当性**: KMカーブからの抽出なら "KaplanMeier"、表からなら "Table" を必ず記録
 8. **evidenceText / evidenceTextJa**: 原文と日本語訳の整合性、両方とも 250 文字以内
@@ -4262,6 +4421,7 @@ ${sourceText.substring(0, criticTextLimit)}`;
       const msgs = [];
       if (pp.nPercentNormalizations > 0) msgs.push(`n(%) 正規化 ${pp.nPercentNormalizations}件`);
       if (pp.nTotalAutoFilled > 0) msgs.push(`Flow由来N補完 ${pp.nTotalAutoFilled}件`);
+      if (pp.successFailureComplementsAdded > 0) msgs.push(`成功/失敗ペア補完 ${pp.successFailureComplementsAdded}件`);
       if (pp.percentOnlyWarnings > 0) msgs.push(`イベント数不明の% ${pp.percentOnlyWarnings}件`);
       if (pp.quoteFails > 0) msgs.push(`引用文 PDF 不一致 ${pp.quoteFails}件 (ハルシネーション疑い)`);
       if (msgs.length) onNotice && onNotice(`📐 後処理: ${msgs.join(' / ')}`);
@@ -6332,6 +6492,7 @@ Step 2 実行: outcome "Cumulative successes" について
    → 2 セット存在
 Step 3 実行: → interventionGroup={n_total:"115", events_or_mean:"96"}, comparisonGroup={n_total:"114", events_or_mean:"75"}
 Step 4 実行: 両方非空 ✓ → 出力 OK
+Step 5 追加確認: successes と failures が同じbox/表にある場合は、選択範囲抽出でも片方だけで終わらせず、notes に「failure も併記: 介入 19/115、対照 39/114」のように必ず残す。全体抽出では別レコードとして両方出す。
 
 ✅ 正しい JSON 出力:
 {
