@@ -299,7 +299,8 @@ Flow diagramから読んだN/イベントと、本文・表・KM図から読ん�
 - 図表からの読み取りは confidence="low" または "medium" に設定し、figureType フィールドに種別を記録、notes に "[図表からの目視抽出]" と明記
 
 【CONSORT Flow Diagramからの抽出（重要）】
-Figure 1 (CONSORT) から以下を抽出:
+Figure 1 (CONSORT) は本文ではなくFlow図そのものを確認する。まず allFlowNumbers に、Flow図内で直接読める数字をすべてセミコロン区切りで列挙してから、以下へ解釈して割り当てる:
+- allFlowNumbers: Flow図内の全数字（randomized / allocated / received / lost / excluded / analyzed / completed / success / failure / response / non-response / n / % / p値 / CI / follow-up年数など、図中で読める数字はすべて。本文照合の有無に限定しない）
 - Randomized N
 - Allocated to each arm N
 - Received intervention N
@@ -576,6 +577,7 @@ const EXTRACT_SCHEMA_JSON = {
       type: "object",
       description: "CONSORT flow diagram からの抽出",
       properties: {
+        allFlowNumbers: { type: "string", description: "CONSORT Flow図そのものから直接読める全数字を、解釈前にセミコロン区切りで列挙。本文照合の有無に限定しない" },
         randomized: { type: "string" },
         allocatedIntervention: { type: "string" },
         allocatedComparison: { type: "string" },
@@ -1559,7 +1561,7 @@ Round 3 方針:
 - Flow diagram由来の行では、同じFlow box内に直接書かれた結果以外のHR/CI/P値を入れない。本文・表・KM図のHR/CI/P値は別行にし、その行ではFlow由来N/イベントを空欄にする。
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
-- CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
+- CONSORT/PRISMAフローチャートは必ず見る。本文テキストではなく、Flow図そのものから直接読める数字をまず全て列挙する。その後に randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に解釈し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
 - フローチャートbox内に success/failure/response/non-response/changed/improved などの結果が書かれていれば必ずOutcome TSVに入れる。上段のランダム化/割付boxはITT候補、下段のcompleted protocol/analyzed PP boxはPP候補として、成功と失敗を両方別行で出す。
 - 図表やフローチャートから読んだ数値も、後でExcelへ貼れるTSVに必ず入れる。画面上の説明だけで終わらせない。
 
@@ -1584,7 +1586,7 @@ PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I�
 
 【出力形式】
 1. まず自動設定したPICOと、比較した2群を短く示す。
-2. 次にCONSORT/PRISMAフローチャート確認結果を、群別Nの短い表で示す。
+2. 次にCONSORT/PRISMAフローチャート確認結果を示す。最初に「Flow図から直接読めた全数字」を列挙し、その後に群別Nを示す。本文テキスト由来の確認結果として扱わない。
 3. 次にExcelへそのまま貼れるOutcome TSV表を出す。列はタブ区切りにする。通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行もOutcome TSV内に入れる。独立したFlow TSVは出さない。
 
 Outcome TSVヘッダー:
@@ -4594,13 +4596,14 @@ ${sourceText.substring(0, coreTextLimit)}`;
     const supplementPrompt = `${picoBlock}${algorithmPromptBlock}
 
 【タスク】上記論文から以下のみを抽出してください（アウトカム数値は別コールで取得済みなので不要）：
-1. consortFlow: CONSORT Flow Diagram のN数（無作為化/割付/解析/脱落）と、Flow内に直接書かれた結果（success/failure/response/non-response/変化など）
+1. consortFlow: CONSORT Flow Diagram の図中全数字（allFlowNumbers）、N数（無作為化/割付/解析/脱落）と、Flow内に直接書かれた結果（success/failure/response/non-response/変化など）
 2. prismaFlow: PRISMA Flow Diagram のN数（identified / screened / excluded / included / meta-analysis）
 3. baselineCharacteristics: Table 1 の患者背景（年齢・性別等）。各項目に介入群/対照群の n・値・SD・% を抽出
 4. expertCommentary: メタ分析実装上の注意点（800文字以内）
 5. paperQualityAssessment: 論文の質的評価（500文字以内）
 
 【CONSORT Flow結果の読み方】
+- まず allFlowNumbers に、本文ではなくCONSORT Flow図そのものから直接読める全数字をセミコロン区切りで列挙する。randomized / allocated / lost / excluded / analyzed / completed / success / failure / n / % / p値 / CI / follow-up年数など、図中で読める数字は本文照合の有無に関係なく全て入れる。画像がなくFlow図を直接読めない場合は空欄にし、本文から推測しない。
 - ランダム化/割付直後の2群boxは ITT候補。allocated / randomized / analyzed ITT のNを群別に取り、同じboxまたは直下に success/failure などの結果があれば ittSuccess_* / ittFailure_* に入れる。
 - 一番下の脱落除外後、completed protocol、per protocol、analyzed PP の2群boxは PP候補。analyzedPP_* のNを群別に取り、同じboxに結果があれば ppSuccess_* / ppFailure_* に入れる。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけ書かれている場合は推測で補完せず、記載値だけ入れる（後処理でNが確実な場合だけ N−event 補完する）。
@@ -4976,6 +4979,15 @@ function buildFlowOutcomeRows(result) {
     });
   };
   add({
+    name: "図中全数字",
+    populationType: "Flow diagram raw",
+    populationDescription: "CONSORT Flow図そのものから解釈前に読んだ全数字",
+    iValue: c.allFlowNumbers,
+    variableType: "Flow Raw Numbers",
+    confidence: "medium",
+    note: "CONSORT Flow図から直接読めた全数字の確認用リスト。本文照合より先に、図中に見える数字を列挙。"
+  });
+  add({
     name: "無作為化総N",
     populationType: "Randomized",
     populationDescription: "無作為化された総数",
@@ -5208,6 +5220,8 @@ PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow d
 
 【絶対ルール】
 - 返すのは consortFlow / prismaFlow のみ。通常の本文/表アウトカムは抽出しないが、Flow diagramのbox内に直接書かれた success/failure/response/non-response/変化などの結果は consortFlow の結果フィールドに必ず入れる。
+- 最初に allFlowNumbers を埋める。本文テキストではなくPDF画像中のFlow diagramそのものから直接読める全数字をセミコロン区切りで列挙する。本文照合の有無に限定しない。
+- allFlowNumbers を作った後で、randomized / allocated / received / lost / excluded / analyzed ITT / analyzed PP / success / failure / response などへ解釈する。
 - ランダム化/割付直後の2群boxはITT候補として扱う。全体randomized、allocated intervention/control、analyzed ITT が読める場合はそれぞれ抽出し、同じ上段boxに成功/失敗があれば ittSuccess_* / ittFailure_* に入れる。
 - 一番下の脱落除外後 / completed protocol / per-protocol / analyzed PP の2群boxはPP候補として扱う。analyzedPP_* を群別に取り、同じ下段boxに成功/失敗があれば ppSuccess_* / ppFailure_* に入れる。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけなら片方だけ入れる。ここではN−event補完をしない（後処理で安全に補完する）。
@@ -5221,7 +5235,7 @@ PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow d
   return await callGemini({
     rotator,
     model: modelInfo.id,
-    systemPrompt: 'CONSORT/PRISMAフローチャートのN数と、Flow内に直接書かれた成功・失敗などの結果だけを画像から確認し、JSONで返してください。',
+    systemPrompt: 'CONSORT/PRISMAフローチャートの画像を直接確認し、まず図中全数字(allFlowNumbers)を列挙してから、N数とFlow内に直接書かれた成功・失敗などの結果をJSONで返してください。',
     userText: flowPrompt,
     images: pdfImages,
     schema: flowSchema,
@@ -8412,6 +8426,9 @@ ${pdfText.substring(0, 30000)}`;
                     </div>
                     <table className="w-full" style={{fontSize:`${Math.max(9,leftFontSize*0.9)}px`}}>
                       <tbody className="divide-y divide-slate-100">
+                        {_hasFlowValue(result.consortFlow.allFlowNumbers) && (
+                          <tr><td className="px-2 py-0.5 text-slate-600">図中全数字</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.allFlowNumbers}</td></tr>
+                        )}
                         <tr><td className="px-2 py-0.5 text-slate-600">無作為化 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.randomized || "-"}</td></tr>
                         <tr><td className="px-2 py-0.5 text-slate-600">割付 (介入/対照/3群)</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.allocatedIntervention || "-"} / {result.consortFlow.allocatedComparison || "-"}{result.consortFlow.allocatedThird ? ` / ${result.consortFlow.allocatedThird}` : ""}</td></tr>
                         <tr><td className="px-2 py-0.5 text-slate-600">ITT解析 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.analyzedITT_intervention || "-"} / {result.consortFlow.analyzedITT_comparison || "-"}</td></tr>
