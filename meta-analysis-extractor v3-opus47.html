@@ -4359,6 +4359,98 @@ function buildFlowRows(result) {
   return rows;
 }
 
+function buildFlowOutcomeRows(result) {
+  const c = result?.consortFlow;
+  if (!c) return [];
+  const src = c.sourceLocation || "CONSORT Flow Diagram";
+  const page = c.pageNumber || "-";
+  const rows = [];
+  const add = ({ name, populationType, populationDescription, iN, cN, thirdName, thirdN, iValue, cValue, note }) => {
+    if (![_hasFlowValue(iN), _hasFlowValue(cN), _hasFlowValue(thirdN), _hasFlowValue(iValue), _hasFlowValue(cValue)].some(Boolean)) return;
+    const evidence = [
+      `${name}`,
+      _hasFlowValue(iN) && `intervention N=${iN}`,
+      _hasFlowValue(cN) && `comparison N=${cN}`,
+      _hasFlowValue(thirdN) && `${thirdName || 'third/total'} N=${thirdN}`,
+      _hasFlowValue(iValue) && `intervention value=${iValue}`,
+      _hasFlowValue(cValue) && `comparison value=${cValue}`
+    ].filter(Boolean).join('; ');
+    rows.push({
+      requestedOutcomeName: "フローチャート由来",
+      actualOutcomeName: `CONSORT Flow - ${name}`,
+      timePoint: "-",
+      variationReason: "CONSORT Flow diagramから抽出した解析集団/追跡パターン",
+      calculationMethod: "Flow diagramの値をそのままメインアウトカム表へ併記",
+      variableType: "Flow Count",
+      populationType,
+      populationDescription,
+      interventionGroup: { n_total: iN || "-", events_or_mean: iValue || "-", sd_or_se: "-" },
+      comparisonGroup: { n_total: cN || "-", events_or_mean: cValue || "-", sd_or_se: "-" },
+      thirdGroupName: thirdName || "-",
+      thirdGroup: { n_total: thirdN || "-", events_or_mean: "-", sd_or_se: "-" },
+      effectEstimate: {},
+      sdOrSe: "-",
+      confidence: "medium",
+      figureType: "FlowDiagram",
+      sourceLocation: src,
+      evidenceText: evidence,
+      evidenceTextJa: `CONSORTフローチャートから抽出: ${evidence}`,
+      notes: `[フローチャートから] ${note || name}。アウトカム値ではなく解析集団/追跡フローのNとしてメイン表に併記。`,
+      pageNumber: page
+    });
+  };
+  add({
+    name: "無作為化総N",
+    populationType: "Randomized",
+    populationDescription: "無作為化された総数",
+    thirdName: "合計",
+    thirdN: c.randomized,
+    note: "Randomized total N"
+  });
+  add({
+    name: "割付N",
+    populationType: "Allocated",
+    populationDescription: "群別割付数",
+    iN: c.allocatedIntervention,
+    cN: c.allocatedComparison,
+    thirdName: "第3群",
+    thirdN: c.allocatedThird,
+    note: "allocated to intervention/comparison"
+  });
+  add({
+    name: "ITT解析N",
+    populationType: "ITT",
+    populationDescription: "Intention-to-treat / analyzed ITT population",
+    iN: c.analyzedITT_intervention,
+    cN: c.analyzedITT_comparison,
+    note: "analyzed ITT population"
+  });
+  add({
+    name: "PP解析N",
+    populationType: "PP / Per-protocol",
+    populationDescription: "Per-protocol / protocol completed population",
+    iN: c.analyzedPP_intervention,
+    cN: c.analyzedPP_comparison,
+    note: "per-protocol population"
+  });
+  add({
+    name: "脱落N",
+    populationType: "Lost to follow-up",
+    populationDescription: "Flow diagramの脱落数",
+    iValue: c.lostToFollowUp_intervention,
+    cValue: c.lostToFollowUp_comparison,
+    note: "lost to follow-up counts"
+  });
+  return rows;
+}
+
+function buildMainOutcomeRowsForCopy(result) {
+  return [
+    ...(result?.extractedOutcomes || []),
+    ...buildFlowOutcomeRows(result)
+  ];
+}
+
 // ============================================================
 // DUAL-MODEL EXTRACTION PIPELINE (Vivekanantha 2026 dual-LLM スタイル)
 // 同じPDFに対して2モデル(Flash Lite と Flash)を独立に並列実行し、
@@ -6481,18 +6573,20 @@ ${pdfText.substring(0, 30000)}`;
     if (!result) return;
     let t = "";
     const flowRows = buildFlowRows(result);
+    const mainOutcomeRows = buildMainOutcomeRowsForCopy(result);
     if (flowRows.length) t += "[フローチャート]\n" + toDelimited(FLOW_HDRS, flowRows, "\t") + "\n\n";
     if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t") + "\n\n";
-    if (result.extractedOutcomes?.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, result.extractedOutcomes.map(outcomeRow), "\t");
+    if (mainOutcomeRows.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, mainOutcomeRows.map(outcomeRow), "\t");
     clipCopy(t) && showToast("全TSVコピー完了");
   };
   const copyAllCSV = () => {
     if (!result) return;
     let t = "";
     const flowRows = buildFlowRows(result);
+    const mainOutcomeRows = buildMainOutcomeRowsForCopy(result);
     if (flowRows.length) t += "[フローチャート]\n" + toDelimited(FLOW_HDRS, flowRows, ",") + "\n\n";
     if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), ",") + "\n\n";
-    if (result.extractedOutcomes?.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, result.extractedOutcomes.map(outcomeRow), ",");
+    if (mainOutcomeRows.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, mainOutcomeRows.map(outcomeRow), ",");
     clipCopy(t) && showToast("全CSVコピー完了");
   };
   const copyFlowTSV = () => {
