@@ -1461,44 +1461,12 @@ const EXTRACTION_ALGORITHM_VARIANTS = [
 
 const SPEEDUP_OPTION_DEFS = [
   {
-    id: 'parallelRounds',
+    id: 'recommendedSafeSpeedup',
     no: 1,
-    label: 'Round並列実行',
-    summary: '選択したRoundを同時に開始します。',
-    merit: '待ち時間を短縮。抽出プロンプトとモデル設定は変えません。',
-    demerit: '同時API呼び出しが増え、429/503やrate limitに当たりやすくなります。'
-  },
-  {
-    id: 'cachePdfPreprocessing',
-    no: 2,
-    label: 'PDF解析キャッシュ',
-    summary: '同じPDFのテキスト・画像・Markdown前処理を再利用します。',
-    merit: '同一PDFの再抽出や複数Roundで前処理時間を短縮。精度への影響は原則ありません。',
-    demerit: '同名・同サイズ・同更新時刻の別PDFではキャッシュ誤用リスクがごく小さくあります。'
-  },
-  {
-    id: 'shareRoundPreprocessing',
-    no: 3,
-    label: 'Round間で前処理共有',
-    summary: '今回の抽出中、PDF前処理を1回だけ作って各Roundへ渡します。',
-    merit: 'Round 1/2/3の重複したPDF準備を削減。抽出アルゴリズム本体は同じです。',
-    demerit: 'モデル能力が異なる場合、不足分の画像前処理だけ追加実行されることがあります。'
-  },
-  {
-    id: 'conditionalHeavyTasks',
-    no: 4,
-    label: '重い図表処理を条件付き化',
-    summary: '図表/PRISMA/KMなどの指定がない時だけ画像パスを省略します。',
-    merit: '画像レンダリングと画像送信を減らせるため、大きなPDFで速くなります。',
-    demerit: '図だけにある重要数値を見落とす可能性があります。精度最優先の本番抽出ではOFF推奨です。'
-  },
-  {
-    id: 'reuseCachedResults',
-    no: 5,
-    label: '同一条件なら前回結果を再利用',
-    summary: 'この画面を開いている間、PDF・PICO・アウトカム・モデル・Round条件が同じならAPIを呼ばず前回結果を表示します。',
-    merit: '完全な再実行を避けられるため最速。前回と同じ結果を再確認できます。',
-    demerit: 'プロンプトやアプリ実装を変えた直後は、古い結果を再表示する可能性があります。'
+    label: 'おすすめ高速化（精度維持優先）',
+    summary: 'PDF解析キャッシュ + Round間の前処理共有だけを行います。',
+    merit: '抽出プロンプト・モデル・図表確認を変えず、同じPDF準備を使い回すため精度低下リスクが最も小さいです。',
+    demerit: '初回のPDF準備は必要です。大幅な高速化は主に複数Round実行時・同一PDF再実行時に出ます。'
   }
 ];
 
@@ -1528,6 +1496,18 @@ function attachAlgorithmVariant(result, variantId) {
 
 function hasSpeedup(speedOptions, id) {
   return !!(speedOptions && speedOptions[id]);
+}
+
+function expandSpeedupOptions(speedOptions) {
+  const recommended = hasSpeedup(speedOptions, 'recommendedSafeSpeedup');
+  return {
+    ...speedOptions,
+    cachePdfPreprocessing: recommended,
+    shareRoundPreprocessing: recommended,
+    parallelRounds: false,
+    conditionalHeavyTasks: false,
+    reuseCachedResults: false
+  };
 }
 
 function getFileIdentity(file) {
@@ -1563,22 +1543,8 @@ function needsVisualPdfPath({ pico, outcomes }) {
   return /(figure|fig\.|table|graph|chart|kaplan|km|forest|flow|prisma|consort|diagram|supplement|appendix|図|表|グラフ|カーブ|曲線|フロー|フローチャート|プリズマ|補足|付録)/i.test(haystack);
 }
 
-function getSpeedupWarnings({ speedOptions, selectedVariants, dualMode, modelB, pico, outcomes }) {
-  const warnings = [];
-  const selectedCount = selectedVariants?.length || 0;
-  if (hasSpeedup(speedOptions, 'parallelRounds') && selectedCount > 1) {
-    warnings.push('Round並列実行: API同時実行数が増えるため、429/503が出た場合はOFFにしてください。');
-  }
-  if (hasSpeedup(speedOptions, 'parallelRounds') && dualMode && modelB && selectedVariants?.some(v => v.id === 'current')) {
-    warnings.push('Round並列実行 + dual-MODEL: Round 1内部でも2モデル並列のため、同時リクエストが多くなります。');
-  }
-  if (hasSpeedup(speedOptions, 'conditionalHeavyTasks') && !needsVisualPdfPath({ pico, outcomes })) {
-    warnings.push('条件付き図表処理: 図表/PRISMA/KM指定が見つからないため画像パスを省略します。図だけの数値がある論文ではOFF推奨です。');
-  }
-  if (hasSpeedup(speedOptions, 'reuseCachedResults') && hasSpeedup(speedOptions, 'conditionalHeavyTasks')) {
-    warnings.push('前回結果再利用: 条件付き図表処理ON/OFFはキャッシュキーに含めます。条件を変えれば再抽出されます。');
-  }
-  return warnings;
+function getSpeedupWarnings({ speedOptions }) {
+  return [];
 }
 
 function buildExtractionResultCacheKey({ pdfFile, pico, outcomes, model, modelB, dualMode, pilotMode, useMarkdown, variantId, speedOptions }) {
@@ -3765,6 +3731,41 @@ ${sourceText.substring(0, 40000)}`;
     extracted._supplementError = e.message;
   }
 
+  // === Round 1 専用: Flow diagram 画像確認 ===
+  // アウトカム抽出アルゴリズムは変えず、CONSORT/PRISMA flow のN数だけを画像から外付け確認する。
+  if (algorithmVariantInfo.id === 'current') {
+    try {
+      const flowModelInfo = initialModelInfo.textOnly
+        ? getGeminiModelInfo(GEMINI.defaultModel)
+        : stageModelInfo("Flow diagram確認");
+      stagesUsed.flowDiagram = flowModelInfo.id;
+      onProgress("stage3", `${flowModelInfo.name.replace(/\s*\(.+/, '')} で CONSORT/PRISMA flow図を確認中...`, 74);
+      let flowImages = pdfImages;
+      if (!flowImages?.length) {
+        onNotice && onNotice('📊 Flow確認: 選択モデルが画像パスを使わないため、フローチャート確認用にPDF画像を作成します');
+        flowImages = await extractPdfImages(pdfFile, m => onProgress("stage3", `Flow確認: ${m}`, 74), 3.0);
+      }
+      const flowCheck = await runFlowDiagramImageCheck({
+        rotator,
+        modelInfo: flowModelInfo,
+        pdfImages: flowImages,
+        onNotice
+      });
+      if (flowCheck?.consortFlow) extracted.consortFlow = flowCheck.consortFlow;
+      if (flowCheck?.prismaFlow) extracted.prismaFlow = flowCheck.prismaFlow;
+      extracted._flowDiagramChecked = true;
+      if (flowCheck?.consortFlow || flowCheck?.prismaFlow) {
+        onNotice && onNotice('📊 Flow確認: CONSORT/PRISMA flow図のN数を確認しました');
+      } else {
+        onNotice && onNotice('📊 Flow確認: 明確なCONSORT/PRISMA flow図は検出されませんでした');
+      }
+    } catch (e) {
+      console.warn("Flow diagram画像確認失敗（主要結果は保持）:", e);
+      extracted._flowDiagramError = e.message;
+      onNotice && onNotice(`⚠ Flow diagram画像確認に失敗: ${String(e.message || e).substring(0, 120)}`);
+    }
+  }
+
   // === Stage 4: Critic 監査パス ===（最新モデルで実行 — Flash切替で精度向上を期待できる）
   if (extracted.extractedOutcomes && extracted.extractedOutcomes.length > 0) {
     const stage4Info = stageModelInfo("Stage4 Critic監査");
@@ -4009,6 +4010,9 @@ ${pdfText.substring(0, 30000)}
   extracted._sources = allSame
     ? [`${getGeminiModelInfo(stagesUsed.core)?.name || stagesUsed.core} [3パス精度最大化 + Stage5後処理]`]
     : [`核心: ${stagesUsed.core} / 補完: ${stagesUsed.supplement || '-'} / Critic: ${stagesUsed.critic || '-'} / 後処理: n%正規化+PDF突合`];
+  if (extracted._flowDiagramChecked) {
+    extracted._sources[0] += ` + Flow図確認(${stagesUsed.flowDiagram || '-'})`;
+  }
   extracted._stagesUsed = stagesUsed;
   attachAlgorithmVariant(extracted, algorithmVariantInfo.id);
   onProgress("complete", "抽出完了", 100);
@@ -4086,6 +4090,37 @@ async function runDualExtractionPipeline({ apiKeys, modelA, modelB, pdfFile, pic
   ];
   onProgress('complete', `dual-MODEL 完了 (両一致${merged._dualLLM.summary.bothCorrectPct}% / 少なくとも片方${merged._dualLLM.summary.atLeastOneCorrectPct}%)`, 100);
   return merged;
+}
+
+async function runFlowDiagramImageCheck({ rotator, modelInfo, pdfImages, onNotice }) {
+  if (!pdfImages?.length) return null;
+  const flowSchema = toGeminiSchema({
+    type: 'object',
+    properties: {
+      consortFlow: EXTRACT_SCHEMA_JSON.properties.consortFlow,
+      prismaFlow: EXTRACT_SCHEMA_JSON.properties.prismaFlow
+    }
+  });
+  const flowPrompt = `あなたは医学論文のフローチャート確認担当です。
+PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow diagram があれば、N数だけを抽出してください。
+
+【絶対ルール】
+- アウトカム数値は抽出しない。返すのは consortFlow / prismaFlow のみ。
+- フローチャートが無い、または画像から読めない場合は空のまま返す。
+- evidenceText には図中の原文・数値を短く引用する。
+- sourceLocation には Figure番号、Flow diagram、ページなどを入れる。
+- 推測で補完しない。`;
+
+  return await callGemini({
+    rotator,
+    model: modelInfo.id,
+    systemPrompt: 'CONSORT/PRISMAフローチャートのN数だけを画像から確認し、JSONで返してください。',
+    userText: flowPrompt,
+    images: pdfImages,
+    schema: flowSchema,
+    thinkingBudget: modelInfo.thinking ? 2000 : 0,
+    onNotice: (m) => onNotice && onNotice(`[Flow確認] ${m}`)
+  });
 }
 
 // ============================================================
@@ -4257,7 +4292,7 @@ function ErrorFlagsBadge({ flags }) {
   );
 }
 
-function AlgorithmRunComparison({ algorithmRuns, rows, fontSize }) {
+function AlgorithmRunComparison({ algorithmRuns, rows, fontSize, onHighlight, onSendToSearch }) {
   if (!algorithmRuns?.runs?.length) return null;
   const value = (v) => {
     const s = String(v || '').trim();
@@ -4357,6 +4392,18 @@ function AlgorithmRunComparison({ algorithmRuns, rows, fontSize }) {
                       <td className="px-2 py-2 border-b border-slate-100 align-top">
                         <div className="text-slate-700 line-clamp-3">{value(oc.evidenceText)}</div>
                         <div className="text-[10px] text-slate-500 mt-1">{value(oc.sourceLocation)}{oc.pageNumber ? ` / P${oc.pageNumber}` : ''}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <button
+                            onClick={() => onHighlight && onHighlight(oc)}
+                            className="text-[9px] bg-yellow-300 hover:bg-yellow-400 text-yellow-900 border border-yellow-500 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
+                            <TargetIcon size={9}/>確認
+                          </button>
+                          <button
+                            onClick={() => onSendToSearch && onSendToSearch(oc.evidenceText || '', oc.pageNumber)}
+                            className="text-[9px] bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
+                            <SearchIcon size={9}/>検索へ
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -4383,7 +4430,7 @@ function HeaderHelpPanel({ onClose }) {
     ['dual', '同じPDFを2つのGeminiモデルで独立並列抽出し、不一致フィールドを見つけやすくします。'],
     ['診断', 'API通信ログ、エラー、モデルフォールバック、リクエスト状況をアプリ内で確認します。'],
     ['保存', '現在の抽出結果をJSONファイルとして保存します。Sessionsの保存とは別の単体バックアップです。'],
-    ['データクリア', '抽出結果、比較ビュー、エラー表示、プレビュー、同一条件の結果再利用キャッシュを消します。PICO、PDF、APIキー設定は残します。']
+    ['データクリア', '抽出結果、比較ビュー、エラー表示、プレビューを消します。PICO、PDF、APIキー設定は残します。']
   ];
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
@@ -5494,7 +5541,7 @@ function ExtractorPage({ apiKeys, model: initialModel, modelB: initialModelB, du
     if (!apiKeys?.length) { showToast("APIキーが設定されていません", "error"); return; }
     const variantsToRun = EXTRACTION_ALGORITHM_VARIANTS.filter(v => selectedAlgorithmRuns.includes(v.id));
     if (variantsToRun.length === 0) { showToast("実行するRoundを選択してください", "error"); return; }
-    const speedOptionsForRun = { ...speedupOptions };
+    const speedOptionsForRun = expandSpeedupOptions(speedupOptions);
     const warningsForRun = getSpeedupWarnings({ speedOptions: speedOptionsForRun, selectedVariants: variantsToRun, dualMode, modelB, pico, outcomes });
     setErrMsg(""); setResult(null); setAlgorithmRuns(null); setHlQuery(""); setHlPage(null); setPdfSearchText("");
     setStatus("running");
@@ -6367,7 +6414,7 @@ ${pdfText.substring(0, 30000)}`;
   const hasExtractionData = !!(result || algorithmRuns || errMsg || metaExportPreview || stabilityRuns || livingDiff || status !== 'idle');
   const clearExtractionData = () => {
     if (status === 'running') { showToast("抽出中はクリアできません", "info"); return; }
-    if (!window.confirm("抽出結果・比較ビュー・エラー表示・プレビュー・結果再利用キャッシュをクリアします。PICO、PDF、APIキー設定は残します。よろしいですか？")) return;
+    if (!window.confirm("抽出結果・比較ビュー・エラー表示・プレビューをクリアします。PICO、PDF、APIキー設定は残します。よろしいですか？")) return;
     setResult(null);
     setAlgorithmRuns(null);
     setErrMsg("");
@@ -6507,7 +6554,7 @@ ${pdfText.substring(0, 30000)}`;
               <Activity size={12}/>診断
             </button>
             {hasExtractionData && status !== 'running' && (
-              <button onClick={clearExtractionData} title="抽出結果・比較ビュー・結果再利用キャッシュをクリア（PICO/PDF/APIキーは保持）" className="text-[10px] bg-red-50 border border-red-300 hover:bg-red-100 px-2 py-1 rounded flex items-center gap-1 font-bold text-red-700 transition-colors">
+              <button onClick={clearExtractionData} title="抽出結果と比較ビューをクリア（PICO/PDF/APIキーは保持）" className="text-[10px] bg-red-50 border border-red-300 hover:bg-red-100 px-2 py-1 rounded flex items-center gap-1 font-bold text-red-700 transition-colors">
                 <Trash2 size={11}/>データクリア
               </button>
             )}
@@ -6797,7 +6844,7 @@ ${pdfText.substring(0, 30000)}`;
                 </div>
                 <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-2">
                   <div className="text-[10px] font-bold text-amber-900 mb-1 flex items-center gap-1">
-                    <ZapIcon size={11}/>高速化オプション（チェックしたものだけ実行）
+                    <ZapIcon size={11}/>高速化オプション（おすすめ1つ）
                   </div>
                   <div className="space-y-1">
                     {SPEEDUP_OPTION_DEFS.map(opt => (
@@ -6945,6 +6992,8 @@ ${pdfText.substring(0, 30000)}`;
                     algorithmRuns={algorithmRuns}
                     rows={algorithmComparisonRows}
                     fontSize={leftFontSize}
+                    onHighlight={(o) => { setHlQuery(o.evidenceText); setHlPage(o.pageNumber); setPdfSearchText(o.evidenceText || ""); }}
+                    onSendToSearch={sendToSearch}
                   />
                 )}
 
