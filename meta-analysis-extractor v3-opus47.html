@@ -168,10 +168,12 @@ overall cohort summary がある場合は、それを優先採用すること。
 【🚨 最重要・絶対遵守ルール】
 **evidenceText に書いた数値は、必ず構造化フィールド（n_total, events_or_mean, sd_or_se, effectEstimate.value 等）にも転記すること**。evidenceText だけ書いて数値フィールドが空のレコードは厳禁。
 - evidence: "121 teeth examined at 5-year, 80% success in PCR, 56% in SW (p=0.36)"
-  → 必ず: interventionGroup.n_total="121", interventionGroup.events_or_mean="80%" (or actual count), comparisonGroup.events_or_mean="56%", effectEstimate.pValue="0.36"
+  → 必ず: interventionGroup.n_total="121", interventionGroup.events_or_mean="97 (80%)", comparisonGroup.events_or_mean="68 (56%)", effectEstimate.pValue="0.36"
+  → notes に "[%報告からイベント数を計算: 0.80 × 121 = 97]" のように計算由来を残す
 - evidence: "229 teeth randomized; PCR group n=114, SW group n=115"
   → 必ず: interventionGroup.n_total="114", comparisonGroup.n_total="115"
-- 数値が "%" のみで実数が無くても、events_or_mean に "80%" と入れる（空にしない）
+- 数値が "%" や "0.80" の割合のみでも、events_or_mean に "80%" や "0.80" だけを書かない。分母があればイベント数を計算して "97 (80%)" 形式にし、分母不明なら "不明 (80%)" として notes に "[%のみ報告 - イベント数不明]" と書く
+- 本文中の右肩文献番号・脚注番号・図表番号をイベント数として抽出しない。群名、アウトカム名、分母、単位、%などと結びつかない孤立小数字はデータではない
 - "p < 0.001" → effectEstimate.pValue="<0.001"
 - 95%CI が "0.21-4.08" → effectEstimate.ci95="0.21-4.08"
 
@@ -1524,12 +1526,15 @@ Round 3 方針:
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNをアウトカムイベント数に変換しない。
+- 図表やフローチャートから読んだ数値も、後でExcelへ貼れるTSVに必ず入れる。画面上の説明だけで終わらせない。
 
 【数字を取り違えないための必須ルール】
 - 本文中の右肩の小さい文献番号、引用番号、脚注番号、表注記番号を、患者数・イベント数・効果量として抽出しない。
 - 文献番号は通常、文末や著者名の後に小さく表示される。単位、%記号、群名、分母、アウトカム名と結びつかない孤立した小数字はデータではない。
 - ページ番号、図表番号、参考文献番号、行番号、脚注番号、年号をアウトカム値として扱わない。
 - n、%、mean、SD、SE、CI、p値、HR/RR/OR/MDなどのラベル、または群名・時点・アウトカム名とセットで確認できる数字だけを採用する。
+- 二値アウトカムでは、80%や0.80をイベント数として扱わない。分母Nが分かる場合はイベント数を計算し「イベント数 (元の%)」形式にする。例: N=115で80%なら「92 (80%)」。分母が不明なら「不明 (80%)」とし、イベント数不明と明記する。
+- パーセントや割合からイベント数を逆算した場合は、Notesに「%/割合報告から計算: 0.80 × 115 = 92」のように必ず書く。
 - evidence textにHTML/CSS断片、OCRノイズ、border-radius、font-weight、padding等が混じる場合は引用として不適切。原文として読める短い数値文に清掃し、清掃できなければ要確認にする。
 
 【過去の実エラーパターンを必ず避ける】
@@ -1545,9 +1550,12 @@ PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I�
 【出力形式】
 1. まず自動設定したPICOと、比較した2群を短く示す。
 2. 次にCONSORT/PRISMAフローチャート確認結果を、群別Nの短い表で示す。
-3. 次にExcelへそのまま貼れるTSV表を出す。列はタブ区切りにする。
+3. 次にExcelへそのまま貼れるTSV表を出す。列はタブ区切りにする。アウトカムTSVだけでなく、フローチャートTSVも必ず出す。
 
-TSVヘッダー:
+Flow TSVヘッダー:
+Flow種別\t項目\t介入群\t対照群\t第3群/合計\t値\t出処\tページ\t根拠/注記
+
+Outcome TSVヘッダー:
 Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
 
 4. 最後に自己検証チェックリストを出す:
@@ -2153,7 +2161,7 @@ function rememberExtractionResult(cacheKey, result) {
 const OC_HDRS = ["要求アウトカム", "実際のアウトカム", "評価時点", "揺らぎ説明", "計算方法", "変数型", "対象集団", "集団説明",
   "介入群_N", "介入群_イベント/平均", "介入群_SD/SE", "対照群_N", "対照群_イベント/平均", "対照群_SD/SE",
   "第3群名", "第3群_N", "第3群_イベント/平均", "第3群_SD/SE", "指標", "推定値", "95%CI", "P値", "SD/SE判定", "信頼度",
-  "出処", "根拠原文", "注記", "ページ"];
+  "図表種別", "出処", "根拠原文", "注記", "ページ"];
 
 function outcomeRow(o) {
   return [o.requestedOutcomeName||"-", o.actualOutcomeName||"-", o.timePoint||"-", o.variationReason||"-",
@@ -2163,7 +2171,7 @@ function outcomeRow(o) {
     o.thirdGroupName||"-", o.thirdGroup?.n_total||"-", o.thirdGroup?.events_or_mean||"-", o.thirdGroup?.sd_or_se||"-",
     o.effectEstimate?.measureType||"-", o.effectEstimate?.value||"-", o.effectEstimate?.ci95||"-", o.effectEstimate?.pValue||"-",
     o.sdOrSe||"-", o.confidence||"-",
-    o.sourceLocation||"-", (o.evidenceText||"-").replace(/[\n\t]/g, " "), o.notes||"-", o.pageNumber||"-"];
+    o.figureType||"-", o.sourceLocation||"-", (o.evidenceText||"-").replace(/[\n\t]/g, " "), o.notes||"-", o.pageNumber||"-"];
 }
 
 const BL_HDRS = ["カテゴリ", "変数", "型", "単位", "介入_N", "介入_値", "介入_SD", "介入_%", "介入_IQR", "介入_範囲",
@@ -2504,8 +2512,19 @@ function normalizeBinaryNPercent(val, nTotal) {
   m = s.match(/^(\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s*\(\s*(\d+(?:\.\d+)?)\s*%\s*\)/i);
   if (m) return `${m[1]} (${m[3]}%)`;
 
-  // パターン4: 単純なカウント "18" + 分母わかってる → 計算
-  m = s.match(/^(\d+(?:\.\d+)?)\s*$/);
+  // パターン3b: "80% of 115" / "80% × 115" → 92 (80%)
+  m = s.match(/^(\d+(?:\.\d+)?)\s*%\s*(?:of|x|×|\*)\s*(\d+(?:\.\d+)?)/i);
+  if (m) {
+    const pct = parseFloat(m[1]);
+    const total = parseFloat(m[2]);
+    if (!isNaN(pct) && !isNaN(total) && total > 0) {
+      return `${Math.round((pct / 100) * total)} (${m[1]}%)`;
+    }
+  }
+
+  // パターン4: 単純な整数カウント "18" + 分母わかってる → 計算
+  // "0.80" のような割合はここでは拾わず、下の割合専用パターンで処理する。
+  m = s.match(/^(\d+)\s*$/);
   if (m && nTotal) {
     const n = parseFloat(m[1]);
     const total = parseFloat(extractNumber(nTotal));
@@ -2517,16 +2536,55 @@ function normalizeBinaryNPercent(val, nTotal) {
 
   // パターン5: パーセントのみ "20%" + 分母わかってる → n計算
   m = s.match(/^(\d+(?:\.\d+)?)\s*%\s*$/);
-  if (m && nTotal) {
+  if (m) {
     const pct = parseFloat(m[1]);
     const total = parseFloat(extractNumber(nTotal));
     if (!isNaN(pct) && !isNaN(total) && total > 0) {
       const n = Math.round((pct / 100) * total);
       return `${n} (${m[1]}%)`;
     }
+    return `不明 (${m[1]}%)`;
+  }
+
+  // パターン6: 割合のみ "0.80" / "0.8" + 分母わかってる → n計算。分母なしなら count と誤解されない形へ。
+  m = s.match(/^(0?\.\d+)\s*$/);
+  if (m) {
+    const prop = parseFloat(m[1]);
+    const pctText = (prop * 100).toFixed(1).replace(/\.0$/, '');
+    const total = parseFloat(extractNumber(nTotal));
+    if (!isNaN(prop) && !isNaN(total) && total > 0) {
+      return `${Math.round(prop * total)} (${pctText}%)`;
+    }
+    return `不明 (${pctText}%)`;
   }
 
   return s; // 認識できないパターンは破壊せずそのまま
+}
+
+function _appendExtractionNote(existing, note) {
+  const clean = String(note || '').trim();
+  if (!clean) return existing || '';
+  const current = String(existing || '').trim();
+  if (current.includes(clean)) return current;
+  return current ? `${current}; ${clean}` : clean;
+}
+
+function _isRateOnlyForEventDerivation(val) {
+  const s = String(val || '').trim();
+  return /^\d+(?:\.\d+)?\s*%\s*$/.test(s)
+    || /^(0?\.\d+)\s*$/.test(s)
+    || /^\d+(?:\.\d+)?\s*%\s*(?:of|x|×|\*)\s*\d+(?:\.\d+)?/i.test(s);
+}
+
+function extractDenominatorFromEventsValue(val) {
+  const s = String(val || '').trim();
+  let m = s.match(/^\s*\d+(?:\.\d+)?\s*\/\s*(\d+(?:\.\d+)?)/);
+  if (m) return m[1];
+  m = s.match(/^\s*\d+(?:\.\d+)?\s+of\s+(\d+(?:\.\d+)?)/i);
+  if (m) return m[1];
+  m = s.match(/^\s*\d+(?:\.\d+)?\s*%\s*(?:of|x|×|\*)\s*(\d+(?:\.\d+)?)/i);
+  if (m) return m[1];
+  return '';
 }
 
 // 引用文の PDF 突合 (fuzzy match): evidenceText が pdfText 内に概ね存在するか
@@ -2578,9 +2636,19 @@ function postProcessExtraction(result, pdfTextLower) {
       const totalNow = extractNumber(out[g].n_total);
       const ev = out[g].events_or_mean;
       if ((!totalNow || totalNow === '') && ev && /binary|二値/i.test(o.variableType || '')) {
+        const embeddedDenominator = extractDenominatorFromEventsValue(ev);
+        if (embeddedDenominator) {
+          out[g] = { ...out[g], n_total: embeddedDenominator };
+          const label = g === 'interventionGroup' ? '介入群' : g === 'comparisonGroup' ? '対照群' : '第3群';
+          out.notes = _appendExtractionNote(out.notes, `[${label}Nをイベント表記から補完: ${embeddedDenominator}]`);
+          nTotalFilled++;
+          return;
+        }
         const consortKey = g === 'interventionGroup' ? 'intervention' : g === 'comparisonGroup' ? 'comparison' : 'third';
         if (consortN[consortKey]) {
           out[g] = { ...out[g], n_total: `${consortN[consortKey]} [CONSORT推定]` };
+          const label = g === 'interventionGroup' ? '介入群' : g === 'comparisonGroup' ? '対照群' : '第3群';
+          out.notes = _appendExtractionNote(out.notes, `[${label}NをCONSORT flowから補完: ${consortN[consortKey]}]`);
           nTotalFilled++;
         }
       }
@@ -2590,15 +2658,27 @@ function postProcessExtraction(result, pdfTextLower) {
       ['interventionGroup', 'comparisonGroup', 'thirdGroup'].forEach(g => {
         if (out[g]?.events_or_mean) {
           const before = out[g].events_or_mean;
+          const wasRateOnly = _isRateOnlyForEventDerivation(before);
           const after = normalizeBinaryNPercent(before, out[g].n_total);
           if (after !== before) {
             out[g] = { ...out[g], events_or_mean: after };
+            const label = g === 'interventionGroup' ? '介入群' : g === 'comparisonGroup' ? '対照群' : '第3群';
+            const total = extractNumber(out[g].n_total);
+            if (wasRateOnly) {
+              const ev = extractEventsCount(after, out[g].n_total);
+              const pct = extractPercent(after, out[g].n_total);
+              const detail = ev
+                ? `${before} と N=${total || '不明'} からイベント数 ${ev}${pct ? ` (${pct}%)` : ''} を計算`
+                : `${before} は割合のみでイベント数不明`;
+              out.calculationMethod = _appendExtractionNote(out.calculationMethod, `${label}: ${detail}`);
+              out.notes = _appendExtractionNote(out.notes, `[${label}: %/割合報告から計算または保持 - ${detail}]`);
+            }
             nFmtChanges++;
           }
           // %のみで実カウント不明 → 警告フラグ追加 (RevMan/R に正しく渡すため)
           if (isPercentOnly(out[g].events_or_mean, out[g].n_total)) {
             nPercentOnlyWarn++;
-            out._flags = [...(o._flags || []), {
+            out._flags = [...(out._flags || []), {
               code: 'percent-only-no-count',
               severity: 'critical',
               msg: `⚠ ${g === 'interventionGroup' ? '介入群' : g === 'comparisonGroup' ? '対照群' : '第3群'}: events_or_mean が "%" のみで実カウント(n)が不明 — RevMan/Rへ「%」をイベント数として誤入力するリスクあり。原文を再確認して n を補完してください`
@@ -2614,7 +2694,7 @@ function postProcessExtraction(result, pdfTextLower) {
       out._quoteScore = v.score;
       if (v.ok === false) {
         nQuoteFails++;
-        out._flags = [...(o._flags || []), { code: 'quote-not-in-pdf', severity: 'critical', msg: `⚠ evidenceText が PDF テキストに見つかりません (一致率 ${(v.score*100).toFixed(0)}%) — ハルシネーション疑い (Laser AI / Elicit 方式の物理突合)` }];
+        out._flags = [...(out._flags || []), { code: 'quote-not-in-pdf', severity: 'critical', msg: `⚠ evidenceText が PDF テキストに見つかりません (一致率 ${(v.score*100).toFixed(0)}%) — ハルシネーション疑い (Laser AI / Elicit 方式の物理突合)` }];
       }
     }
     return out;
@@ -2762,6 +2842,7 @@ function isPercentOnly(eventsOrMean, nTotal) {
   if (!s) return false;
   // 明示的な % 記号で終わり、カウント部分なし
   if (/^\s*\d+(?:\.\d+)?\s*%\s*$/.test(s)) return true;
+  if (/^\s*不明\s*\(\s*\d+(?:\.\d+)?\s*%\s*\)\s*$/.test(s)) return true;
   // 0.X 形式で n_total 不明
   const totalNum = parseFloat(extractNumber(nTotal));
   if (/^\s*0?\.\d+\s*$/.test(s) && (isNaN(totalNum) || totalNum <= 0)) return true;
@@ -3747,6 +3828,8 @@ evidenceText だけ書いて数値フィールドが空のレコードは絶対�
   → interventionGroup.n_total="114", events_or_mean="91 (80%)"
   → comparisonGroup.n_total="115", events_or_mean="64 (56%)"
   → effectEstimate.value="0.38", ci95="0.23-0.63", pValue="0.001"
+- 二値アウトカムで "80%" や "0.80" だけを events_or_mean に入れない。必ず分母Nからイベント数を計算し "92 (80%)" のように書く。パーセント/割合から計算した場合は calculationMethod と notes に計算式を残す。
+- 右肩の文献番号・脚注番号・図表番号をイベント数として扱わない。群名、分母、アウトカム名、%/単位と結びつく数値だけを採用する。
 
 【⚠ 出力サイズ厳守 — 応答が途中で切れるのを防ぐ】
 - evidenceText: ${evidenceCap}文字以内に**要約抜粋**（数値を含む核心部分のみ）。長文の場合は "..." で省略
@@ -3979,6 +4062,8 @@ ${sourceText.substring(0, criticTextLimit)}`;
       const pp = extracted._postProcess;
       const msgs = [];
       if (pp.nPercentNormalizations > 0) msgs.push(`n(%) 正規化 ${pp.nPercentNormalizations}件`);
+      if (pp.nTotalAutoFilled > 0) msgs.push(`Flow由来N補完 ${pp.nTotalAutoFilled}件`);
+      if (pp.percentOnlyWarnings > 0) msgs.push(`イベント数不明の% ${pp.percentOnlyWarnings}件`);
       if (pp.quoteFails > 0) msgs.push(`引用文 PDF 不一致 ${pp.quoteFails}件 (ハルシネーション疑い)`);
       if (msgs.length) onNotice && onNotice(`📐 後処理: ${msgs.join(' / ')}`);
     }
@@ -4112,6 +4197,49 @@ ${pdfText.substring(0, 30000)}
   attachAlgorithmVariant(extracted, algorithmVariantInfo.id);
   onProgress("complete", "抽出完了", 100);
   return extracted;
+}
+
+const FLOW_HDRS = ["Flow種別", "項目", "介入群", "対照群", "第3群/合計", "値", "出処", "ページ", "根拠/注記"];
+
+function _hasFlowValue(v) {
+  const s = String(v ?? '').trim();
+  return !!s && s !== '-' && s !== '不明' && s !== '未抽出';
+}
+
+function _pairFlowValue(a, b) {
+  if (!_hasFlowValue(a) && !_hasFlowValue(b)) return "";
+  return `${a || "-"} / ${b || "-"}`;
+}
+
+function buildFlowRows(result) {
+  const rows = [];
+  const add = (type, item, intervention, comparison, thirdOrTotal, value, source, page, note) => {
+    if (![_hasFlowValue(intervention), _hasFlowValue(comparison), _hasFlowValue(thirdOrTotal), _hasFlowValue(value)].some(Boolean)) return;
+    rows.push([type, item, intervention || "-", comparison || "-", thirdOrTotal || "-", value || "-", source || "-", page || "-", note || "-"]);
+  };
+  const c = result?.consortFlow;
+  if (c) {
+    const src = c.sourceLocation || "CONSORT Flow Diagram";
+    const page = c.pageNumber || "-";
+    add("CONSORT", "無作為化 N", "-", "-", c.randomized || "-", c.randomized || "-", src, page, "Flow diagramから抽出した総ランダム化数");
+    add("CONSORT", "割付 N", c.allocatedIntervention || "-", c.allocatedComparison || "-", c.allocatedThird || "-", "-", src, page, "Flow diagramから抽出した群別割付数");
+    add("CONSORT", "ITT解析 N", c.analyzedITT_intervention || "-", c.analyzedITT_comparison || "-", "-", "-", src, page, "Flow diagramから抽出した群別ITT解析対象数");
+    add("CONSORT", "PP解析 N", c.analyzedPP_intervention || "-", c.analyzedPP_comparison || "-", "-", "-", src, page, "Flow diagramから抽出した群別PP解析対象数");
+    add("CONSORT", "脱落 N", c.lostToFollowUp_intervention || "-", c.lostToFollowUp_comparison || "-", "-", "-", src, page, "Flow diagramから抽出した群別脱落数");
+  }
+  const p = result?.prismaFlow;
+  if (p) {
+    const src = p.sourceLocation || "PRISMA Flow Diagram";
+    const page = p.pageNumber || "-";
+    add("PRISMA", "Records identified", "-", "-", "-", p.recordsIdentified || "-", src, page, p.evidenceText || "Flow diagramから抽出");
+    add("PRISMA", "From databases/registers/other", "-", "-", "-", [p.recordsFromDatabases, p.recordsFromRegisters, p.recordsFromOtherSources].filter(_hasFlowValue).join(" / "), src, page, "databases / registers / other sources");
+    add("PRISMA", "Duplicates removed", "-", "-", "-", p.duplicatesRemoved || "-", src, page, "重複除外");
+    add("PRISMA", "Screened / excluded", "-", "-", "-", _pairFlowValue(p.recordsScreened, p.recordsExcluded), src, page, "スクリーニング/除外");
+    add("PRISMA", "Retrieval sought / not retrieved", "-", "-", "-", _pairFlowValue(p.reportsSoughtForRetrieval, p.reportsNotRetrieved), src, page, "入手試行/未入手");
+    add("PRISMA", "Eligibility assessed / excluded", "-", "-", "-", _pairFlowValue(p.reportsAssessedForEligibility, p.reportsExcluded), src, page, "適格性評価/除外");
+    add("PRISMA", "Included review / meta-analysis", "-", "-", "-", _pairFlowValue(p.studiesIncludedInReview, p.studiesIncludedInMetaAnalysis), src, page, p.notes || "レビュー/メタ解析に含まれた研究数");
+  }
+  return rows;
 }
 
 // ============================================================
@@ -6235,6 +6363,8 @@ ${pdfText.substring(0, 30000)}`;
   const copyAllTSV = () => {
     if (!result) return;
     let t = "";
+    const flowRows = buildFlowRows(result);
+    if (flowRows.length) t += "[フローチャート]\n" + toDelimited(FLOW_HDRS, flowRows, "\t") + "\n\n";
     if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t") + "\n\n";
     if (result.extractedOutcomes?.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, result.extractedOutcomes.map(outcomeRow), "\t");
     clipCopy(t) && showToast("全TSVコピー完了");
@@ -6242,9 +6372,16 @@ ${pdfText.substring(0, 30000)}`;
   const copyAllCSV = () => {
     if (!result) return;
     let t = "";
-    if (result.baselineCharacteristics?.length) t += toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), ",") + "\n\n";
-    if (result.extractedOutcomes?.length) t += toDelimited(OC_HDRS, result.extractedOutcomes.map(outcomeRow), ",");
+    const flowRows = buildFlowRows(result);
+    if (flowRows.length) t += "[フローチャート]\n" + toDelimited(FLOW_HDRS, flowRows, ",") + "\n\n";
+    if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), ",") + "\n\n";
+    if (result.extractedOutcomes?.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, result.extractedOutcomes.map(outcomeRow), ",");
     clipCopy(t) && showToast("全CSVコピー完了");
+  };
+  const copyFlowTSV = () => {
+    const rows = buildFlowRows(result);
+    if (!rows.length) { showToast("フローチャート抽出データがありません", "info"); return; }
+    clipCopy(toDelimited(FLOW_HDRS, rows, "\t")) && showToast("フローチャートTSVコピー完了");
   };
   const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
 
@@ -7389,7 +7526,10 @@ ${pdfText.substring(0, 30000)}`;
 
                 {result.consortFlow && (
                   <section className="border border-indigo-200 rounded-lg overflow-hidden">
-                    <div className="bg-indigo-50 px-2 py-1 border-b border-indigo-200"><h3 className="font-semibold text-indigo-800">🌀 CONSORT Flow</h3></div>
+                    <div className="bg-indigo-50 px-2 py-1 border-b border-indigo-200 flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-indigo-800">🌀 CONSORT Flow</h3>
+                      <button onClick={copyFlowTSV} className="bg-white border border-indigo-300 px-1.5 py-0.5 rounded font-medium text-indigo-700 hover:bg-indigo-100" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}><CopyIcon size={9} className="inline mr-0.5"/>Flow TSV</button>
+                    </div>
                     <table className="w-full" style={{fontSize:`${Math.max(9,leftFontSize*0.9)}px`}}>
                       <tbody className="divide-y divide-slate-100">
                         <tr><td className="px-2 py-0.5 text-slate-600">無作為化 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.randomized || "-"}</td></tr>
@@ -7404,7 +7544,10 @@ ${pdfText.substring(0, 30000)}`;
 
                 {result.prismaFlow && (
                   <section className="border border-violet-200 rounded-lg overflow-hidden">
-                    <div className="bg-violet-50 px-2 py-1 border-b border-violet-200"><h3 className="font-semibold text-violet-800">🔎 PRISMA Flow</h3></div>
+                    <div className="bg-violet-50 px-2 py-1 border-b border-violet-200 flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-violet-800">🔎 PRISMA Flow</h3>
+                      <button onClick={copyFlowTSV} className="bg-white border border-violet-300 px-1.5 py-0.5 rounded font-medium text-violet-700 hover:bg-violet-100" style={{fontSize:`${Math.max(8,leftFontSize*0.8)}px`}}><CopyIcon size={9} className="inline mr-0.5"/>Flow TSV</button>
+                    </div>
                     <table className="w-full" style={{fontSize:`${Math.max(9,leftFontSize*0.9)}px`}}>
                       <tbody className="divide-y divide-slate-100">
                         <tr><td className="px-2 py-0.5 text-slate-600">Identified</td><td className="px-2 py-0.5 font-medium">{result.prismaFlow.recordsIdentified || "-"}</td></tr>
