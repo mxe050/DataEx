@@ -3566,6 +3566,36 @@ function buildFlowMetaOutcomeRows(result, studyId) {
   const count = (v) => extractNumber(v);
   const firstCount = (...vals) => vals.map(count).find(Boolean) || '';
   const cleanRaw = (v) => (v === null || v === undefined || v === '' ? '-' : String(v).replace(/[\t\r\n]/g, ' '));
+  if (_hasFlowValue(flow.allFlowNumbers)) {
+    rows.push({
+      outcome: 'CONSORT Flow - 図中全数字',
+      study: studyId,
+      timepoint: 'Flow',
+      population: 'Flow diagram raw',
+      events_intervention: '',
+      total_intervention: '',
+      percent_intervention: '',
+      events_control: '',
+      total_control: '',
+      percent_control: '',
+      reported_RR: '',
+      reported_OR: '',
+      reported_HR: '',
+      reported_RD: '',
+      ci95_lower: '',
+      ci95_upper: '',
+      log_HR: '',
+      SE_log_HR: '',
+      p_value: '',
+      sourceLocation: src,
+      pageNumber: page,
+      sourceDetail: '[フローチャートから] Flow図そのものから直接読めた全数字。本文・表の値ではなく、解釈前の確認用リスト。',
+      evidenceText: cleanRaw(flow.allFlowNumbers),
+      evidenceTextJa: `CONSORTフローチャート図中全数字: ${cleanRaw(flow.allFlowNumbers)}`,
+      confidence: 'medium',
+      notes: '最終結果へ保持するための確認行。events_* / total_* は空欄のまま、evidenceText/sourceDetailに図中全数字を保持。'
+    });
+  }
   const add = ({ label, population, intervention, control, totalIntervention, totalControl, sourceNote, countMeaning }) => {
     const iCount = count(intervention);
     const cCount = count(control);
@@ -7292,10 +7322,17 @@ ${pdfText.substring(0, 30000)}`;
   const [resultFilter, setResultFilter] = useState({ severity: 'all', sortBy: 'order', highlightKw: true });
   const [showSessions, setShowSessions] = useState(false);  // 複数論文集約ビュー
   const showUnifiedRoundResults = !!algorithmRuns;
+  const displayOutcomes = useMemo(() => {
+    if (!result) return [];
+    return [
+      ...(result.extractedOutcomes || []),
+      ...buildFlowOutcomeRows(result).map(o => ({ ...o, _flowSynthesized: true }))
+    ];
+  }, [result]);
   // 結果ペインの outcomes をフィルター/ソート (UI 表示用)
   const filteredOutcomes = useMemo(() => {
-    if (!result?.extractedOutcomes) return [];
-    let list = [...result.extractedOutcomes];
+    if (!displayOutcomes.length) return [];
+    let list = [...displayOutcomes];
     // severity filter
     if (resultFilter.severity === 'critical') {
       list = list.filter(o => (o._flags || []).some(f => f.severity === 'critical'));
@@ -7311,7 +7348,7 @@ ${pdfText.substring(0, 30000)}`;
       list.sort((a, b) => _completenessScore(a) - _completenessScore(b));
     }
     return list;
-  }, [result?.extractedOutcomes, resultFilter]);
+  }, [displayOutcomes, resultFilter]);
   const algorithmComparisonRows = useMemo(() => buildAlgorithmComparisonRows(algorithmRuns), [algorithmRuns]);
 
   // Templates handlers
@@ -8516,8 +8553,8 @@ ${pdfText.substring(0, 30000)}`;
                 )}
 
                 {/* Tag Table view (Nested Knowledge 方式) — トグルで OutcomeCard と切替 */}
-                {!showUnifiedRoundResults && showTagTable && result.extractedOutcomes?.length > 0 && (() => {
-                  const tag = buildTagTable(result.extractedOutcomes);
+                {!showUnifiedRoundResults && showTagTable && displayOutcomes.length > 0 && (() => {
+                  const tag = buildTagTable(displayOutcomes);
                   return (
                     <section className="bg-white border-2 border-indigo-300 rounded-lg overflow-hidden shadow">
                       <div className="bg-indigo-600 text-white px-3 py-2 flex items-center justify-between">
@@ -8605,12 +8642,12 @@ ${pdfText.substring(0, 30000)}`;
                 })()}
 
                 {/* フィルター/ソート/ハイライトバー */}
-                {!showUnifiedRoundResults && !showTagTable && result.extractedOutcomes?.length > 0 && (
+                {!showUnifiedRoundResults && !showTagTable && displayOutcomes.length > 0 && (
                   <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2" style={{fontSize:`${Math.max(10,leftFontSize*0.85)}px`}}>
                     <span className="font-bold text-slate-700">🔎 フィルター:</span>
                     <select value={resultFilter.severity} onChange={e => setResultFilter({...resultFilter, severity: e.target.value})}
                       className="bg-white border border-slate-300 rounded px-1 py-0.5 text-[11px]">
-                      <option value="all">全件 ({result.extractedOutcomes.length})</option>
+                      <option value="all">全件 ({displayOutcomes.length})</option>
                       <option value="critical">致命フラグのみ</option>
                       <option value="warning">警告以上</option>
                       <option value="partial">不一致/部分</option>
@@ -8626,26 +8663,27 @@ ${pdfText.substring(0, 30000)}`;
                       <input type="checkbox" checked={resultFilter.highlightKw} onChange={e => setResultFilter({...resultFilter, highlightKw: e.target.checked})} className="w-3 h-3 accent-purple-600"/>
                       <span className="text-slate-700">数値・p値・SD/SE等を色付け</span>
                     </label>
-                    <span className="ml-auto text-slate-500">表示中: <b className="text-purple-700">{filteredOutcomes.length}</b> / {result.extractedOutcomes.length}</span>
+                    <span className="ml-auto text-slate-500">表示中: <b className="text-purple-700">{filteredOutcomes.length}</b> / {displayOutcomes.length}</span>
                   </div>
                 )}
 
                 <div className={`space-y-3 ${showTagTable || showUnifiedRoundResults ? 'hidden' : ''}`}>
                   {filteredOutcomes.map((oc, idx) => {
                     // 元のインデックスを取得 (editOutcome に渡すため)
-                    const origIdx = result.extractedOutcomes.indexOf(oc);
+                    const origIdx = (result.extractedOutcomes || []).indexOf(oc);
+                    const isFlowSynth = origIdx < 0 || oc._flowSynthesized;
                     return (
-                      <OutcomeCard key={origIdx} oc={oc} idx={origIdx} pico={pico} onEdit={editOutcome}
+                      <OutcomeCard key={isFlowSynth ? `flow-${idx}` : origIdx} oc={oc} idx={isFlowSynth ? idx : origIdx} pico={pico} onEdit={isFlowSynth ? (() => {}) : editOutcome}
                         onCopyTSV={copyOneTSV} onCopyCSV={copyOneCSV} fontSize={leftFontSize}
                         onHighlight={(o) => { setHlQuery(o.evidenceText); setHlPage(o.pageNumber); setPdfSearchText(o.evidenceText || ""); }}
                         onSendToSearch={sendToSearch}
-                        onReVerify={apiKeys?.length ? reVerifyOutcome : null}
-                        isNew={highlightNewIdx === origIdx}
+                        onReVerify={!isFlowSynth && apiKeys?.length ? reVerifyOutcome : null}
+                        isNew={!isFlowSynth && highlightNewIdx === origIdx}
                         highlightKw={resultFilter.highlightKw}/>
                     );
                   })}
-                  {(!result.extractedOutcomes?.length) && <div className="text-center py-6 text-slate-500">データなし</div>}
-                  {result.extractedOutcomes?.length > 0 && filteredOutcomes.length === 0 && (
+                  {(!displayOutcomes.length) && <div className="text-center py-6 text-slate-500">データなし</div>}
+                  {displayOutcomes.length > 0 && filteredOutcomes.length === 0 && (
                     <div className="text-center py-6 text-slate-500">フィルター条件に一致するアウトカムがありません</div>
                   )}
                 </div>
