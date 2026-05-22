@@ -303,7 +303,9 @@ Figure 1 (CONSORT) から以下を抽出:
 - Received intervention N
 - Lost to follow-up N (理由別)
 - Analyzed (ITT) N / Analyzed (PP) N
-これらは populationType ごとの n_total として使用。
+- 上段のランダム化/割付直後に成功・失敗・反応・非反応などの結果が書かれていれば ITT候補結果として抽出
+- 下段の脱落除外後 / completed protocol / analyzed PP box に成功・失敗・反応・非反応などの結果が書かれていれば PP候補結果として抽出
+成功/失敗の片方だけが記載され、同じbox内のNが明確なら、もう片方は N−event で計算して別レコード化し、notes に式を残す。これらは populationType ごとの n_total とアウトカム候補として使用。
 
 【Table 1 (Baseline) の完全抽出】
 全行を baselineCharacteristics に抽出。年齢・性別は必須。
@@ -582,6 +584,22 @@ const EXTRACT_SCHEMA_JSON = {
         analyzedPP_comparison: { type: "string" },
         lostToFollowUp_intervention: { type: "string" },
         lostToFollowUp_comparison: { type: "string" },
+        ittSuccess_intervention: { type: "string" },
+        ittSuccess_comparison: { type: "string" },
+        ittFailure_intervention: { type: "string" },
+        ittFailure_comparison: { type: "string" },
+        ppSuccess_intervention: { type: "string" },
+        ppSuccess_comparison: { type: "string" },
+        ppFailure_intervention: { type: "string" },
+        ppFailure_comparison: { type: "string" },
+        ittOtherOutcomeName: { type: "string" },
+        ittOtherResult_intervention: { type: "string" },
+        ittOtherResult_comparison: { type: "string" },
+        ppOtherOutcomeName: { type: "string" },
+        ppOtherResult_intervention: { type: "string" },
+        ppOtherResult_comparison: { type: "string" },
+        flowOutcomeEvidenceText: { type: "string" },
+        notes: { type: "string" },
         sourceLocation: { type: "string" }, pageNumber: { type: "integer" }
       }
     },
@@ -1538,6 +1556,7 @@ Round 3 方針:
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
+- フローチャートbox内に success/failure/response/non-response/changed/improved などの結果が書かれていれば必ずOutcome TSVに入れる。上段のランダム化/割付boxはITT候補、下段のcompleted protocol/analyzed PP boxはPP候補として、成功と失敗を両方別行で出す。
 - 図表やフローチャートから読んだ数値も、後でExcelへ貼れるTSVに必ず入れる。画面上の説明だけで終わらせない。
 
 【数字を取り違えないための必須ルール】
@@ -3312,6 +3331,54 @@ function buildContinuousRows(outcomes, paperPICO, fileName, studyIdOverride) {
   return rows;
 }
 
+function _flowEventText(raw, total) {
+  if (!_hasFlowValue(raw)) return '';
+  const resolvedTotal = extractNumber(total) || extractDenominatorFromEventsValue(raw);
+  const normalized = normalizeBinaryNPercent(raw, resolvedTotal);
+  const event = extractEventsCount(normalized, resolvedTotal);
+  const totalNum = _asIntegerCount(resolvedTotal);
+  if (!event) return normalized;
+  const eventNum = _asIntegerCount(event);
+  if (eventNum === null) return normalized;
+  const pct = extractPercent(normalized, total);
+  if (pct) return `${eventNum} (${pct}%)`;
+  return totalNum !== null ? _formatNPercent(eventNum, totalNum) : String(eventNum);
+}
+
+function _flowComplementText(raw, total) {
+  if (!_hasFlowValue(raw)) return '';
+  const resolvedTotal = extractNumber(total) || extractDenominatorFromEventsValue(raw);
+  const totalNum = _asIntegerCount(resolvedTotal);
+  const eventNum = _asIntegerCount(extractEventsCount(raw, resolvedTotal));
+  if (totalNum === null || eventNum === null || totalNum < 0 || eventNum < 0 || eventNum > totalNum) return '';
+  return _formatNPercent(totalNum - eventNum, totalNum);
+}
+
+function _flowSuccessFailurePair({ totalI, totalC, successI, successC, failureI, failureC }) {
+  let sI = _flowEventText(successI, totalI);
+  let sC = _flowEventText(successC, totalC);
+  let fI = _flowEventText(failureI, totalI);
+  let fC = _flowEventText(failureC, totalC);
+  const derived = [];
+  if (!fI && sI) {
+    fI = _flowComplementText(successI, totalI);
+    if (fI) derived.push('介入群 failure=N-success');
+  }
+  if (!fC && sC) {
+    fC = _flowComplementText(successC, totalC);
+    if (fC) derived.push('対照群 failure=N-success');
+  }
+  if (!sI && fI) {
+    sI = _flowComplementText(failureI, totalI);
+    if (sI) derived.push('介入群 success=N-failure');
+  }
+  if (!sC && fC) {
+    sC = _flowComplementText(failureC, totalC);
+    if (sC) derived.push('対照群 success=N-failure');
+  }
+  return { successI: sI, successC: sC, failureI: fI, failureC: fC, derived };
+}
+
 function buildFlowMetaOutcomeRows(result, studyId) {
   const flow = result?.consortFlow;
   if (!flow) return [];
@@ -3389,6 +3456,119 @@ function buildFlowMetaOutcomeRows(result, studyId) {
     totalControl: flow.allocatedComparison || flow.analyzedITT_comparison,
     sourceNote: 'lost to follow-up / discontinued / excluded after allocation の2群boxから取得。',
     countMeaning: 'events_* には脱落イベント数、total_* には割付NまたはITT解析Nを併記。臨床アウトカムとは別のFlow由来行として扱ってください。'
+  });
+  const addOutcome = ({ label, population, totalI, totalC, eventI, eventC, sourceNote, derived }) => {
+    const iCount = extractEventsCount(eventI, totalI);
+    const cCount = extractEventsCount(eventC, totalC);
+    if (!iCount && !cCount) return;
+    const note = [
+      `[フローチャートから] ${sourceNote}`,
+      `介入群=${cleanRaw(eventI)} / 対照群=${cleanRaw(eventC)}`,
+      derived?.length ? `派生計算=${derived.join(' / ')}` : '',
+      `出処=${src}${page ? ` p.${page}` : ''}`,
+      'events_* はフローチャートbox内の成功/失敗/結果カウント。total_* は同じboxまたは同じ解析段のN。本文/表アウトカム行と照合してください。'
+    ].filter(Boolean).join(' ');
+    rows.push({
+      outcome: `CONSORT Flow - ${label}`,
+      study: studyId,
+      timepoint: 'Flow',
+      population,
+      events_intervention: iCount,
+      total_intervention: count(totalI),
+      percent_intervention: extractPercent(eventI, totalI),
+      events_control: cCount,
+      total_control: count(totalC),
+      percent_control: extractPercent(eventC, totalC),
+      reported_RR: '',
+      reported_OR: '',
+      reported_HR: '',
+      reported_RD: '',
+      ci95_lower: '',
+      ci95_upper: '',
+      log_HR: '',
+      SE_log_HR: '',
+      p_value: '',
+      sourceLocation: src,
+      pageNumber: page,
+      confidence: derived?.length ? 'medium' : 'high',
+      notes: note
+    });
+  };
+  const ittTotalI = flow.analyzedITT_intervention || flow.allocatedIntervention;
+  const ittTotalC = flow.analyzedITT_comparison || flow.allocatedComparison;
+  const ittPair = _flowSuccessFailurePair({
+    totalI: ittTotalI,
+    totalC: ittTotalC,
+    successI: flow.ittSuccess_intervention,
+    successC: flow.ittSuccess_comparison,
+    failureI: flow.ittFailure_intervention,
+    failureC: flow.ittFailure_comparison
+  });
+  addOutcome({
+    label: 'ITT成功',
+    population: 'ITT',
+    totalI: ittTotalI,
+    totalC: ittTotalC,
+    eventI: ittPair.successI,
+    eventC: ittPair.successC,
+    sourceNote: '上段のランダム化/割付または analyzed ITT box に書かれた success/successes から取得。',
+    derived: ittPair.derived.filter(x => x.includes('success='))
+  });
+  addOutcome({
+    label: 'ITT失敗',
+    population: 'ITT',
+    totalI: ittTotalI,
+    totalC: ittTotalC,
+    eventI: ittPair.failureI,
+    eventC: ittPair.failureC,
+    sourceNote: '上段のランダム化/割付または analyzed ITT box に書かれた failure/failures から取得。',
+    derived: ittPair.derived.filter(x => x.includes('failure='))
+  });
+  const ppPair = _flowSuccessFailurePair({
+    totalI: flow.analyzedPP_intervention,
+    totalC: flow.analyzedPP_comparison,
+    successI: flow.ppSuccess_intervention,
+    successC: flow.ppSuccess_comparison,
+    failureI: flow.ppFailure_intervention,
+    failureC: flow.ppFailure_comparison
+  });
+  addOutcome({
+    label: 'PP成功',
+    population: 'PP / Per-protocol',
+    totalI: flow.analyzedPP_intervention,
+    totalC: flow.analyzedPP_comparison,
+    eventI: ppPair.successI,
+    eventC: ppPair.successC,
+    sourceNote: '下段の脱落除外後 / completed protocol / analyzed PP box に書かれた success/successes から取得。',
+    derived: ppPair.derived.filter(x => x.includes('success='))
+  });
+  addOutcome({
+    label: 'PP失敗',
+    population: 'PP / Per-protocol',
+    totalI: flow.analyzedPP_intervention,
+    totalC: flow.analyzedPP_comparison,
+    eventI: ppPair.failureI,
+    eventC: ppPair.failureC,
+    sourceNote: '下段の脱落除外後 / completed protocol / analyzed PP box に書かれた failure/failures から取得。',
+    derived: ppPair.derived.filter(x => x.includes('failure='))
+  });
+  addOutcome({
+    label: flow.ittOtherOutcomeName || 'ITTその他結果',
+    population: 'ITT',
+    totalI: ittTotalI,
+    totalC: ittTotalC,
+    eventI: _flowEventText(flow.ittOtherResult_intervention, ittTotalI),
+    eventC: _flowEventText(flow.ittOtherResult_comparison, ittTotalC),
+    sourceNote: `上段ITT候補boxに書かれた ${flow.ittOtherOutcomeName || 'その他結果'} から取得。`
+  });
+  addOutcome({
+    label: flow.ppOtherOutcomeName || 'PPその他結果',
+    population: 'PP / Per-protocol',
+    totalI: flow.analyzedPP_intervention,
+    totalC: flow.analyzedPP_comparison,
+    eventI: _flowEventText(flow.ppOtherResult_intervention, flow.analyzedPP_intervention),
+    eventC: _flowEventText(flow.ppOtherResult_comparison, flow.analyzedPP_comparison),
+    sourceNote: `下段PP候補boxに書かれた ${flow.ppOtherOutcomeName || 'その他結果'} から取得。`
   });
   return rows;
 }
@@ -4231,11 +4411,18 @@ ${sourceText.substring(0, coreTextLimit)}`;
     const supplementPrompt = `${picoBlock}${algorithmPromptBlock}
 
 【タスク】上記論文から以下のみを抽出してください（アウトカム数値は別コールで取得済みなので不要）：
-1. consortFlow: CONSORT Flow Diagram のN数（無作為化/割付/解析/脱落）
+1. consortFlow: CONSORT Flow Diagram のN数（無作為化/割付/解析/脱落）と、Flow内に直接書かれた結果（success/failure/response/non-response/変化など）
 2. prismaFlow: PRISMA Flow Diagram のN数（identified / screened / excluded / included / meta-analysis）
 3. baselineCharacteristics: Table 1 の患者背景（年齢・性別等）。各項目に介入群/対照群の n・値・SD・% を抽出
 4. expertCommentary: メタ分析実装上の注意点（800文字以内）
 5. paperQualityAssessment: 論文の質的評価（500文字以内）
+
+【CONSORT Flow結果の読み方】
+- ランダム化/割付直後の2群boxは ITT候補。allocated / randomized / analyzed ITT のNを群別に取り、同じboxまたは直下に success/failure などの結果があれば ittSuccess_* / ittFailure_* に入れる。
+- 一番下の脱落除外後、completed protocol、per protocol、analyzed PP の2群boxは PP候補。analyzedPP_* のNを群別に取り、同じboxに結果があれば ppSuccess_* / ppFailure_* に入れる。
+- 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけ書かれている場合は推測で補完せず、記載値だけ入れる（後処理でNが確実な場合だけ N−event 補完する）。
+- success/failure以外の結果（changed/improved/healed/responseなど）がFlow内にある場合は ittOtherOutcomeName/ittOtherResult_* または ppOtherOutcomeName/ppOtherResult_* に入れる。
+- flowOutcomeEvidenceText には、結果が書かれたboxの原文・数値を短く引用する。
 
 【⚠ 出力サイズ厳守】expertCommentary 800文字以内、paperQualityAssessment 500文字以内、各 baseline 行の文字列値は短く
 
@@ -4569,7 +4756,7 @@ function buildFlowOutcomeRows(result) {
   const src = c.sourceLocation || "CONSORT Flow Diagram";
   const page = c.pageNumber || "-";
   const rows = [];
-  const add = ({ name, populationType, populationDescription, iN, cN, thirdName, thirdN, iValue, cValue, note }) => {
+  const add = ({ name, populationType, populationDescription, iN, cN, thirdName, thirdN, iValue, cValue, note, variableType = "Flow Count", calculationMethod, confidence = "medium" }) => {
     if (![_hasFlowValue(iN), _hasFlowValue(cN), _hasFlowValue(thirdN), _hasFlowValue(iValue), _hasFlowValue(cValue)].some(Boolean)) return;
     const evidence = [
       `${name}`,
@@ -4584,8 +4771,8 @@ function buildFlowOutcomeRows(result) {
       actualOutcomeName: `CONSORT Flow - ${name}`,
       timePoint: "-",
       variationReason: "CONSORT Flow diagramから抽出した解析集団/追跡パターン",
-      calculationMethod: "Flow diagramの値をそのままメインアウトカム表へ併記",
-      variableType: "Flow Count",
+      calculationMethod: calculationMethod || "Flow diagramの値をそのままメインアウトカム表へ併記",
+      variableType,
       populationType,
       populationDescription,
       interventionGroup: { n_total: iN || "-", events_or_mean: iValue || "-", sd_or_se: "-" },
@@ -4594,12 +4781,12 @@ function buildFlowOutcomeRows(result) {
       thirdGroup: { n_total: thirdN || "-", events_or_mean: "-", sd_or_se: "-" },
       effectEstimate: {},
       sdOrSe: "-",
-      confidence: "medium",
+      confidence,
       figureType: "FlowDiagram",
       sourceLocation: src,
-      evidenceText: evidence,
-      evidenceTextJa: `CONSORTフローチャートから抽出: ${evidence}`,
-      notes: `[フローチャートから] ${note || name}。アウトカム値ではなく解析集団/追跡フローのNとしてメイン表に併記。`,
+      evidenceText: c.flowOutcomeEvidenceText || evidence,
+      evidenceTextJa: `CONSORTフローチャートから抽出: ${c.flowOutcomeEvidenceText || evidence}`,
+      notes: `[フローチャートから] ${note || name}。${variableType === "Binary" ? "Flow diagram内に結果値が記載されていたためOutcome TSVへ統合。" : "アウトカム値ではなく解析集団/追跡フローのNとしてメイン表に併記。"}`,
       pageNumber: page
     });
   };
@@ -4650,6 +4837,93 @@ function buildFlowOutcomeRows(result) {
     iValue: c.lostToFollowUp_intervention,
     cValue: c.lostToFollowUp_comparison,
     note: "CONSORT Flowの lost to follow-up / discontinued / excluded after allocation の2群boxから脱落イベント数として取得"
+  });
+  const addResultPairRows = ({ population, labelPrefix, totalI, totalC, pair, sourceNote }) => {
+    const calc = pair.derived.length
+      ? `Flow diagramの成功/失敗値を抽出し、不足側は N−event で補完 (${pair.derived.join(' / ')})`
+      : "Flow diagramの成功/失敗値をそのまま抽出";
+    add({
+      name: `${labelPrefix}成功`,
+      populationType: population,
+      populationDescription: sourceNote,
+      iN: totalI,
+      cN: totalC,
+      iValue: pair.successI,
+      cValue: pair.successC,
+      variableType: "Binary",
+      calculationMethod: calc,
+      confidence: pair.derived.length ? "medium" : "high",
+      note: `${sourceNote}。success/successes/成功として記載された結果を抽出。${pair.derived.filter(x => x.includes('success=')).length ? `不足側は ${pair.derived.filter(x => x.includes('success=')).join(' / ')} で補完。` : ''}`
+    });
+    add({
+      name: `${labelPrefix}失敗`,
+      populationType: population,
+      populationDescription: sourceNote,
+      iN: totalI,
+      cN: totalC,
+      iValue: pair.failureI,
+      cValue: pair.failureC,
+      variableType: "Binary",
+      calculationMethod: calc,
+      confidence: pair.derived.length ? "medium" : "high",
+      note: `${sourceNote}。failure/failures/失敗として記載された結果を抽出。${pair.derived.filter(x => x.includes('failure=')).length ? `不足側は ${pair.derived.filter(x => x.includes('failure=')).join(' / ')} で補完。` : ''}`
+    });
+  };
+  const ittTotalI = c.analyzedITT_intervention || c.allocatedIntervention;
+  const ittTotalC = c.analyzedITT_comparison || c.allocatedComparison;
+  addResultPairRows({
+    population: "ITT",
+    labelPrefix: "ITT",
+    totalI: ittTotalI,
+    totalC: ittTotalC,
+    pair: _flowSuccessFailurePair({
+      totalI: ittTotalI,
+      totalC: ittTotalC,
+      successI: c.ittSuccess_intervention,
+      successC: c.ittSuccess_comparison,
+      failureI: c.ittFailure_intervention,
+      failureC: c.ittFailure_comparison
+    }),
+    sourceNote: "上段のランダム化/割付または analyzed ITT box から取得したITT候補結果"
+  });
+  addResultPairRows({
+    population: "PP / Per-protocol",
+    labelPrefix: "PP",
+    totalI: c.analyzedPP_intervention,
+    totalC: c.analyzedPP_comparison,
+    pair: _flowSuccessFailurePair({
+      totalI: c.analyzedPP_intervention,
+      totalC: c.analyzedPP_comparison,
+      successI: c.ppSuccess_intervention,
+      successC: c.ppSuccess_comparison,
+      failureI: c.ppFailure_intervention,
+      failureC: c.ppFailure_comparison
+    }),
+    sourceNote: "下段の脱落除外後 / completed protocol / analyzed PP box から取得したPP候補結果"
+  });
+  add({
+    name: c.ittOtherOutcomeName || "ITTその他結果",
+    populationType: "ITT",
+    populationDescription: "上段ITT候補boxに成功/失敗以外の結果が記載されていた場合",
+    iN: ittTotalI,
+    cN: ittTotalC,
+    iValue: _flowEventText(c.ittOtherResult_intervention, ittTotalI),
+    cValue: _flowEventText(c.ittOtherResult_comparison, ittTotalC),
+    variableType: "Flow Result",
+    confidence: "medium",
+    note: `CONSORT Flowの上段ITT候補boxに書かれた ${c.ittOtherOutcomeName || 'その他結果'} から取得`
+  });
+  add({
+    name: c.ppOtherOutcomeName || "PPその他結果",
+    populationType: "PP / Per-protocol",
+    populationDescription: "下段PP候補boxに成功/失敗以外の結果が記載されていた場合",
+    iN: c.analyzedPP_intervention,
+    cN: c.analyzedPP_comparison,
+    iValue: _flowEventText(c.ppOtherResult_intervention, c.analyzedPP_intervention),
+    cValue: _flowEventText(c.ppOtherResult_comparison, c.analyzedPP_comparison),
+    variableType: "Flow Result",
+    confidence: "medium",
+    note: `CONSORT Flowの下段PP候補boxに書かれた ${c.ppOtherOutcomeName || 'その他結果'} から取得`
   });
   return rows;
 }
@@ -4744,19 +5018,24 @@ async function runFlowDiagramImageCheck({ rotator, modelInfo, pdfImages, onNotic
     }
   });
   const flowPrompt = `あなたは医学論文のフローチャート確認担当です。
-PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow diagram があれば、N数だけを抽出してください。
+PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow diagram があれば、N数とFlow内に直接書かれた結果を抽出してください。
 
 【絶対ルール】
-- アウトカム数値は抽出しない。返すのは consortFlow / prismaFlow のみ。
+- 返すのは consortFlow / prismaFlow のみ。通常の本文/表アウトカムは抽出しないが、Flow diagramのbox内に直接書かれた success/failure/response/non-response/変化などの結果は consortFlow の結果フィールドに必ず入れる。
+- ランダム化/割付直後の2群boxはITT候補として扱う。全体randomized、allocated intervention/control、analyzed ITT が読める場合はそれぞれ抽出し、同じ上段boxに成功/失敗があれば ittSuccess_* / ittFailure_* に入れる。
+- 一番下の脱落除外後 / completed protocol / per-protocol / analyzed PP の2群boxはPP候補として扱う。analyzedPP_* を群別に取り、同じ下段boxに成功/失敗があれば ppSuccess_* / ppFailure_* に入れる。
+- 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけなら片方だけ入れる。ここではN−event補完をしない（後処理で安全に補完する）。
+- success/failure以外の結果（response, non-response, changed, improved, healed, deterioration など）がFlow内にある場合は ittOtherOutcomeName/ittOtherResult_* または ppOtherOutcomeName/ppOtherResult_* に入れる。
 - フローチャートが無い、または画像から読めない場合は空のまま返す。
 - evidenceText には図中の原文・数値を短く引用する。
+- flowOutcomeEvidenceText には結果が書かれたboxの原文・数値を短く引用する。
 - sourceLocation には Figure番号、Flow diagram、ページなどを入れる。
 - 推測で補完しない。`;
 
   return await callGemini({
     rotator,
     model: modelInfo.id,
-    systemPrompt: 'CONSORT/PRISMAフローチャートのN数だけを画像から確認し、JSONで返してください。',
+    systemPrompt: 'CONSORT/PRISMAフローチャートのN数と、Flow内に直接書かれた成功・失敗などの結果だけを画像から確認し、JSONで返してください。',
     userText: flowPrompt,
     images: pdfImages,
     schema: flowSchema,
@@ -7951,6 +8230,15 @@ ${pdfText.substring(0, 30000)}`;
                         <tr><td className="px-2 py-0.5 text-slate-600">割付 (介入/対照/3群)</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.allocatedIntervention || "-"} / {result.consortFlow.allocatedComparison || "-"}{result.consortFlow.allocatedThird ? ` / ${result.consortFlow.allocatedThird}` : ""}</td></tr>
                         <tr><td className="px-2 py-0.5 text-slate-600">ITT解析 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.analyzedITT_intervention || "-"} / {result.consortFlow.analyzedITT_comparison || "-"}</td></tr>
                         <tr><td className="px-2 py-0.5 text-slate-600">PP解析 N</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.analyzedPP_intervention || "-"} / {result.consortFlow.analyzedPP_comparison || "-"}</td></tr>
+                        {[_hasFlowValue(result.consortFlow.ittSuccess_intervention), _hasFlowValue(result.consortFlow.ittSuccess_comparison), _hasFlowValue(result.consortFlow.ittFailure_intervention), _hasFlowValue(result.consortFlow.ittFailure_comparison)].some(Boolean) && (
+                          <tr><td className="px-2 py-0.5 text-slate-600">ITT結果 成功/失敗</td><td className="px-2 py-0.5 font-medium">成功 {result.consortFlow.ittSuccess_intervention || "-"} / {result.consortFlow.ittSuccess_comparison || "-"}　失敗 {result.consortFlow.ittFailure_intervention || "-"} / {result.consortFlow.ittFailure_comparison || "-"}</td></tr>
+                        )}
+                        {[_hasFlowValue(result.consortFlow.ppSuccess_intervention), _hasFlowValue(result.consortFlow.ppSuccess_comparison), _hasFlowValue(result.consortFlow.ppFailure_intervention), _hasFlowValue(result.consortFlow.ppFailure_comparison)].some(Boolean) && (
+                          <tr><td className="px-2 py-0.5 text-slate-600">PP結果 成功/失敗</td><td className="px-2 py-0.5 font-medium">成功 {result.consortFlow.ppSuccess_intervention || "-"} / {result.consortFlow.ppSuccess_comparison || "-"}　失敗 {result.consortFlow.ppFailure_intervention || "-"} / {result.consortFlow.ppFailure_comparison || "-"}</td></tr>
+                        )}
+                        {[_hasFlowValue(result.consortFlow.ittOtherResult_intervention), _hasFlowValue(result.consortFlow.ittOtherResult_comparison), _hasFlowValue(result.consortFlow.ppOtherResult_intervention), _hasFlowValue(result.consortFlow.ppOtherResult_comparison)].some(Boolean) && (
+                          <tr><td className="px-2 py-0.5 text-slate-600">Flowその他結果</td><td className="px-2 py-0.5 font-medium">ITT {result.consortFlow.ittOtherOutcomeName || "その他"}: {result.consortFlow.ittOtherResult_intervention || "-"} / {result.consortFlow.ittOtherResult_comparison || "-"}　PP {result.consortFlow.ppOtherOutcomeName || "その他"}: {result.consortFlow.ppOtherResult_intervention || "-"} / {result.consortFlow.ppOtherResult_comparison || "-"}</td></tr>
+                        )}
                         <tr><td className="px-2 py-0.5 text-slate-600">脱落 (介入/対照)</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.lostToFollowUp_intervention || "-"} / {result.consortFlow.lostToFollowUp_comparison || "-"}</td></tr>
                       </tbody>
                     </table>
