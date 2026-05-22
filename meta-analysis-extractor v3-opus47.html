@@ -300,7 +300,9 @@ Flow diagramから読んだN/イベントと、本文・表・KM図から読ん�
 - 図表からの読み取りは confidence="low" または "medium" に設定し、figureType フィールドに種別を記録、notes に "[図表からの目視抽出]" と明記
 
 【CONSORT Flow Diagramからの抽出（重要）】
-Figure 1 (CONSORT) から以下を抽出:
+Figure 1 (CONSORT) から以下を抽出する。必ず **Step 1: 図中の数字を全て読む → Step 2: 意味を解釈してフィールドへ割り当てる** の順で行う:
+- Step 1: flowNumberInventory に、Flow diagram内で読める全ての数字を、周辺ラベル・群名・box位置と一緒に列挙する。randomized / allocated / lost / excluded / analyzed / completed / successes / failures / cumulative など、数値が付くものは省略しない。
+- Step 2: flowNumberInventory を見ながら、以下の構造化フィールドへ割り当てる。
 - Randomized N
 - Allocated to each arm N
 - Received intervention N
@@ -601,6 +603,23 @@ const EXTRACT_SCHEMA_JSON = {
         ppOtherOutcomeName: { type: "string" },
         ppOtherResult_intervention: { type: "string" },
         ppOtherResult_comparison: { type: "string" },
+        flowNumberInventory: {
+          type: "array",
+          description: "Flow diagram内で読める全ての数字を、解釈前に台帳として列挙する",
+          items: {
+            type: "object",
+            properties: {
+              rawText: { type: "string" },
+              number: { type: "string" },
+              label: { type: "string" },
+              group: { type: "string" },
+              boxLocation: { type: "string" },
+              interpretedAs: { type: "string" },
+              confidence: { type: "string" },
+              notes: { type: "string" }
+            }
+          }
+        },
         flowOutcomeEvidenceText: { type: "string", description: "結果が書かれたFlow boxの原文を、数値とラベルごと短く引用する" },
         notes: { type: "string" },
         sourceLocation: { type: "string" }, pageNumber: { type: "integer" }
@@ -1561,6 +1580,7 @@ Round 3 方針:
 - RAG/根拠接地: 先に該当箇所を探し、次に値を抽出し、最後にevidence textと構造化フィールドが一致するか検証する。
 - Fan 2026等のRCT抽出エラー分類を踏まえ、misallocation(群・時点・フィールド誤割付) と missed/omitted data(本文にある値の見落とし) を最重要エラーとして扱う。
 - CONSORT/PRISMAフローチャートは必ず見る。randomized、allocated、received intervention、lost to follow-up、analyzed for primary outcomeを群別に確認し、アウトカムの分母と矛盾しないか確認する。ただしフローチャートNを臨床アウトカムイベント数に変換せず、Flow由来N/脱落数として別行にする。
+- フローチャートでは、まず図中の数字を全て flowNumberInventory 相当の台帳に列挙し、その後で randomized / allocated / analyzed ITT / analyzed PP / success / failure などへ解釈する。数字を読み飛ばして解釈だけ出さない。
 - フローチャートbox内に success/failure/response/non-response/changed/improved などの結果が書かれていれば必ずOutcome TSVに入れる。上段のランダム化/割付boxはITT候補、下段のcompleted protocol/analyzed PP boxはPP候補として、成功と失敗を両方別行で出す。
 - 図表やフローチャートから読んだ数値も、後でExcelへ貼れるTSVに必ず入れる。画面上の説明だけで終わらせない。
 
@@ -1587,14 +1607,23 @@ PMID/DOI、1st Author、Journal、Year、Study Name、Design、PICO-P、PICO-I�
 【出力形式】
 1. まず自動設定したPICOと、比較した2群を短く示す。
 2. 次にCONSORT/PRISMAフローチャート確認結果を、群別Nの短い表で示す。
-3. 次にExcelへそのまま貼れるOutcome TSV表を出す。列はタブ区切りにする。通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行もOutcome TSV内に入れる。独立したFlow TSVは出さない。
+3. 次にFlow Number Inventory TSVを出す。フローチャート内で読んだ全数字、周辺ラベル、群名、box位置、解釈を入れる。
+4. 次にExcelへそのまま貼れるOutcome TSV表を出す。列はタブ区切りにする。通常アウトカムに加えて、フローチャートから得たITT/PP/割付/脱落の行もOutcome TSV内に入れる。独立したFlow TSVは出さない。
    - まずラベル付き原文をEvidence Text / Notesに保持する。
    - 最終TSVでは、Intervention Result / Control Result などの数値セルは数字だけにし、"cumulative failures" などの意味ラベルは Source Detail または Notes に残す。
+5. Outcome TSVの後に、抽出サマリーをTSVで出す。このRCTで使われているアウトカム候補、ITT/PP差、Flow由来値、本文/表/Figure由来値、メタ分析時の注意点をExcel上で読めるように書く。
+6. 最後に「最終メタ分析候補TSV」を出す。本文/表/Figure/Flowを照合した上で、メタ分析に使いやすい候補行を、数値セルが数字だけになるようにまとめる。
 
 Outcome TSVヘッダー:
 Study ID\tPMID/DOI\t1st Author\tJournal\tYear\tStudy Name\tDesign\tPICO-P\tPICO-I\tPICO-C\tPopulation\tTime Point\tOutcome\tOutcome Type\tIntervention\tIntervention N\tIntervention Result\tIntervention SD/SE\tControl\tControl N\tControl Result\tControl SD/SE\tEffect Measure\tEffect Value\t95% CI\tP-value\tSignificance\tSource Location\tPage/Figure/Table\tSource Detail\tEvidence Text\tEvidence Text JA\tConfidence\tNotes
 
-4. 最後に自己検証チェックリストを出す:
+Flow Number Inventory TSVヘッダー:
+Source Location\tPage\tBox Location\tGroup\tNumber\tLabel\tRaw Text\tInterpreted As\tConfidence\tNotes
+
+Final Meta-analysis Candidate TSVヘッダー:
+Outcome\tStudy\tTimepoint\tPopulation\tEvents Intervention\tTotal Intervention\tPercent Intervention\tEvents Control\tTotal Control\tPercent Control\tEffect Measure\tEffect Value\t95% CI\tP-value\tSource Detail\tEvidence Text\tNotes
+
+7. 最後に自己検証チェックリストを出す:
 - 解析対象Nか
 - Primary/secondaryを混同していないか
 - 介入群/対照群が逆でないか
@@ -2261,6 +2290,8 @@ function outcomeRow(o) {
 const BL_HDRS = ["カテゴリ", "変数", "型", "単位", "介入_N", "介入_値", "介入_SD", "介入_%", "介入_IQR", "介入_範囲",
   "対照_N", "対照_値", "対照_SD", "対照_%", "対照_IQR", "対照_範囲",
   "第3群_N", "第3群_値", "第3群_SD", "第3群_%", "第3群_IQR", "第3群_範囲", "P値", "出処", "ページ"];
+const FLOW_INV_HDRS = ["出処", "ページ", "box位置", "群", "数字", "ラベル", "原文", "解釈", "信頼度", "注記"];
+const SUMMARY_HDRS = ["セクション", "項目", "内容"];
 
 function baselineRow(b) {
   return [b.category||"-", b.variable||"-", b.dataType||"-", b.unit||"-",
@@ -2268,6 +2299,99 @@ function baselineRow(b) {
     b.comparisonGroup?.n||"-", b.comparisonGroup?.value||"-", b.comparisonGroup?.sd||"-", b.comparisonGroup?.percent||"-", b.comparisonGroup?.iqr||"-", b.comparisonGroup?.range||"-",
     b.thirdGroup?.n||"-", b.thirdGroup?.value||"-", b.thirdGroup?.sd||"-", b.thirdGroup?.percent||"-", b.thirdGroup?.iqr||"-", b.thirdGroup?.range||"-",
     b.pValue||"-", b.sourceLocation||"-", b.pageNumber||"-"];
+}
+
+function _flowInventoryRow(item, flow) {
+  return [
+    flow?.sourceLocation || "-",
+    flow?.pageNumber || "-",
+    item?.boxLocation || "-",
+    item?.group || "-",
+    extractNumber(item?.number || item?.rawText) || "-",
+    item?.label || "-",
+    _cleanOneLine(item?.rawText || item?.number || "-"),
+    item?.interpretedAs || "-",
+    item?.confidence || "-",
+    _cleanOneLine(item?.notes || "")
+  ];
+}
+
+function buildFlowInventoryRows(result) {
+  const flow = result?.consortFlow;
+  if (!flow) return [];
+  const inv = Array.isArray(flow.flowNumberInventory) ? flow.flowNumberInventory : [];
+  const rows = inv.map(item => _flowInventoryRow(item, flow));
+  if (rows.length) return rows;
+  const fallback = [];
+  const add = (rawText, label, group, interpretedAs, boxLocation) => {
+    if (!_hasFlowValue(rawText)) return;
+    fallback.push(_flowInventoryRow({
+      rawText,
+      number: extractNumber(rawText),
+      label,
+      group,
+      interpretedAs,
+      boxLocation,
+      confidence: "fallback",
+      notes: "flowNumberInventoryが未出力だったため、構造化フィールドから再構成"
+    }, flow));
+  };
+  add(flow.randomized, "randomized", "overall", "randomized total", "CONSORT flow");
+  add(flow.allocatedIntervention, "allocated", "intervention", "allocated intervention", "allocation box");
+  add(flow.allocatedComparison, "allocated", "comparison", "allocated comparison", "allocation box");
+  add(flow.allocatedThird, "allocated", "third", "allocated third arm", "allocation box");
+  add(flow.analyzedITT_intervention, "analyzed ITT", "intervention", "ITT denominator", "analysis box");
+  add(flow.analyzedITT_comparison, "analyzed ITT", "comparison", "ITT denominator", "analysis box");
+  add(flow.analyzedPP_intervention, "analyzed PP", "intervention", "PP denominator", "completed/analyzed box");
+  add(flow.analyzedPP_comparison, "analyzed PP", "comparison", "PP denominator", "completed/analyzed box");
+  add(flow.lostToFollowUp_intervention, "lost/excluded", "intervention", "flow attrition", "attrition box");
+  add(flow.lostToFollowUp_comparison, "lost/excluded", "comparison", "flow attrition", "attrition box");
+  add(flow.ittSuccess_intervention, "success", "intervention", "ITT success/result", "result box");
+  add(flow.ittSuccess_comparison, "success", "comparison", "ITT success/result", "result box");
+  add(flow.ittFailure_intervention, "failure", "intervention", "ITT failure/result", "result box");
+  add(flow.ittFailure_comparison, "failure", "comparison", "ITT failure/result", "result box");
+  add(flow.ppSuccess_intervention, "success", "intervention", "PP success/result", "completed/result box");
+  add(flow.ppSuccess_comparison, "success", "comparison", "PP success/result", "completed/result box");
+  add(flow.ppFailure_intervention, "failure", "intervention", "PP failure/result", "completed/result box");
+  add(flow.ppFailure_comparison, "failure", "comparison", "PP failure/result", "completed/result box");
+  add(flow.ittOtherResult_intervention, flow.ittOtherOutcomeName || "other result", "intervention", "ITT other result", "result box");
+  add(flow.ittOtherResult_comparison, flow.ittOtherOutcomeName || "other result", "comparison", "ITT other result", "result box");
+  add(flow.ppOtherResult_intervention, flow.ppOtherOutcomeName || "other result", "intervention", "PP other result", "completed/result box");
+  add(flow.ppOtherResult_comparison, flow.ppOtherOutcomeName || "other result", "comparison", "PP other result", "completed/result box");
+  return fallback;
+}
+
+function _uniqueJoin(vals, max = 12) {
+  const list = [];
+  (vals || []).forEach(v => {
+    const s = _cleanOneLine(v);
+    if (s && s !== "-" && !list.includes(s)) list.push(s);
+  });
+  const clipped = list.slice(0, max);
+  return clipped.join(" / ") + (list.length > max ? ` / 他${list.length - max}件` : "");
+}
+
+function buildExtractionSummaryRows(result) {
+  const ocs = result?.extractedOutcomes || [];
+  const pico = result?.paperPICO || {};
+  const flowRows = buildFlowInventoryRows(result);
+  const rows = [];
+  const add = (section, item, content) => rows.push([section, item, _cleanOneLine(content || "-")]);
+  add("PICO", "P", pico.P);
+  add("PICO", "I", pico.I);
+  add("PICO", "C", pico.C);
+  if (pico.thirdGroup) add("PICO", "3群/追加群", pico.thirdGroup);
+  add("研究", "デザイン", pico.studyDesign);
+  add("研究", "サンプル/追跡", [pico.sampleSize, pico.followUpDuration].filter(Boolean).join(" / "));
+  add("アウトカム候補", "論文から抽出されたアウトカム", _uniqueJoin(ocs.map(o => o.actualOutcomeName || o.requestedOutcomeName), 20));
+  add("アウトカム候補", "解析集団", _uniqueJoin(ocs.map(o => o.populationType), 12));
+  add("フローチャート", "数字台帳件数", flowRows.length ? `${flowRows.length}件` : "0件");
+  add("フローチャート", "Flow出処", result?.consortFlow?.sourceLocation || "-");
+  add("フローチャート", "Flow原文", result?.consortFlow?.flowOutcomeEvidenceText || result?.consortFlow?.evidenceText || "-");
+  if (result?.expertCommentary) add("解釈", "メタ分析実装上の注意", result.expertCommentary);
+  if (result?.paperQualityAssessment) add("解釈", "論文の質的評価", result.paperQualityAssessment);
+  add("最終表", "使い方", "上の全一覧とFlow数字台帳を確認後、下の最終メタ分析候補表をExcel/R/RevMan用の出発点として使う。必ず原文と照合する。");
+  return rows;
 }
 
 // RevMan XML 風 (.rm5 互換ライト版) 出力
@@ -3870,6 +3994,45 @@ function toRevManContinuousTSV(outcomes, paperPICO, fileName, studyIdOverride) {
   return { tsv: rowsToTSV(REVMAN_CONTINUOUS_COLS, rows), count: rows.length, total: rows.length };
 }
 
+function _isFinalMetaBinaryCandidate(row) {
+  const outcome = String(row?.outcome || '');
+  if (/CONSORT Flow - (割付N|ITT解析N|PP解析N|脱落N)/.test(outcome)) return false;
+  const hasEvents = _hasMeaningfulValue(row.events_intervention)
+    && _hasMeaningfulValue(row.total_intervention)
+    && _hasMeaningfulValue(row.events_control)
+    && _hasMeaningfulValue(row.total_control);
+  const hasEffect = _hasMeaningfulValue(row.reported_RR)
+    || _hasMeaningfulValue(row.reported_OR)
+    || _hasMeaningfulValue(row.reported_HR)
+    || _hasMeaningfulValue(row.reported_RD);
+  return hasEvents || hasEffect;
+}
+
+function _isFinalMetaContinuousCandidate(row) {
+  const hasMeans = _hasMeaningfulValue(row.n_intervention)
+    && _hasMeaningfulValue(row.mean_intervention)
+    && _hasMeaningfulValue(row.n_control)
+    && _hasMeaningfulValue(row.mean_control);
+  const hasEffect = _hasMeaningfulValue(row.reported_MD)
+    || _hasMeaningfulValue(row.reported_SMD)
+    || _hasMeaningfulValue(row.reported_AdjMD);
+  return hasMeans || hasEffect;
+}
+
+function buildFinalMetaBinaryRows(result, fileName, studyIdOverride) {
+  if (!result) return [];
+  const studyId = deriveStudyId(result.paperPICO, fileName, studyIdOverride);
+  const outcomeRows = buildBinaryRows(result.extractedOutcomes || [], result.paperPICO, fileName, studyIdOverride);
+  const flowRows = buildFlowMetaOutcomeRows(result, studyId);
+  return outcomeRows.concat(flowRows).filter(_isFinalMetaBinaryCandidate);
+}
+
+function buildFinalMetaContinuousRows(result, fileName, studyIdOverride) {
+  if (!result) return [];
+  return buildContinuousRows(result.extractedOutcomes || [], result.paperPICO, fileName, studyIdOverride)
+    .filter(_isFinalMetaContinuousCandidate);
+}
+
 // R metafor 二値スクリプト
 function toRMetaforBinaryScript(outcomes, paperPICO, fileName, studyIdOverride) {
   const rows = buildBinaryRows(outcomes, paperPICO, fileName, studyIdOverride);
@@ -4669,6 +4832,7 @@ ${sourceText.substring(0, coreTextLimit)}`;
 5. paperQualityAssessment: 論文の質的評価（500文字以内）
 
 【CONSORT Flow結果の読み方】
+- 最初に flowNumberInventory を作る。Flow diagram 内で読める数字を全て、周辺ラベル・群名・box位置・意味候補と一緒に列挙する。その後で下記フィールドへ解釈して割り当てる。
 - ランダム化/割付直後の2群boxは ITT候補。allocated / randomized / analyzed ITT のNを群別に取り、同じboxまたは直下に success/failure などの結果があれば ittSuccess_* / ittFailure_* に入れる。
 - 一番下の脱落除外後、completed protocol、per protocol、analyzed PP の2群boxは PP候補。analyzedPP_* のNを群別に取り、同じboxに結果があれば ppSuccess_* / ppFailure_* に入れる。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけ書かれている場合は推測で補完せず、記載値だけ入れる（後処理でNが確実な場合だけ N−event 補完する）。
@@ -5276,6 +5440,9 @@ PDF各ページ画像を確認し、CONSORT flow diagram または PRISMA flow d
 
 【絶対ルール】
 - 返すのは consortFlow / prismaFlow のみ。通常の本文/表アウトカムは抽出しないが、Flow diagramのbox内に直接書かれた success/failure/response/non-response/変化などの結果は consortFlow の結果フィールドに必ず入れる。
+- まず flowNumberInventory を作る。Flow diagram内で読める全ての数字を、周辺ラベル・群名・box位置・意味候補と一緒に列挙する。解釈が難しい数字も、読めたなら台帳に入れる。
+- 次に flowNumberInventory を見ながら randomized / allocated / received / lost / excluded / analyzed ITT / analyzed PP / success / failure / response などへ解釈する。
+- 数字を読み飛ばして、解釈済みフィールドだけを返すことは禁止。
 - ランダム化/割付直後の2群boxはITT候補として扱う。全体randomized、allocated intervention/control、analyzed ITT が読める場合はそれぞれ抽出し、同じ上段boxに成功/失敗があれば ittSuccess_* / ittFailure_* に入れる。
 - 一番下の脱落除外後 / completed protocol / per-protocol / analyzed PP の2群boxはPP候補として扱う。analyzedPP_* を群別に取り、同じ下段boxに成功/失敗があれば ppSuccess_* / ppFailure_* に入れる。
 - 成功と失敗が両方書かれている場合は両方を必ず取る。片方だけなら片方だけ入れる。ここではN−event補完をしない（後処理で安全に補完する）。
@@ -7314,21 +7481,36 @@ ${pdfText.substring(0, 30000)}`;
 
   const copyOneTSV = (o) => { clipCopy(toDelimited(OC_HDRS, [outcomeRow(o)], "\t")) && showToast("TSVコピー完了"); };
   const copyOneCSV = (o) => { clipCopy(toDelimited(OC_HDRS, [outcomeRow(o)], ",")) && showToast("CSVコピー完了"); };
-  const copyAllTSV = () => {
+  const buildFullCopyText = (delimiter) => {
     if (!result) return;
     let t = "";
     const mainOutcomeRows = buildMainOutcomeRowsForCopy(result);
-    if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t") + "\n\n";
-    if (mainOutcomeRows.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, mainOutcomeRows.map(outcomeRow), "\t");
-    clipCopy(t) && showToast("全TSVコピー完了");
+    const flowInventoryRows = buildFlowInventoryRows(result);
+    const summaryRows = buildExtractionSummaryRows(result);
+    const pdfNameForExport = pdfFile?.name || '';
+    const finalBinaryRows = buildFinalMetaBinaryRows(result, pdfNameForExport, studyIdOverride);
+    const finalContinuousRows = buildFinalMetaContinuousRows(result, pdfNameForExport, studyIdOverride);
+    const addSection = (title, headers, rows) => {
+      if (!rows?.length) return;
+      const normalizedRows = rows.map(r => Array.isArray(r) ? r : headers.map(h => r?.[h] ?? ""));
+      if (t) t += "\n\n";
+      t += `[${title}]\n` + toDelimited(headers, normalizedRows, delimiter);
+    };
+    addSection("患者背景_全一覧", BL_HDRS, result.baselineCharacteristics?.map(baselineRow) || []);
+    addSection("アウトカム_全一覧", OC_HDRS, mainOutcomeRows.map(outcomeRow));
+    addSection("フローチャート数字台帳_全数字", FLOW_INV_HDRS, flowInventoryRows);
+    addSection("抽出サマリー_Excel内確認用", SUMMARY_HDRS, summaryRows);
+    addSection("最終メタ分析候補_二値", REVMAN_BINARY_COLS, finalBinaryRows);
+    addSection("最終メタ分析候補_連続", REVMAN_CONTINUOUS_COLS, finalContinuousRows);
+    return t;
+  };
+  const copyAllTSV = () => {
+    const t = buildFullCopyText("\t");
+    if (t) clipCopy(t) && showToast("全TSVコピー完了（全一覧・Flow台帳・サマリー・最終候補表を含む）");
   };
   const copyAllCSV = () => {
-    if (!result) return;
-    let t = "";
-    const mainOutcomeRows = buildMainOutcomeRowsForCopy(result);
-    if (result.baselineCharacteristics?.length) t += "[患者背景]\n" + toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), ",") + "\n\n";
-    if (mainOutcomeRows.length) t += "[アウトカム]\n" + toDelimited(OC_HDRS, mainOutcomeRows.map(outcomeRow), ",");
-    clipCopy(t) && showToast("全CSVコピー完了");
+    const t = buildFullCopyText(",");
+    if (t) clipCopy(t) && showToast("全CSVコピー完了（全一覧・Flow台帳・サマリー・最終候補表を含む）");
   };
   const copyBaselineTSV = () => { result?.baselineCharacteristics && clipCopy(toDelimited(BL_HDRS, result.baselineCharacteristics.map(baselineRow), "\t")) && showToast("患者背景TSVコピー完了"); };
 
@@ -8495,6 +8677,18 @@ ${pdfText.substring(0, 30000)}`;
                           <tr><td className="px-2 py-0.5 text-slate-600">Flowその他結果</td><td className="px-2 py-0.5 font-medium">ITT {result.consortFlow.ittOtherOutcomeName || "その他"}: {result.consortFlow.ittOtherResult_intervention || "-"} / {result.consortFlow.ittOtherResult_comparison || "-"}　PP {result.consortFlow.ppOtherOutcomeName || "その他"}: {result.consortFlow.ppOtherResult_intervention || "-"} / {result.consortFlow.ppOtherResult_comparison || "-"}</td></tr>
                         )}
                         <tr><td className="px-2 py-0.5 text-slate-600">脱落 (介入/対照)</td><td className="px-2 py-0.5 font-medium">{result.consortFlow.lostToFollowUp_intervention || "-"} / {result.consortFlow.lostToFollowUp_comparison || "-"}</td></tr>
+                        {Array.isArray(result.consortFlow.flowNumberInventory) && result.consortFlow.flowNumberInventory.length > 0 && (
+                          <tr>
+                            <td className="px-2 py-0.5 text-slate-600">数字台帳</td>
+                            <td className="px-2 py-0.5 font-medium">
+                              {result.consortFlow.flowNumberInventory.length}件:
+                              <span className="ml-1 text-slate-600 font-normal">
+                                {result.consortFlow.flowNumberInventory.slice(0, 8).map(x => x.rawText || [x.number, x.label].filter(Boolean).join(" ")).filter(Boolean).join(" / ")}
+                                {result.consortFlow.flowNumberInventory.length > 8 ? ` / 他${result.consortFlow.flowNumberInventory.length - 8}件` : ""}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </section>
