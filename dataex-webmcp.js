@@ -5,13 +5,14 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const APP_VERSION = 'dataex-chatgpt-phase2.8.1';
+  const APP_VERSION = window.createDataExFuzzy ? 'dataex-fuzzy-abc-v1.0.0' : 'dataex-chatgpt-phase3.2.2';
   let savedConditions = null;
   const viewer = $('pdf-viewer');
   const state = { pdf: null, filename: '', currentPage: 0, generation: 0, scale: 1, pages: new Map(), loading: false };
   let loadingTask = null;
   let observer = null;
   let activeEvidence = null;
+  let sourceNavigation = null;
   let zooming = false;
   let focusRequest = 0;
   const message = (id, text, error = false) => { $(id).textContent = text; $(id).classList.toggle('error', error); };
@@ -33,8 +34,8 @@
       filename: state.filename, pageCount: state.pdf?.numPages || 0,
       intervention: $('intervention').value, comparator: $('comparator').value,
       outcomes: $('outcomes').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean),
-      timepoint: $('timepoint').value, populationRule: $('population-rule').value,
-      extraRules: $('extra-rules').value, currentPage: state.currentPage, savedConditions };
+      timepoint: ($('timepoint')?.value || ''), populationRule: ($('population-rule')?.value || ''),
+      extraRules: ($('extra-rules')?.value || ''), currentPage: state.currentPage, savedConditions };
   }
   async function pageData(number) {
     pageNumber(number);
@@ -148,11 +149,14 @@
       host.style.width = `${viewport.width}px`; host.style.height = `${viewport.height}px`;
       host.replaceChildren(canvas, layer, badge);
       data.divs = divs; data.renderedScale = scale;
+      selection.redraw();
+      sourceNavigation?.redraw(number);
     })();
     try { await data.rendering; } finally { data.rendering = null; }
     return data;
   }
   function clearHighlights() {
+    sourceNavigation?.clear();
     $('evidence-navigation').replaceChildren();
     viewer.querySelectorAll('.highlight-hook').forEach(span => span.classList.remove('highlight-hook'));
     viewer.querySelectorAll('.bbox-highlight').forEach(box => box.remove());
@@ -251,6 +255,17 @@
     return emit({ok:true,page,matchStatus,highlightedCount:overlays.length,matchedText:(match?.matchedText||indices.map(i=>data.raw.slice(data.spans[i].start,data.spans[i].end)).join(' ')).slice(0,3000),message:messageText,highlightedSpanIds:ids,boundingBoxes:boxes});
   }
 
+  async function clearPdf() {
+    ++state.generation;focusRequest++;observer?.disconnect();observer=null;clearHighlights();
+    const previousTask=loadingTask;loadingTask=null;
+    state.pdf=null;state.filename='';state.currentPage=0;state.loading=false;state.pages.clear();
+    selection.reset();viewer.replaceChildren();
+    const empty=document.createElement('div');empty.className='empty';empty.textContent='右側にPDFが表示されます';viewer.append(empty);
+    $('search-results').replaceChildren();$('pdf-query').value='';$('pdf-file').value='';
+    $('page-total').textContent='/ 0';$('page-number').value=1;$('page-number').removeAttribute('max');
+    $('choose-pdf').textContent='PDFを選択';message('evidence-message','');message('pdf-status','PDFを選択してください。');
+    invalidateSaved();selection.sync();await previousTask?.destroy();
+  }
   async function loadPdf(file) {
     if (!file) return;
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') { message('pdf-status', 'PDFファイルを選択してください。', true); return; }
@@ -258,6 +273,7 @@
     observer?.disconnect(); clearHighlights();
     const previousTask = loadingTask; loadingTask = null;
     state.pdf = null; state.filename = ''; state.currentPage = 0; state.loading = true; state.pages.clear();
+    selection.reset();
     viewer.replaceChildren(); $('search-results').replaceChildren(); $('page-total').textContent = '/ 0'; $('page-number').value = 1;
     message('evidence-message', ''); message('pdf-status', 'PDFを読み込んでいます…');
     $('choose-pdf').textContent = 'PDFを選択'; invalidateSaved(); extraction.detachPdf();
@@ -285,27 +301,24 @@
       message('pdf-status', `✓ ${file.name}\n${pdf.numPages}ページ`);
       $('choose-pdf').textContent = 'PDFを変更';
       await extraction.onPdfLoaded(file); checkGeneration(generation);
+      selection.sync();
     } catch (error) {
       if (generation !== state.generation) return;
       state.pdf = null; state.filename = ''; state.currentPage = 0; state.loading = false; state.pages.clear(); viewer.replaceChildren();
       $('page-total').textContent = '/ 0';
       message('pdf-status', error.name === 'PasswordException' ? 'パスワード付きPDFはこの試験版では開けません。' : `PDF読込失敗：${error.message}`, true);
+      selection.sync();
     }
   }
-  $('pdf-file').addEventListener('change', event => { loadPdf(event.target.files[0]); event.target.value = ''; });
+  $('pdf-file').addEventListener('change', event => { const files = [...event.target.files]; if (extraction.loadFiles) void extraction.loadFiles(files, loadPdf); else void loadPdf(files[0]); event.target.value = ''; });
   const drop = $('drop-zone');
   ['dragenter', 'dragover'].forEach(type => drop.addEventListener(type, event => { event.preventDefault(); drop.classList.add('drag'); }));
   drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
-  drop.addEventListener('drop', event => { event.preventDefault(); drop.classList.remove('drag'); loadPdf(event.dataTransfer.files[0]); });
+  drop.addEventListener('drop', event => { event.preventDefault(); drop.classList.remove('drag'); if (extraction.loadFiles) void extraction.loadFiles([...event.dataTransfer.files], loadPdf); else void loadPdf(event.dataTransfer.files[0]); });
   window.addEventListener('dragover', event => event.preventDefault());
   window.addEventListener('drop', event => event.preventDefault());
-  $('conditions').addEventListener('submit', event => {
-    event.preventDefault();
-    extraction.submit(() => {
-      const { savedConditions: previous, ...current } = getState();
-      savedConditions = { ...current, savedAt: new Date().toISOString() };
-    });
-  });
+  // Review configuration submit is handled by the independent Prompt Builder.
+  // The existing extraction tools and Review Profile guards remain unchanged.
   $('search-form').addEventListener('submit', async event => {
     event.preventDefault(); const generation = state.generation;
     $('search-results').replaceChildren();
@@ -333,6 +346,7 @@
   async function zoom(delta) {
     if (zooming) return;
     zooming = true;
+    selection.cancelDrag();
     const evidence = activeEvidence, generation = state.generation;
     try {
       checkReady(); const current = state.currentPage;
@@ -345,11 +359,13 @@
         host.style.width = `${viewport.width}px`; host.style.height = `${viewport.height}px`;
         // Keep offscreen canvas/text aligned until the observer rerenders it.
         const data = state.pages.has(number) ? await state.pages.get(number) : null;
-        if (data?.renderedScale && data.renderedScale !== state.scale) host.replaceChildren();
+        if (data?.renderedScale && data.renderedScale !== state.scale) { host.replaceChildren(); data.renderedScale = null; data.divs = []; }
       }
+      selection.redraw();
       await renderPage(current); checkGeneration(generation);
       $(`pdf-page-${current}`).scrollIntoView({ block: 'start' });
       if (evidence) await focusEvidence(evidence);
+      else await sourceNavigation?.afterZoom();
     } catch (error) { if (generation === state.generation) message('evidence-message', error.message, true); }
     finally { zooming = false; }
   }
@@ -364,8 +380,12 @@
     tool('dataex_search_pdf', 'PDFテキストを正規化検索し、ページ番号・短いsnippet・spanIdsを返す。単一語だけでなく指定outcome、論文の用語、尺度名、時点、Results/Table用語を組み合わせて検索する。未知の正解数値を捏造して検索しない。最大20件。candidateRankはページ順の候補順位（意味的評価ではない）。boundingBoxesがある場合はページ左上原点の0〜1座標。画像のみのPDFはOCRしない。', schema({ query: { type: 'string', minLength: 1, maxLength: 200 }, pageStart: { type: 'integer', minimum: 1 }, pageEnd: { type: 'integer', minimum: 1 }, maxResults: { type: 'integer', minimum: 1, maximum: 20, default: 8 } }, ['query']), async (args,options) => { const result=await searchPdf(args,options); extraction.recordSearch(args.query); return result; }, true),
     tool('dataex_focus_evidence', '指定ページの根拠を黄色表示。query/focusQueryとevidenceText,row,column,label,valueTextを指定可能。query→evidenceText→行+数値→固有短句で照合。spanIds/bboxesはテキスト指定と併用不可。ok,matchStatus,highlightedCount,matchedText,messageを返す。ok=falseやcount=0は未照合。', schema({ page: { type: 'integer', minimum: 1 }, query: { type: 'string', minLength: 1, maxLength: 200 }, focusQuery: { type: 'string', maxLength: 200 }, evidenceText: { type: 'string', maxLength: 3000 }, row: { type: 'string', maxLength: 200 }, column: { type: 'string', maxLength: 200 }, use: { type: 'string', maxLength: 200 }, valueText: { type: 'string', maxLength: 1000 }, spanIds: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string' } }, bboxes: { type: 'array', minItems: 1, maxItems: 100, items: schema({ x: { type: 'number', minimum: 0, maximum: 1 }, y: { type: 'number', minimum: 0, maximum: 1 }, width: { type: 'number', exclusiveMinimum: 0, maximum: 1 }, height: { type: 'number', exclusiveMinimum: 0, maximum: 1 } }, ['x', 'y', 'width', 'height']) }, label: { type: 'string', maxLength: 200 } }, ['page']), focusEvidence, false)
   ];
-  const extraction = window.createDataExExtraction({ $, state, getState, pageData, pageNumber, checkReady, checkGeneration, normalize, focusEvidence, tool, schema, message });
-  tools.push(...extraction.tools);
+  const selection = window.createDataExSelection({ state, viewer, renderPage });
+  window.dataexVisual = window.createDataExVisual({state,selection,getExtraction:()=>extraction,tool,schema,pageData,focusEvidence,fuzzyContext:!!window.createDataExFuzzy});
+  sourceNavigation = window.DataExSource?.create({state, renderPage, rangeBoxes, clearHighlights, message, ensurePdf: anchor => extraction.ensureSourcePdf?.(anchor)}) || null;
+  if (sourceNavigation) window.DataExSourceNavigation = sourceNavigation;
+  const extraction = (window.createDataExFuzzy || window.createDataExExtraction)({ $, state, getState, pageData, pageNumber, checkReady, checkGeneration, normalize, focusEvidence, navigation: sourceNavigation, tool, schema, message, clearPdf });
+  tools.push(...extraction.tools,...window.dataexVisual.tools);
   async function registerTools() {
     const controller = new AbortController(); const registered = [];
     const modelContext = document.modelContext || navigator.modelContext;
@@ -385,7 +405,7 @@
   function invalidateSaved() {
     savedConditions = null;
     $('request-guide').hidden = true;
-    message('extract-message', '');
+    if (!window.createDataExFuzzy) message('extract-message', '');
   }
   $('conditions').addEventListener('input', invalidateSaved);
   $('copy-request').addEventListener('click', () => extraction.copyRequest());

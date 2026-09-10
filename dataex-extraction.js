@@ -122,7 +122,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
   function persist() {
     if (!storageKey || !documentMeta) return;
     try {
-      const record = { version: 2, documentMeta, profileContext: window.dataexReviewProfile?.context(), form: formSnapshot(), results, sourceChecks, reviews: [...reviews], requestOrder };
+      const record = { version: 2, documentMeta, profileContext: window.dataexReviewProfile?.context(), form: formSnapshot(), visualResults: window.dataexVisual?.snapshot(), results, sourceChecks, reviews: [...reviews], requestOrder };
       window.localStorage.setItem(storageKey, JSON.stringify(record));
       window.localStorage.setItem(LATEST_KEY, storageKey);
       message('storage-message', '');
@@ -141,7 +141,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
   }
   function keyFor(m) { return STORE_PREFIX + encodeURIComponent(JSON.stringify([m.filename, m.size, m.lastModified, m.pageCount, m.pdfId])); }
   function adopt(record, key) {
-    documentMeta = record.documentMeta; storageKey = key; results = record.results || null;
+    documentMeta = record.documentMeta; storageKey = key; results = record.results || null; window.dataexVisual?.restore(record.visualResults);
     sourceChecks = Array.isArray(record.sourceChecks) ? record.sourceChecks : [];
     requestOrder = Array.isArray(record.requestOrder) ? record.requestOrder.filter(x => typeof x === 'string').slice(0, 50) : [];
     reviews = new Map((Array.isArray(record.reviews) ? record.reviews : []).filter(entry => Array.isArray(entry) && Number.isInteger(entry[0]) && entry[0] >= 0 && entry[0] < (results?.outcomes.length || 0) && ['NOT_REVIEWED','ACCEPTED','CORRECTED','REVIEW_REQUIRED','REJECTED'].includes(entry[1]?.state)));
@@ -152,7 +152,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
       const key = window.localStorage.getItem(LATEST_KEY), record = readRecord(key);
       if (!record) return;
       adopt(record, key); pdfMatches = false; render();
-      if (results) reviewMode(false);
+      if (results || window.dataexVisual?.outcomes().length) reviewMode(false);
       message('pdf-status', `保存結果: ${documentMeta.filename}\n${documentMeta.pageCount}ページ（PDF未読込）`);
     } catch (_) { storageWarning('保存データを復元できませんでした。PDFを選択して再開してください。'); }
   }
@@ -168,7 +168,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
     if (key !== storageKey) {
       window.dataexReviewProfile?.newPdf(key);
       if (record) adopt(record, key);
-      else { results = null; sourceChecks = []; reviews.clear(); requestOrder = []; selectedSources.clear(); resultRevision++; window.dataexReviewProfile?.applyDefaults(false); }
+      else { window.dataexVisual?.clear(); results = null; sourceChecks = []; reviews.clear(); requestOrder = []; selectedSources.clear(); resultRevision++; window.dataexReviewProfile?.applyDefaults(false); }
     }
     documentMeta = meta; storageKey = key; pdfMatches = true;
     if (results) {
@@ -180,7 +180,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
       }
     }
     render(); persist();
-    if (results) reviewMode(false);
+    if (results || window.dataexVisual?.outcomes().length) reviewMode(false);
     else { $('condition-content').hidden = false; $('review-header').hidden = true; }
   }
   function eraseResult() {
@@ -189,7 +189,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
       if (storageKey) window.localStorage.removeItem(storageKey);
       if (window.localStorage.getItem(LATEST_KEY) === storageKey) window.localStorage.removeItem(LATEST_KEY);
     } catch (_) { storageWarning('保存結果を消去できませんでした。ブラウザの保存設定を確認してください。'); return; }
-    results = null; sourceChecks = []; reviews.clear(); requestOrder = []; selectedSources.clear(); resultRevision++; focusSerial++;
+    window.dataexVisual?.clear(); results = null; sourceChecks = []; reviews.clear(); requestOrder = []; selectedSources.clear(); resultRevision++; focusSerial++;
     storageKey = null; $('review-header').hidden = true; $('condition-content').hidden = false; $('evidence-navigation').replaceChildren();
     $('clear-highlight').click(); render();
   }
@@ -201,7 +201,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
   function completeness() {
     const requested = requestOrder.length ? requestOrder : results?.outcomes.map(o => o.outcome) || [];
     return requested.map(outcome => {
-      const found = (results?.outcomes || []).filter(o => normalize(o.outcome) === normalize(outcome));
+      const found = [...(results?.outcomes || []),...(window.dataexVisual?.outcomes()||[])].filter(o => normalize(o.outcome) === normalize(outcome));
       let code = 'NOT_FOUND';
       if (found.length) {
         if (found.every(o => readyStates.includes(o.status))) code = 'FOUND_READY';
@@ -452,21 +452,22 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
   }
   function render() {
     focusSerial++; $('evidence-navigation').replaceChildren();
-    const root = $('result-cards'); root.replaceChildren(); $('results-empty').hidden = !!results;
-    $('review-header').hidden = !results; $('restore-notice').hidden = !results || pdfMatches;
-    if (!results) { confirmedSummary=null; return; }
+    const allOutcomes=[...(results?.outcomes||[]),...(window.dataexVisual?.outcomes()||[])],hasResults=allOutcomes.length>0;
+    const root = $('result-cards'); root.replaceChildren(); $('results-empty').hidden = hasResults;
+    $('review-header').hidden = !hasResults; $('restore-notice').hidden = !hasResults || pdfMatches;
+    if (!hasResults) { confirmedSummary=null; return; }
     const complete=completeness();
-    confirmedSummary=summarize(results.outcomes);
+    confirmedSummary=summarize(allOutcomes);
     const counts=confirmedSummary.summaryCounts;
     const countText=`解析投入可 ${counts.use} ｜ 要確認 ${counts.review} ｜ 解析投入しない ${counts.doNotUse}`;
     const filename = documentMeta?.filename || state.filename || '';
     const filenameLabel = el('span', filename, 'review-filename'); filenameLabel.title = filename;
     $('review-summary').replaceChildren(filenameLabel, el('span', ` ｜ ${counts.total} outcomes ｜ ${countText}`, 'review-counts'));
     const summary = el('div', null, 'result-summary');
-    summary.append(el('strong', results.study), el('p', countText)); root.append(summary);
+    summary.append(el('strong', results?.study||'選択範囲からの視覚抽出'), el('p', countText)); root.append(summary);
     // Requested order is primary. Without it, apply stable status grouping to extra outcomes.
     const rank = status => status === 'READY' ? 0 : readyStates.includes(status) ? 1 : ['CANDIDATE_ONLY','NEEDS_REVIEW','NEEDS_VISUAL_REVIEW'].includes(status) ? 2 : 3;
-    const ordered = results.outcomes.map((outcome, i) => ({ outcome, i, requested: requestOrder.findIndex(x => normalize(x) === normalize(outcome.outcome)) }));
+    const ordered = (results?.outcomes||[]).map((outcome, i) => ({ outcome, i, requested: requestOrder.findIndex(x => normalize(x) === normalize(outcome.outcome)) }));
     ordered.sort((a,b) => {
       if (a.requested >= 0 || b.requested >= 0) return (a.requested < 0 ? Infinity : a.requested) - (b.requested < 0 ? Infinity : b.requested) || a.i-b.i;
       if (normalize(a.outcome.outcome) === normalize(b.outcome.outcome)) return a.i-b.i;
@@ -602,10 +603,11 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
       if(review.correction)card.append(el('p',`修正記録（未検証）：${review.correction}`,'review-flags'));
       card.append(technical);root.append(card);
     });
-    for(const missing of complete.filter(c=>c.code==='NOT_FOUND'&&!results.outcomes.some(o=>normalize(o.outcome)===normalize(c.outcome)))) {
+    for(const missing of complete.filter(c=>c.code==='NOT_FOUND'&&!allOutcomes.some(o=>normalize(o.outcome)===normalize(c.outcome)))) {
       const card=el('article',null,'result-card');card.append(el('h3',missing.outcome),el('span','未発見・追加探索','result-status status-NOT_FOUND'),el('p','このアウトカムの結果はまだ返されていません。報告なしとは区別しています。'));root.append(card);
     }
-    if(results.unresolved.length){const section=el('section',null,'unresolved-list');section.append(el('h3','未解決事項'));results.unresolved.forEach(item=>section.append(el('p',`${item.outcome?item.outcome+': ':''}${item.issue} — ${item.impact}`)));root.append(section);}
+    if(results?.unresolved.length){const section=el('section',null,'unresolved-list');section.append(el('h3','未解決事項'));results.unresolved.forEach(item=>section.append(el('p',`${item.outcome?item.outcome+': ':''}${item.issue} — ${item.impact}`)));root.append(section);}
+    window.dataexVisual?.render(root,pdfMatches);
   }
 
   async function setResults(payload, options = {}) {
@@ -625,7 +627,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
     pdfMatches = true; selectedSources.clear(); render(); persist(); reviewMode();
     return { ...structuredClone(confirmedSummary), completeness: completeness(), displayed: confirmedSummary.summaryCounts.total, ready: confirmedSummary.summaryCounts.use, needsReview: confirmedSummary.summaryCounts.review, doNotUse: confirmedSummary.summaryCounts.doNotUse, warnings: audited.warnings, note: 'PDFの根拠テキスト一致を検証。数値の意味・対応関係の妥当性は抽出者と人の確認が必要。' };
   }
-  function reset() { results = null; sourceChecks = []; reviews.clear(); readPages.clear(); selectedSources.clear(); render(); }
+  function reset() { window.dataexVisual?.clear(); results = null; sourceChecks = []; reviews.clear(); readPages.clear(); selectedSources.clear(); render(); }
   $('request-text').textContent = '送信文：「このDataExを抽出してください…」';
   $('request-text').title = requestText;
   $('copy-request').textContent = 'もう一度コピー';
@@ -651,7 +653,7 @@ window.createDataExExtraction = function ({ $, state, getState, pageData, pageNu
     tool('dataex_set_results', `抽出した構造化結果をDataEx左側に表示する。outcome名はユーザーの入力名を保持し、入力順で返す。${hierarchy} 根拠はsourceId、evidenceText、focusQueryを指定。SE_TO_SDは構造化inputs/sourceRef/output/linkageを使用し、群別計算はcalculationsに格納。別ページのsourceを許可するがstudy/arm/measure/timepoint/populationと観測系列の対応が必要。図注はFIGURE_CAPTIONであり図の目測値ではない。旧inputs文字列は読み込み互換。SOURCE_VERIFIED_TEXTは引用一致を表し、意味的正しさの自動保証ではない。NOT_FOUND/NOT_REPORTED/NOT_DERIVABLEとNEEDS_VISUAL_REVIEWを区別。${summaryProtocol} compositeAuditは参考情報であり解析値ではない。rangeAllowedにはstudy/analysisUnit/population/timeWindow/semanticReason/semanticSourceRefsを各componentに指定する。`, resultSchema, setResults, false)
   ];
   restoreLatest();
-  return { recordSearch(query) { searchTrace().queries.add(normalize(query)); }, tools, reset, detachPdf, onPdfLoaded, requestText, copyRequest, async submit(save) {
+  return { getBrief:brief,getSummary:()=>structuredClone(confirmedSummary),visualChanged(collapse=true){requestOrder=getState().outcomes.slice();render();persist();if(collapse)reviewMode(false);}, recordSearch(query) { searchTrace().queries.add(normalize(query)); }, tools, reset, detachPdf, onPdfLoaded, requestText, copyRequest, async submit(save) {
     try {
       if (!state.pdf || state.loading) fail('PDFを選択してください');
       if(window.dataexReviewProfile && !await window.dataexReviewProfile.confirmExtraction(getState()))return;

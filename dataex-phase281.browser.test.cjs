@@ -5,13 +5,19 @@ const {PDFDocument,StandardFonts}=require(process.env.DATAEX_PDFLIB_MODULE||'pdf
 const assets=process.env.DATAEX_PDF_DIR||path.join(__dirname,'test-assets'),out=process.env.DATAEX_ARTIFACT_DIR||__dirname;
 const passed=[],pass=s=>{passed.push(s);console.log('PASS '+s);};
 const profileKey='dataex:review-profiles:v1';
+// The form now generates a prompt. Keep every original guard assertion by invoking
+// the same confirmation entry point still used by the existing extraction workflow.
+const triggerExtractionGuard=page=>page.evaluate(async()=>{
+  const current=await window.registeredTools.dataex_get_state.execute({});
+  void window.dataexReviewProfile.confirmExtraction(current);
+});
 (async()=>{
  const browser=await chromium.launch({headless:true});
  try {
   const page=await browser.newPage({viewport:{width:1450,height:1000}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
   await page.addInitScript(()=>{window.registeredTools={};Object.defineProperty(document,'modelContext',{value:{registerTool(t){window.registeredTools[t.name]=t;}}});});
-  const ready=()=>page.waitForFunction(()=>Object.keys(window.registeredTools).length===7);
+  const ready=()=>page.waitForFunction(()=>Object.keys(window.registeredTools).length===10);
   await page.goto(process.env.DATAEX_URL||'http://127.0.0.1:8770/dataex-chatgpt.html');await ready();
   const call=(name,args={})=>page.evaluate(({name,args})=>window.registeredTools[name].execute(args),{name,args});
   const load=async file=>{await page.locator('#pdf-file').setInputFiles(file);await page.waitForFunction(()=>document.querySelector('#pdf-status').textContent.startsWith('✓'));};
@@ -19,7 +25,7 @@ const profileKey='dataex:review-profiles:v1';
   const field=k=>page.locator('#profile-form [data-field="'+k+'"]');
   await page.locator('#profile-open').click();await field('profileName').fill('CRPS pain test');await field('reviewOutcomeName').fill('Pain intensity');await field('targetTime').fill('Post Wk 1–2');await page.locator('#profile-save').click();
   let pending=await call('dataex_get_extraction_brief');assert.equal(pending.profileDecisionForPdf,'UNDECIDED');assert.equal(pending.activeReviewProfile,null);assert.equal(pending.extractionBlocked,true);assert.equal(await page.locator('#outcomes').inputValue(),'');assert.equal(await page.locator('#timepoint').inputValue(),'');
-  await page.getByRole('button',{name:'データ抽出',exact:true}).click();assert.equal(await page.locator('#request-guide').isVisible(),false);assert.equal((await call('dataex_set_results',{})).isError,true);
+  await triggerExtractionGuard(page);assert.equal(await page.locator('#request-guide').isVisible(),false);assert.equal((await call('dataex_set_results',{})).isError,true);
   await page.screenshot({path:path.join(out,'phase281-activation.png')});
   await page.locator('#profile-pdf-change').click();assert.equal(await page.locator('#profile-dialog').isVisible(),true);await page.locator('#profile-close').click();
   await page.locator('#profile-pdf-suppress').click();pending=await call('dataex_get_extraction_brief');assert.equal(pending.profileDecisionForPdf,'SUPPRESS');assert.equal(pending.activeReviewProfile,null);assert.equal(await page.locator('#outcomes').inputValue(),'');
@@ -29,7 +35,7 @@ const profileKey='dataex:review-profiles:v1';
   await load(path.join(assets,'sigtermans2009.pdf'));assert.equal((await call('dataex_get_extraction_brief')).profileDecisionForPdf,'UNDECIDED');assert.equal(await page.locator('#outcomes').inputValue(),'');await page.locator('#outcomes').fill('Explicit outcome');await page.locator('#timepoint').fill('week 99');await page.locator('#profile-pdf-use').click();assert.equal(await page.locator('#outcomes').inputValue(),'Explicit outcome');assert.equal(await page.locator('#timepoint').inputValue(),'week 99');
   await page.locator('#profile-open').click();await field('profileName').fill('CRPS pain test revised');await page.locator('#profile-save').click();assert.equal((await call('dataex_get_extraction_brief')).profileDecisionForPdf,'UNDECIDED');assert.equal(await page.locator('#outcomes').inputValue(),'Explicit outcome');
   await load(path.join(assets,'Holz 2020.pdf'));assert.equal((await call('dataex_get_extraction_brief')).profileDecisionForPdf,'UNDECIDED');await page.locator('#profile-pdf-use').click();
-  pass('PDF activation: block brief/submit/set_results until choice; SUPPRESS retains profile; USE defaults; explicit fields retained; reload restores both decisions; new PDF and profile edit require choice');
+  pass('PDF activation: block brief/extraction guard/set_results until choice; SUPPRESS retains profile; USE defaults; explicit fields retained; reload restores both decisions; new PDF and profile edit require choice');
   assert.equal((await call('dataex_get_extraction_brief')).profileConflict.hasConflict,false);
   await page.locator('#outcomes').fill('疼痛強度');await page.locator('#timepoint').fill('1–2 weeks');
   let brief=await call('dataex_get_extraction_brief');assert.equal(brief.profileConflict.hasConflict,false);assert.equal(brief.profileRulesApplied.outcomes.length,1);
@@ -37,16 +43,16 @@ const profileKey='dataex:review-profiles:v1';
   const names=['Serious ocular AE','BCVA 8–12 weeks','TEAEs leading to investigational product discontinuation OR death'];
   await page.locator('#outcomes').fill(names.join('\n'));await page.locator('#timepoint').fill('during study period');
   brief=await call('dataex_get_extraction_brief');assert.equal(brief.extractionBlocked,true);assert.equal(brief.profileConflict.resolved,false);assert.equal(brief.profileConflict.items.length,4);
-  await page.getByRole('button',{name:'データ抽出',exact:true}).click();assert.equal(await page.locator('#profile-conflict-dialog').isVisible(),true);assert.equal(await page.locator('#request-guide').isVisible(),false);
+  await triggerExtractionGuard(page);assert.equal(await page.locator('#profile-conflict-dialog').isVisible(),true);assert.equal(await page.locator('#request-guide').isVisible(),false);
   assert.equal(await page.locator('#profile-conflict-suppress').evaluate(e=>e===document.activeElement),true);
   await page.screenshot({path:path.join(out,'phase28-profile-conflict.png')});
   await page.locator('#profile-conflict-cancel').click();assert.equal(await page.locator('#profile-conflict-dialog').isVisible(),false);
-  await page.getByRole('button',{name:'データ抽出',exact:true}).click();await page.locator('#profile-conflict-change').click();assert.equal(await page.locator('#profile-dialog').isVisible(),true);await page.locator('#profile-close').click();
-  await page.getByRole('button',{name:'データ抽出',exact:true}).click();await page.locator('#profile-conflict-suppress').click();
+  await triggerExtractionGuard(page);await page.locator('#profile-conflict-change').click();assert.equal(await page.locator('#profile-dialog').isVisible(),true);await page.locator('#profile-close').click();
+  await triggerExtractionGuard(page);await page.locator('#profile-conflict-suppress').click();
   brief=await call('dataex_get_extraction_brief');assert.equal(brief.activeReviewProfile,null);assert.equal(brief.profileConflict.resolved,true);assert.equal(brief.profileSuppressed,true);assert.equal(brief.profileRulesApplied.outcomes.length,0);
   assert.match(await page.locator('#profile-bar').innerText(),/CRPS pain test revised（このPDFでは未使用）/);
   const saved=await page.evaluate(k=>JSON.parse(localStorage.getItem(k)),profileKey);assert.equal(saved.profiles[0].profile.profileName,'CRPS pain test revised');assert.ok(saved.activeId);
-  pass('Profile mismatch blocks submit and brief; cancel/change/suppress; aliases and group changes; profile preserved');
+  pass('Profile mismatch blocks extraction guard and brief; cancel/change/suppress; aliases and group changes; profile preserved');
   const texts={};for(const n of [5,7,8])texts[n]=(await call('dataex_get_page_text',{page:n,maxChars:16000})).normalizedText;
   const excerpt=(n,start,end)=>{const text=texts[n],i=text.indexOf(start),j=text.indexOf(end,i+start.length);assert.ok(i>=0&&j>i,start);return text.slice(i,j).trim();};
   const source=(sourceId,use,page,evidenceText,focusQuery)=>({sourceId,use,page,evidenceText,focusQuery,printedPage:null,section:'Table '+(page===5?'2':'3'),tableFigure:null,row:null,column:null,verification:'SOURCE_VERIFIED_TEXT'});
@@ -96,6 +102,6 @@ const profileKey='dataex:review-profiles:v1';
   const ambiguous=structuredClone(union);ambiguous.outcomes[0].compositeAudit.components[0].semanticCompatibility='AMBIGUOUS';result=await call('dataex_set_results',ambiguous);assert.ok(!result.isError);assert.equal(await page.locator('.composite-range').count(),0);
   const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem(localStorage.getItem('dataex:phase2.5:latest'))));assert.equal(stored.results.outcomes[0].compositeAudit.rangeAllowed,false);assert.deepEqual(stored.results.outcomes[0].compositeAudit.ranges,[]);
   pass('Compatible synthetic union ranges recomputed; unit/N/context/verification/promotion gates; ambiguous range cleared');
-  assert.deepEqual(errors,[]);pass('7 tools and no console errors');fs.writeFileSync(path.join(out,'phase281-test-result.json'),JSON.stringify({passed,consoleErrors:errors},null,2));
+  assert.deepEqual(errors,[]);pass('10 tools and no console errors');fs.writeFileSync(path.join(out,'phase281-test-result.json'),JSON.stringify({passed,consoleErrors:errors},null,2));
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

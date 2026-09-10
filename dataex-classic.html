@@ -5,21 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DataEx</title>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script defer src="dataex-review-profile.js"></script>
+  <script defer src="dataex-extraction.js"></script>
   <script defer src="dataex-selection.js"></script>
   <script defer src="dataex-caption.js"></script>
   <script defer src="dataex-visual.js"></script>
-  <script defer src="dataex-fuzzy-core.js"></script>
-  <script defer src="dataex-ico-mapping.js"></script>
-  <script defer src="dataex-results-model.js"></script>
-  <script defer src="dataex-paper-model.js"></script>
-  <script defer src="dataex-source-navigation.js"></script>
-  <script defer src="dataex-decisions.js"></script>
-  <script defer src="dataex-review-store.js"></script>
-  <script defer src="dataex-review-workspace.js"></script>
-  <script defer src="dataex-results-ui.js"></script>
-  <script defer src="dataex-fuzzy-workspace.js"></script>
+  <script defer src="dataex-core-prompt.js"></script>
+  <script defer src="dataex-prompt-builder.js"></script>
   <script defer src="dataex-webmcp.js"></script>
-
+  <link rel="stylesheet" href="dataex-prompt-builder.css">
   <style>
     *{box-sizing:border-box}body{margin:0;font:14px/1.6 system-ui,sans-serif;color:#1e293b;background:#f5f3ff}header{height:76px;padding:12px 24px;background:white;border-bottom:1px solid #ddd6fe;display:flex;align-items:center;justify-content:space-between;gap:16px}h1{font-size:20px;margin:0}h1 small{font-size:12px;font-weight:500;color:#6d28d9}a{color:#6d28d9}.status{font-size:12px;color:#64748b}main{display:grid;grid-template-columns:minmax(320px,380px) minmax(0,1fr);height:calc(100vh - 76px)}aside{overflow:auto;padding:24px;background:#fff;border-right:1px solid #ddd6fe}h2{font-size:16px;margin:0 0 16px}label{display:block;font-weight:600;margin-top:14px}input,textarea,button,select{font:inherit}input:not([type=file]),textarea{display:block;width:100%;padding:9px 11px;border:1px solid #cbd5e1;border-radius:7px;background:white}textarea{resize:vertical}input:focus,textarea:focus,button:focus-visible{outline:2px solid #8b5cf6;outline-offset:2px}button{cursor:pointer;border:1px solid #cbd5e1;border-radius:7px;background:white;padding:7px 12px;color:#334155}button:disabled{opacity:.5;cursor:wait}.primary{margin-top:20px;width:100%;background:#7c3aed;color:white;border:0;padding:11px;font-weight:700}.drop-zone{border:2px dashed #c4b5fd;border-radius:10px;padding:18px 12px;background:#faf5ff}.drop-zone.drag{background:#ede9fe;border-color:#7c3aed}.drop-zone input{width:100%;font-size:12px}.hint{font-size:12px;color:#64748b;margin:8px 0}.message{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;margin-top:12px}.error{color:#b91c1c}details{margin-top:18px}summary{cursor:pointer;font-weight:600}.future{margin-top:26px;border-top:1px solid #e2e8f0;padding-top:20px}.viewer-pane{display:flex;flex-direction:column;min-width:0;min-height:0}.toolbar{padding:10px 14px;background:#f8fafc;display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #cbd5e1}.toolbar input{width:65px}.toolbar label{margin:0;font-size:12px}.searchbar{display:flex;gap:6px;flex:1;min-width:220px}.searchbar input{width:100%;min-width:80px}.viewer{flex:1;overflow:auto;padding:20px;background:#475569;position:relative;scroll-behavior:auto}.empty{text-align:center;color:#e2e8f0;padding:100px 15px}.pdf-page{position:relative;background:white;box-shadow:0 4px 20px #0f172a33;margin:0 auto 20px;flex-shrink:0;overflow:hidden}.pdf-page canvas{display:block}.page-label{position:absolute;top:4px;left:6px;background:#0f172acc;color:white;border-radius:12px;padding:1px 8px;font-size:10px;z-index:20;pointer-events:none}.textLayer{position:absolute;inset:0;overflow:hidden;line-height:1;text-size-adjust:none;forced-color-adjust:none}.textLayer span,.textLayer br{color:transparent;position:absolute;white-space:pre;cursor:text;transform-origin:0% 0%}.textLayer span::selection{background:rgba(0,100,200,.3)}.highlight-hook{background-color:rgba(250,204,21,.55)!important;color:transparent!important;box-shadow:0 0 0 3px rgba(250,204,21,.55);border-radius:2px;z-index:10}.bbox-highlight{position:absolute;background:rgba(250,204,21,.55);pointer-events:none;z-index:11}.results{max-height:160px;overflow:auto;background:#f8fafc}.results button{display:block;width:100%;text-align:left;border-radius:0;border-width:0 0 1px;font-size:12px}.results:empty{display:none}#evidence-message{margin:0;padding:5px 14px;background:#f8fafc;min-height:30px}.badge{font-size:11px;color:#6d28d9;background:#ede9fe;padding:3px 8px;border-radius:20px}@media(max-width:760px){header{height:auto;align-items:flex-start;padding:12px;flex-wrap:wrap}main{display:block;height:auto}aside{overflow:visible;padding:18px}.viewer-pane{height:75vh;min-height:450px}header .status{font-size:11px}.viewer{padding:12px}}
     button{white-space:nowrap;flex-shrink:0}
@@ -44,41 +38,52 @@
 .figure-metadata,.figure-unresolved{margin:12px 0;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;overflow-wrap:anywhere}.figure-metadata{background:#f0f9ff}.figure-unresolved{background:#fffbeb;border-color:#fcd34d}.figure-metadata h4,.figure-unresolved h4{margin:0 0 6px;font-size:13px}.figure-metadata p,.figure-unresolved p{margin:4px 0;font-size:12px}.figure-analysis-hold{font-size:12px;color:#92400e}
 .provenance-selection,.provenance-caption{margin:10px 0;padding:10px;border:1px solid #cbd5e1;border-radius:6px;color:#334155;overflow-wrap:anywhere}.provenance-caption{background:#f8fafc}.provenance-selection h4,.provenance-caption h4{margin:0 0 6px;color:#0f172a}
 </style>
-<link rel="stylesheet" href="dataex-fuzzy.css">
-<link rel="stylesheet" href="dataex-results.css">
-<link rel="stylesheet" href="dataex-review.css">
-<link rel="stylesheet" href="dataex-paper.css">
 </head>
 <body>
-<header><h1>DataEx <small>Fuzzy Data Extraction Workspace</small></h1><div class="header-actions"><a href="index.html">DataEx ホーム</a><details class="diagnostics"><summary>診断</summary><div id="webmcp-status" class="status" role="status">site tools: 未検出</div><div id="app-version" class="status"></div><p class="status">PDF本体は保存・送信しません。必要な本文と抽出結果はツール応答でWorkと共有します。条件・結果・確認状態はこのブラウザに保存します。</p></details></div></header>
+<header><h1>DataEx</h1><div class="header-actions"><a href="index.html">DataEx ホーム</a><details class="diagnostics"><summary>診断</summary><div id="webmcp-status" class="status" role="status">site tools: 未検出</div><div id="app-version" class="status"></div><p class="status">PDF本体は保存・送信しません。必要な本文と抽出結果はツール応答でWorkと共有します。条件・結果・確認状態はこのブラウザに保存します。</p></details></div></header>
 <main>
   <aside id="conditions-pane">
-    <div class="fuzzy-intro"><h2>PDFから、使えるデータへ。</h2><p>まず候補を見つけて、曖昧な点だけあとから確認。</p></div>
+    <div id="review-header" hidden><p id="review-summary"></p><div class="review-header-actions"><button id="toggle-conditions" type="button" aria-expanded="false" aria-controls="condition-content">抽出条件を表示</button><button id="erase-results" type="button">この結果を消去</button></div></div>
+    <div id="restore-notice" class="hint" hidden>原著PDFを再選択すると根拠を表示できます <button id="reselect-pdf" type="button">原著PDFを再選択</button></div>
     <div id="storage-message" class="message" role="status"></div>
     <div id="condition-content">
-      <div id="drop-zone" class="drop-zone"><strong>PDF</strong><input id="pdf-file" type="file" accept="application/pdf,.pdf" multiple hidden><button id="choose-pdf" type="button">PDFを選択</button><p class="hint">複数のPDFも選択できます。ここにドラッグ＆ドロップ。</p></div>
-      <div id="pdf-status" class="message" role="status">PDFを選択してください。</div>
-      <div id="fuzzy-pdf-queue" aria-label="選択中のPDF"></div><p id="fuzzy-queue-note" class="hint"></p>
-      <form id="conditions">
-        <button id="fuzzy-extract" class="primary" type="submit">このPDFから使えるデータを探す</button>
-        <p class="hint">ChatGPT / Codexが論文を読み、候補をこの画面に返します。PDFを自動送信しません。</p>
-        <p id="fuzzy-mode" role="status"></p>
-        <details id="sr-context"><summary>SR条件を追加すると精度が上がります（任意）</summary>
-        <p class="hint">SRで定義したICOをそのまま入力してください。原著と表現が違っていても、AIが意味的に対応づけます。</p>
-        <label for="review-name">Review / Project name <span class="optional">任意</span></label><input id="review-name" maxlength="500" placeholder="例：腰痛の治療">
-        <label for="population">Population <span class="optional">任意</span></label><input id="population" maxlength="2000" placeholder="例：Adults with chronic low back pain">
-        <label for="intervention">Intervention <span class="optional">任意</span></label><div class="sr-clear-field"><input id="intervention" maxlength="2000" placeholder="例：Acupuncture"><button type="button" data-clear-sr="intervention" aria-label="Interventionをクリア">×</button></div>
-        <label for="comparator">Comparator <span class="optional">任意</span></label><div class="sr-clear-field"><input id="comparator" maxlength="2000" placeholder="例：Usual care"><button type="button" data-clear-sr="comparator" aria-label="Comparatorをクリア">×</button></div>
-        <label for="outcomes">Outcomes of interest <span class="optional">任意・1行に1つ</span></label><div class="sr-clear-field"><textarea id="outcomes" rows="2" maxlength="8000" placeholder="例：Pain&#10;Disability&#10;空欄なら論文から候補を探します"></textarea><button type="button" data-clear-sr="outcomes" aria-label="Outcomesをクリア">×</button></div>
-        <button id="clear-sr" type="button">SR条件をすべてクリア</button><p class="hint">レビュー名・採用済みデータは保持します。</p>
-        </details>
-        <button id="new-paper" type="button">新しいPDFを解析</button>
-        <div id="extract-message" class="message" role="status"></div>
-        <div id="request-guide" hidden><p>抽出依頼を隣のチャットへ送信してください。細かな抽出ルールの指定は不要です。</p><textarea id="request-text" readonly aria-label="チャットへの抽出依頼" rows="4"></textarea><button id="copy-request" type="button">依頼をコピー</button></div>
-      </form>
+    <h2>抽出条件</h2>
+    <div id="drop-zone" class="drop-zone"><strong>PDF</strong><input id="pdf-file" type="file" accept="application/pdf,.pdf" hidden><button id="choose-pdf" type="button">PDFを選択</button><p class="hint">ここにドラッグ＆ドロップできます</p><p class="hint">PDFと抽出結果はこのブラウザ内で処理します。</p></div>
+    <div id="pdf-status" class="message" role="status">PDFを読み込んでください。</div>
+    <form id="conditions">
+      <label for="intervention">Intervention</label><input id="intervention" placeholder="例：介入群・治療名" maxlength="2000">
+      <label for="comparator">Comparator</label><input id="comparator" placeholder="例：対照群・比較治療" maxlength="2000">
+      <label for="outcomes">Outcomes <span class="hint">（1行に1つ）</span></label><textarea id="outcomes" rows="3" placeholder="例：&#10;Pain intensity&#10;Quality of life" maxlength="8000"></textarea>
+      <label for="timepoint">Timepoint</label><input id="timepoint" placeholder="例：12 weeks" maxlength="2000">
+      <p id="builder-outcome-summary"></p>
+      <details id="builder-advanced"><summary>Advanced</summary>
+        <p class="hint">各Outcomeに適用する共通設定です。未指定の項目があっても生成できます。</p>
+        <label for="builder-study-design">Study Design</label><select id="builder-study-design"></select>
+        <label for="builder-data-type">Data Type</label><select id="builder-data-type"></select>
+        <fieldset><legend>Requested Statistics</legend><div id="builder-statistics"></div></fieldset>
+        <label for="population-rule">Analysis Population / Denominator（Population rule）</label><textarea id="population-rule" rows="2" maxlength="4000" placeholder="例：ITT、FAS、PP、Safety set、Observed at timepoint、Other"></textarea>
+        <label for="builder-scale">Scale / Unit</label><input id="builder-scale" list="builder-scale-options" maxlength="2000" placeholder="候補を選択、または自由に入力"><datalist id="builder-scale-options"><option value="0–10"><option value="0–100"><option value="ETDRS letters"><option value="mm"></datalist>
+        <label for="builder-time-origin">Time Origin</label><select id="builder-time-origin"></select>
+        <label for="builder-time-rule">Time Selection Rule</label><select id="builder-time-rule"></select>
+        <label for="builder-analysis-unit">Analysis Unit</label><input id="builder-analysis-unit" maxlength="2000" placeholder="例：participant、eye、tooth、cluster">
+        <label for="builder-node-rule">Synthesis Node Rule</label><textarea id="builder-node-rule" rows="2" maxlength="4000" placeholder="群の統合・比較のルール"></textarea>
+        <label for="extra-rules">Extra Rules</label><textarea id="extra-rules" rows="3" maxlength="4000" placeholder="追加ルール"></textarea>
+      </details>
+      <button id="generate-prompt" class="primary" type="submit">AI抽出用プロンプトを生成</button>
+      <p class="hint">入力したレビュー仕様から生成します。PDFの自動解析・AIへの送信は行いません。</p>
+      <div id="extract-message" class="message" role="status"></div>
+    <div id="request-guide" hidden><p id="request-text">このDataExを抽出してください</p><button id="copy-request" type="button">指示をコピー</button></div></form>
     </div>
-    <details id="fuzzy-prompt-details"><summary>AI抽出用プロンプトを表示</summary><p id="fuzzy-prompt-version"></p><label for="fuzzy-prompt">内部プロンプト全文（読み取り専用）</label><textarea id="fuzzy-prompt" readonly rows="14" spellcheck="false"></textarea><button id="fuzzy-copy-prompt" type="button">全文コピー</button></details>
-    <section id="results-section" class="future"><h2>抽出結果</h2><p id="fuzzy-result-status" role="status"></p><p id="results-empty" class="hint">AIが見つけたOutcomeと数値の候補がここに表示されます。</p><div id="fuzzy-results"></div><div id="result-cards"></div></section>
+    <section id="builder-result" aria-labelledby="builder-heading" hidden>
+      <h2 id="builder-heading">SR Data Extraction Prompt Builder</h2>
+      <p id="builder-version"></p>
+      <p id="builder-warning" role="status" hidden></p>
+      <p id="builder-stale" role="status" hidden>設定が変更されています。再生成、コピー、保存の際に最新の入力を反映します。</p>
+      <label for="builder-prompt">生成プロンプト全文（読み取り専用）</label><textarea id="builder-prompt" rows="20" readonly spellcheck="false"></textarea>
+      <div class="builder-actions"><button id="builder-copy" type="button">全文コピー</button><button id="builder-save-txt" type="button">TXT保存</button><button id="builder-save-json" type="button">設定JSON保存</button></div>
+    </section>
+    <p id="builder-status" role="status"></p>
+    <section id="results-section" class="future"><h2>抽出結果</h2><p id="results-empty" class="hint">抽出結果はここに表示されます</p><div id="result-cards"></div></section>
   </aside>
   <div id="pane-resizer" role="separator" tabindex="0" aria-label="左右ペインの幅" aria-orientation="vertical" aria-controls="conditions-pane" aria-valuemin="320" aria-valuenow="320"></div>
   <section class="viewer-pane" aria-label="PDFビューア">
@@ -86,6 +91,5 @@
     <div id="evidence-bar"><div id="evidence-message" class="message" role="status"></div><nav id="evidence-navigation" aria-label="根拠の切替"></nav></div><div id="search-results" class="results" aria-label="検索結果"></div><div id="pdf-viewer" class="viewer"><div class="empty">右側にPDFが表示されます</div></div>
   </section>
 </main>
-<dialog id="new-paper-dialog" aria-labelledby="new-paper-title"><h2 id="new-paper-title">次の論文へ</h2><p>採用済みデータとReview Workspaceは保持します。</p><label><input type="radio" name="next-paper-ico" value="keep" checked> SR条件を保持</label><label><input type="radio" name="next-paper-ico" value="clear"> SR条件をクリア</label><div class="new-paper-actions"><button id="new-paper-confirm" type="button">次のPDFを選ぶ</button><button id="new-paper-cancel" type="button">キャンセル</button></div></dialog>
 </body>
 </html>

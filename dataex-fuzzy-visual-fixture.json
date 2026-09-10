@@ -1,0 +1,51 @@
+{
+  "selectionId": "sel-b84497b0-dc5e-4360-9140-b68eca4e6cd2",
+  "sourceKind": "TABLE_DIRECT",
+  "resultStatus": "READY",
+  "outcomes": [
+    {
+      "outcome": "Change in BCVA from baseline to 8 to 12 weeks",
+      "timepoint": "week 8",
+      "population": "US-relevant population, full analysis set; assessed patients",
+      "unit": "ETDRS letters",
+      "analysisUnit": "participant",
+      "variableType": "continuous",
+      "arms": [
+        {
+          "name": "FYB201",
+          "valueText": "Mean 5.1 / SD 7.52 / n 228",
+          "numerator": null,
+          "denominator": 228,
+          "mean": 5.1,
+          "sd": 7.52,
+          "se": null
+        },
+        {
+          "name": "Reference ranibizumab",
+          "valueText": "Mean 5.6 / SD 8.63 / n 233",
+          "numerator": null,
+          "denominator": 233,
+          "mean": 5.6,
+          "sd": 8.63,
+          "se": null
+        }
+      ],
+      "directVisibleValues": [
+        "Mean change from baseline, ETDRS letters (SD): 5.1 (7.52), 5.6 (8.63)",
+        "Patients with assessment: 228, 233"
+      ],
+      "derivedValues": [],
+      "approximate": false,
+      "reason": "Raw Table 2 mean/SD and observed n; ANCOVA LS mean/SE excluded.",
+      "reviewFlags": []
+    }
+  ],
+  "visualAudit": {
+    "valuesClearlyVisible": true,
+    "labelsClearlyVisible": true,
+    "unitsClearlyVisible": true,
+    "timepointClearlyVisible": true,
+    "uncertaintyTypeClearlyVisible": true,
+    "notes": "Table labels and raw arm values visually inspected in test fixture."
+  }
+}

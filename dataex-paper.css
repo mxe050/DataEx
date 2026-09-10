@@ -1,0 +1,50 @@
+/* Paper-first presentation only. PDF selection and source-highlight geometry are unchanged. */
+.paper-workspace .result-study-line {font-size:12px;white-space:normal;overflow-wrap:anywhere}
+.paper-comparisons {margin:8px 0}
+.paper-comparisons h4 {margin:7px 0;font-size:12px;color:#4c6170}
+.paper-comparison-card {padding:8px 10px;margin:5px 0;background:#fff;border:1px solid #d5e3e8;border-radius:7px}
+.paper-comparison-card strong {font-size:14px;color:#175368;line-height:1.4;display:block}
+.paper-comparison-outcomes {font-size:11px;color:#637580;margin:3px 0 0}
+.paper-design-warning {font-size:11px;line-height:1.45;margin:7px 0;padding:7px 9px;background:#fff8e4;border-left:3px solid #d5b853;color:#6e5d2f;border-radius:3px}
+.paper-workspace .outcome-card-body {padding-top:7px}
+.paper-workspace .outcome-card-meta {margin-top:2px}
+.paper-workspace .outcome-formal-name {max-height:3em;overflow:auto}
+.paper-time-label {font-size:11px;color:#596f7e;margin:3px 0}
+.paper-time-tabs {display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 7px}
+.paper-workspace .paper-time-button {border:1px solid #bdced7;border-radius:5px;background:#fff;color:#3e5969;font-size:11px;padding:4px 7px;line-height:1.35;min-height:30px;max-width:100%;overflow-wrap:anywhere;white-space:normal}
+.paper-workspace .paper-time-button[aria-pressed=true] {background:#176b7b;border-color:#176b7b;color:#fff}
+.paper-comparison-choice {display:block;font-size:11px;color:#596f7e;margin:6px 0}
+.paper-comparison-choice select {width:100%;min-width:0;margin-top:3px;padding:5px 7px;font-size:11px;border:1px solid #bdced7;border-radius:5px;background:#fff;color:#263d4b}
+.paper-datum {display:flex;flex-direction:column;gap:2px;min-width:0}
+.paper-statistic-type,.paper-sample-size {color:#5d707e;font-size:10px;line-height:1.3;display:block}
+.paper-workspace .paper-three-layers .result-table thead th:first-child {width:20%}
+.paper-workspace .paper-three-layers .result-table[data-columns="3"] thead th:nth-child(2) {width:40%}
+.paper-workspace .paper-three-layers .result-table td {vertical-align:middle}
+.paper-meta-hints {margin:6px 0 8px}
+.paper-readiness {font-size:11px;line-height:1.4;color:#6c5c2d;margin:5px 0;padding:4px 7px;border-radius:5px;background:#fff8e1;display:inline-block}
+.paper-readiness[data-readiness="DIRECT"] {background:#e9f5ed;color:#276347}
+.paper-readiness[data-readiness="CONVERTIBLE"] {background:#edf3fc;color:#315c8a}
+.paper-readiness[data-readiness="UNUSABLE"] {background:#f1f2f4;color:#6a6d74}
+.paper-meta-line {display:flex;align-items:center;flex-wrap:wrap;gap:3px 5px;margin:2px 0;font-size:11px;line-height:1.45;color:#4f6574}
+.paper-meta-line>span {flex:1;min-width:160px}
+.paper-meta-hints>.result-details {margin:3px 0;padding:0;border:0}
+.paper-meta-hints>.result-details>summary {font-size:10px;font-weight:500;display:inline-block}
+.paper-meta-hints>.result-details p {font-size:11px;line-height:1.5;margin:5px 0}
+.paper-derived-preview {padding:5px;background:#f5f8fc}
+.paper-no-paired {font-size:12px;padding:7px 8px;background:#f4f7f9;border-radius:5px;color:#566b77}
+.paper-result-set {margin:7px 0}
+.paper-result-type {font-size:11px;font-weight:600;color:#435e6d;margin:8px 0 2px}
+.paper-workspace #fuzzy-needs-review>summary {font-weight:600}
+.paper-workspace #fuzzy-needs-review .result-issue-group {margin:5px 0}
+@media(max-width:500px){
+  .paper-comparison-card {padding:7px}
+  .paper-comparison-card strong {font-size:13px}
+  .paper-workspace .outcome-title {font-size:13px}
+  .paper-workspace .paper-three-layers .result-table thead th:first-child {width:20%}
+  .paper-statistic-type,.paper-sample-size {font-size:9px}
+  .paper-meta-line>span {min-width:120px}
+}
+
+.paper-selection-suggestion {margin:7px 0;padding:7px 9px;border-left:3px solid #4a8997;background:#edf6f7;border-radius:3px}
+.paper-selection-suggestion h4 {font-size:11px;color:#315b66;margin:0 0 4px}
+.paper-selection-suggestion p {font-size:11px;line-height:1.4;margin:2px 0;color:#405e67}
