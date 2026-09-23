@@ -48,3 +48,29 @@
 .paper-selection-suggestion {margin:7px 0;padding:7px 9px;border-left:3px solid #4a8997;background:#edf6f7;border-radius:3px}
 .paper-selection-suggestion h4 {font-size:11px;color:#315b66;margin:0 0 4px}
 .paper-selection-suggestion p {font-size:11px;line-height:1.4;margin:2px 0;color:#405e67}
+
+.paper-giv-result {margin:10px 0;padding-top:8px;border-top:1px solid #d6e4df}
+.paper-giv-summary {margin:6px 0;padding:10px 12px;background:#eef7f2;border:1px solid #c2ddce;border-radius:6px;overflow-wrap:anywhere}
+.paper-giv-summary[hidden] {display:none}
+.paper-giv-values p {margin:3px 0;font-size:12px;line-height:1.5}
+.paper-giv-values strong {display:block;margin:5px 0;color:#245f43}
+.paper-giv-values .paper-giv-se {font-size:16px}
+.paper-giv-values .paper-giv-usage {font-size:12px}
+.paper-giv-label {font-weight:600}
+.paper-giv-summary .decision-actions {flex-wrap:wrap;margin-bottom:0}
+@media(max-width:500px){.paper-giv-summary{padding:8px}.paper-giv-summary .decision-actions button{white-space:normal;max-width:100%}}
+
+
+/* Result-set decisions stay distinct from the provenance state of each cell. */
+.result-set-conflict-warning {padding:8px 10px;margin:8px 0;border:1px solid #d9b457;border-radius:5px;background:#fff8e5;color:#685017;overflow-wrap:anywhere}
+.result-set-conflict-warning p {margin:3px 0;line-height:1.45;font-size:12px}
+.accepted-data-tray>.result-set-conflict-warning {flex-basis:100%;margin:2px 0 0}
+.result-set-conflict-existing {padding-left:20px;font-size:12px;line-height:1.5}
+.decision-dialog[data-result-set-conflict] .decision-actions {align-items:stretch;flex-direction:column}
+.decision-dialog[data-result-set-conflict] .decision-actions button {white-space:normal;text-align:left}
+.paper-workspace .decision-cell .decision-badge {font-size:9px;background:#edf2f5;color:#566570}
+.paper-factorial-values { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.6rem; }
+.paper-analysis-node { min-width:0; padding:.65rem; border:1px solid var(--border,#d8e0e5); border-radius:8px; }
+.paper-analysis-node > strong { display:block; margin-bottom:.4rem; overflow-wrap:anywhere; }
+.paper-node-badge { display:block; font-size:.72rem; font-weight:normal; color:#536b83; margin:.25rem 0; }
+@media(max-width:420px) { .paper-factorial-values { grid-template-columns:1fr; } }

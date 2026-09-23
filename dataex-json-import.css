@@ -1,0 +1,14 @@
+.json-import-controls{margin:10px 0;font-size:12px}
+.json-import-controls button{font-size:12px}
+.json-import-controls .hint{margin:4px 0}
+.json-import-dialog{width:min(560px,calc(100vw - 24px));max-height:88vh;overflow:auto;border:1px solid #cbd5e1;border-radius:10px;padding:20px;color:#1e293b}
+.json-import-dialog::backdrop{background:#0f172a55}
+.json-import-dialog h2{margin:0 0 12px;font-size:18px}
+.json-import-dialog dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:10px 0}
+.json-import-dialog dt,.json-import-dialog dd{margin:0;overflow-wrap:anywhere}
+.json-import-dialog .json-import-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.json-import-dialog .json-import-actions button{flex:1 1 auto}
+.json-import-dialog details{font-size:12px;margin-top:12px}
+.json-import-dialog select{max-width:100%;width:100%}
+.json-import-error{color:#991b1b;white-space:pre-wrap;overflow-wrap:anywhere}
+.import-version{display:block;font-size:11px;color:#64748b}

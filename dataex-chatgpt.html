@@ -11,13 +11,40 @@
   <script defer src="dataex-fuzzy-core.js"></script>
   <script defer src="dataex-ico-mapping.js"></script>
   <script defer src="dataex-results-model.js"></script>
+  <script defer src="dataex-effect-type.js"></script>
+  <script defer src="dataex-arm-ontology.js"></script>
   <script defer src="dataex-paper-model.js"></script>
   <script defer src="dataex-source-navigation.js"></script>
   <script defer src="dataex-decisions.js"></script>
+  <script defer src="dataex-confirmation.js"></script>
+  <script defer src="dataex-csv-trace.js"></script>
+  <script defer src="dataex-csv-trace-ui.js"></script>
+  <link rel="stylesheet" href="dataex-csv-trace.css">
+  <script defer src="dataex-result-list.js"></script>
+  <script defer src="dataex-outcome-workflow.js"></script>
+  <script defer src="dataex-work-session.js"></script>
+  <script defer src="dataex-work-session-ui.js"></script>
+<script defer src="dataex-simple-flow.js"></script><script defer src="dataex-simple-flow-ui.js"></script>
+  <link rel="stylesheet" href="dataex-work-session.css">
+  <script defer src="dataex-outcome-workflow-ui.js"></script>
+  <link rel="stylesheet" href="dataex-outcome-workflow.css">
+  <script defer src="dataex-focus-review.js"></script>
+  <link rel="stylesheet" href="dataex-focus-review.css">
   <script defer src="dataex-review-store.js"></script>
+  <script defer src="dataex-review-projects.js"></script>
   <script defer src="dataex-review-workspace.js"></script>
+  <script defer src="dataex-presentation-cache.js"></script>
   <script defer src="dataex-results-ui.js"></script>
-  <script defer src="dataex-fuzzy-workspace.js"></script>
+  <script defer src="dataex-fuzzy-cache.js"></script>
+  <link rel="stylesheet" href="dataex-extraction-timing.css">
+  <script defer src="dataex-extraction-timing.js"></script>
+  <link rel="stylesheet" href="dataex-json-import.css">
+  <script defer src="dataex-json-import.js"></script>
+  <script defer src="dataex-json-import-ui.js"></script>
+  <script defer src="dataex-ai-proposal.js"></script><script defer src="dataex-ai-proposal-add-ui.js"></script><script defer src="dataex-ai-proposal-ui.js"></script><link rel="stylesheet" href="dataex-ai-proposal.css">
+  <script defer src="dataex-batch.js"></script>
+  <script defer src="dataex-sr-reference.js"></script>
+<script defer src="dataex-fuzzy-workspace.js"></script>
   <script defer src="dataex-webmcp.js"></script>
 
   <style>
@@ -48,34 +75,38 @@
 <link rel="stylesheet" href="dataex-results.css">
 <link rel="stylesheet" href="dataex-review.css">
 <link rel="stylesheet" href="dataex-paper.css">
-</head>
+<link rel="stylesheet" href="dataex-final-ui.css">
+<link rel="stylesheet" href="dataex-simple-flow.css"></head>
 <body>
-<header><h1>DataEx <small>Fuzzy Data Extraction Workspace</small></h1><div class="header-actions"><a href="index.html">DataEx ホーム</a><details class="diagnostics"><summary>診断</summary><div id="webmcp-status" class="status" role="status">site tools: 未検出</div><div id="app-version" class="status"></div><p class="status">PDF本体は保存・送信しません。必要な本文と抽出結果はツール応答でWorkと共有します。条件・結果・確認状態はこのブラウザに保存します。</p></details></div></header>
+<header><h1>DataEx <small>Fuzzy Data Extraction Workspace</small></h1><div class="header-actions"><a href="index.html">DataEx ホーム</a><details class="diagnostics"><summary>診断</summary><div id="webmcp-status" class="status" role="status">site tools: 未検出</div><div id="app-version" class="status"></div><div class="status">UI-FINAL-1.0 · OUTPUT-GATE-1.0 · CSV-TRACE-1.1</div><p class="status">PDF本体は保存・送信しません。必要な本文と抽出結果はツール応答でWorkと共有します。条件・結果・確認状態はこのブラウザに保存します。</p></details></div></header>
 <main>
   <aside id="conditions-pane">
     <div class="fuzzy-intro"><h2>PDFから、使えるデータへ。</h2><p>まず候補を見つけて、曖昧な点だけあとから確認。</p></div>
     <div id="storage-message" class="message" role="status"></div>
     <div id="condition-content">
-      <div id="drop-zone" class="drop-zone"><strong>PDF</strong><input id="pdf-file" type="file" accept="application/pdf,.pdf" multiple hidden><button id="choose-pdf" type="button">PDFを選択</button><p class="hint">複数のPDFも選択できます。ここにドラッグ＆ドロップ。</p></div>
+      <div id="drop-zone" class="drop-zone"><strong>PDF</strong><input id="pdf-file" type="file" accept="application/pdf,.pdf" multiple hidden><button id="choose-pdf" type="button">PDFを選ぶ</button><p class="hint">複数のPDFも選択できます。ここにドラッグ＆ドロップ。</p></div>
       <div id="pdf-status" class="message" role="status">PDFを選択してください。</div>
       <div id="fuzzy-pdf-queue" aria-label="選択中のPDF"></div><p id="fuzzy-queue-note" class="hint"></p>
       <form id="conditions">
-        <button id="fuzzy-extract" class="primary" type="submit">このPDFから使えるデータを探す</button>
-        <p class="hint">ChatGPT / Codexが論文を読み、候補をこの画面に返します。PDFを自動送信しません。</p>
-        <p id="fuzzy-mode" role="status"></p>
-        <details id="sr-context"><summary>SR条件を追加すると精度が上がります（任意）</summary>
+        <details id="sr-context"><summary>PICO / SR条件を添える（任意）</summary>
+        <div class="sr-clear-actions"><button id="clear-sr" type="button">SR条件をすべてクリア</button><p class="hint">レビュー名・採用済みデータは保持します。</p></div>
         <p class="hint">SRで定義したICOをそのまま入力してください。原著と表現が違っていても、AIが意味的に対応づけます。</p>
         <label for="review-name">Review / Project name <span class="optional">任意</span></label><input id="review-name" maxlength="500" placeholder="例：腰痛の治療">
-        <label for="population">Population <span class="optional">任意</span></label><input id="population" maxlength="2000" placeholder="例：Adults with chronic low back pain">
+        <label for="population">Population <span class="optional">任意</span></label><div class="sr-clear-field"><input id="population" maxlength="2000" placeholder="例：Adults with chronic low back pain"><button type="button" data-clear-sr="population" aria-label="Populationをクリア">×</button></div>
         <label for="intervention">Intervention <span class="optional">任意</span></label><div class="sr-clear-field"><input id="intervention" maxlength="2000" placeholder="例：Acupuncture"><button type="button" data-clear-sr="intervention" aria-label="Interventionをクリア">×</button></div>
         <label for="comparator">Comparator <span class="optional">任意</span></label><div class="sr-clear-field"><input id="comparator" maxlength="2000" placeholder="例：Usual care"><button type="button" data-clear-sr="comparator" aria-label="Comparatorをクリア">×</button></div>
         <label for="outcomes">Outcomes of interest <span class="optional">任意・1行に1つ</span></label><div class="sr-clear-field"><textarea id="outcomes" rows="2" maxlength="8000" placeholder="例：Pain&#10;Disability&#10;空欄なら論文から候補を探します"></textarea><button type="button" data-clear-sr="outcomes" aria-label="Outcomesをクリア">×</button></div>
-        <button id="clear-sr" type="button">SR条件をすべてクリア</button><p class="hint">レビュー名・採用済みデータは保持します。</p>
         </details>
+        <button id="fuzzy-extract" class="primary" type="submit">抽出を始める</button>
+        <p class="hint">設定は不要です。ボタンで依頼文をコピー → 隣のチャットへ貼り付けて送信 → AIの結果をここで確認します。ボタンだけでAIは実行されません。</p>
+        <p id="fuzzy-mode" role="status"></p>
+
         <button id="new-paper" type="button">新しいPDFを解析</button>
         <div id="extract-message" class="message" role="status"></div>
         <div id="request-guide" hidden><p>抽出依頼を隣のチャットへ送信してください。細かな抽出ルールの指定は不要です。</p><textarea id="request-text" readonly aria-label="チャットへの抽出依頼" rows="4"></textarea><button id="copy-request" type="button">依頼をコピー</button></div>
+        <div id="extraction-timing" hidden></div>
       </form>
+      <div id="json-import-controls"></div>
     </div>
     <details id="fuzzy-prompt-details"><summary>AI抽出用プロンプトを表示</summary><p id="fuzzy-prompt-version"></p><label for="fuzzy-prompt">内部プロンプト全文（読み取り専用）</label><textarea id="fuzzy-prompt" readonly rows="14" spellcheck="false"></textarea><button id="fuzzy-copy-prompt" type="button">全文コピー</button></details>
     <section id="results-section" class="future"><h2>抽出結果</h2><p id="fuzzy-result-status" role="status"></p><p id="results-empty" class="hint">AIが見つけたOutcomeと数値の候補がここに表示されます。</p><div id="fuzzy-results"></div><div id="result-cards"></div></section>
@@ -86,6 +117,18 @@
     <div id="evidence-bar"><div id="evidence-message" class="message" role="status"></div><nav id="evidence-navigation" aria-label="根拠の切替"></nav></div><div id="search-results" class="results" aria-label="検索結果"></div><div id="pdf-viewer" class="viewer"><div class="empty">右側にPDFが表示されます</div></div>
   </section>
 </main>
-<dialog id="new-paper-dialog" aria-labelledby="new-paper-title"><h2 id="new-paper-title">次の論文へ</h2><p>採用済みデータとReview Workspaceは保持します。</p><label><input type="radio" name="next-paper-ico" value="keep" checked> SR条件を保持</label><label><input type="radio" name="next-paper-ico" value="clear"> SR条件をクリア</label><div class="new-paper-actions"><button id="new-paper-confirm" type="button">次のPDFを選ぶ</button><button id="new-paper-cancel" type="button">キャンセル</button></div></dialog>
+<dialog id="new-paper-dialog" aria-labelledby="new-paper-title">
+  <h2 id="new-paper-title">次の論文へ</h2>
+  <p>以前のレビュー・Raw・audit・採用済みデータ・確定済みStudyは保持します。</p>
+  <label><input type="radio" name="next-paper-ico" value="keep"> 同じレビューに追加（SR条件を保持）</label>
+  <p class="hint">現在のReview Workspace、ICO、mapping decisionsを引き継ぎます。</p>
+  <label><input type="radio" name="next-paper-ico" value="clear" checked> 同じレビューに追加（SR条件をクリア）</label>
+  <p class="hint">同じレビューでPopulation / Intervention / Comparator / Outcomesを空にし、Paper-only探索します。</p>
+  <label><input type="radio" name="next-paper-ico" value="new-review"> 新しいレビューを開始</label>
+  <p class="hint">新しい保存先を作成し、SR条件とmapping候補が空のPaper-only / Discoveryで始めます。</p>
+  <div id="new-review-fields" hidden><label for="new-review-name">新しいReview名</label><input id="new-review-name" maxlength="500" placeholder="例：Moffett 1999 validation"></div>
+  <p id="new-paper-error" class="message" role="status"></p>
+  <div class="new-paper-actions"><button id="new-paper-confirm" type="button">次のPDFを選ぶ</button><button id="new-paper-cancel" type="button">キャンセル</button></div>
+</dialog>
 </body>
 </html>

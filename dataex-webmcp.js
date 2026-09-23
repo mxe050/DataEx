@@ -263,7 +263,7 @@
     const empty=document.createElement('div');empty.className='empty';empty.textContent='右側にPDFが表示されます';viewer.append(empty);
     $('search-results').replaceChildren();$('pdf-query').value='';$('pdf-file').value='';
     $('page-total').textContent='/ 0';$('page-number').value=1;$('page-number').removeAttribute('max');
-    $('choose-pdf').textContent='PDFを選択';message('evidence-message','');message('pdf-status','PDFを選択してください。');
+    $('choose-pdf').textContent='PDFを選ぶ';message('evidence-message','');message('pdf-status','PDFを選択してください。');
     invalidateSaved();selection.sync();await previousTask?.destroy();
   }
   async function loadPdf(file) {
@@ -274,9 +274,9 @@
     const previousTask = loadingTask; loadingTask = null;
     state.pdf = null; state.filename = ''; state.currentPage = 0; state.loading = true; state.pages.clear();
     selection.reset();
-    viewer.replaceChildren(); $('search-results').replaceChildren(); $('page-total').textContent = '/ 0'; $('page-number').value = 1;
+    viewer.replaceChildren(); $('pdf-query').value=''; $('search-results').replaceChildren(); $('page-total').textContent = '/ 0'; $('page-number').value = 1;
     message('evidence-message', ''); message('pdf-status', 'PDFを読み込んでいます…');
-    $('choose-pdf').textContent = 'PDFを選択'; invalidateSaved(); extraction.detachPdf();
+    $('choose-pdf').textContent = 'PDFを選ぶ'; invalidateSaved(); extraction.detachPdf();
     try {
       await previousTask?.destroy(); checkGeneration(generation);
       if (!window.pdfjsLib) fail('PDF.jsを読み込めませんでした。接続を確認してページを再読み込みしてください。');
@@ -384,7 +384,7 @@
   window.dataexVisual = window.createDataExVisual({state,selection,getExtraction:()=>extraction,tool,schema,pageData,focusEvidence,fuzzyContext:!!window.createDataExFuzzy});
   sourceNavigation = window.DataExSource?.create({state, renderPage, rangeBoxes, clearHighlights, message, ensurePdf: anchor => extraction.ensureSourcePdf?.(anchor)}) || null;
   if (sourceNavigation) window.DataExSourceNavigation = sourceNavigation;
-  const extraction = (window.createDataExFuzzy || window.createDataExExtraction)({ $, state, getState, pageData, pageNumber, checkReady, checkGeneration, normalize, focusEvidence, navigation: sourceNavigation, tool, schema, message, clearPdf });
+  const extraction = (window.createDataExFuzzy || window.createDataExExtraction)({ $, state, getState, pageData, pageNumber, checkReady, checkGeneration, normalize, focusEvidence, navigation: sourceNavigation, tool, schema, message, clearPdf, loadPdf, capturePdfView:()=>({pdfId:state.pdf?.fingerprints?.[0],page:state.currentPage,scale:state.scale,scrollTop:viewer.scrollTop,scrollLeft:viewer.scrollLeft}),restorePdfView:async view=>{if(view.pdfId!==state.pdf?.fingerprints?.[0])return;clearHighlights();message('evidence-message','保存した閲覧位置を復元しました。原著確認・承認とは別です。');if(Number.isFinite(view.scale)&&view.scale!==state.scale)await zoom(view.scale-state.scale);if(view.page>=1&&view.page<=state.pdf.numPages){await renderPage(view.page);state.currentPage=view.page;$('page-number').value=view.page;viewer.scrollTop=view.scrollTop||0;viewer.scrollLeft=view.scrollLeft||0;}} });
   tools.push(...extraction.tools,...window.dataexVisual.tools);
   async function registerTools() {
     const controller = new AbortController(); const registered = [];
@@ -410,7 +410,7 @@
   $('conditions').addEventListener('input', invalidateSaved);
   $('copy-request').addEventListener('click', () => extraction.copyRequest());
   const main = document.querySelector('main'), resizer = $('pane-resizer');
-  let leftRatio = .38;
+  let leftRatio = .52;
   function resizePane(width) {
     if (innerWidth < 830) return;
     const available = main.clientWidth;

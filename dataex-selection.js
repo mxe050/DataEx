@@ -45,8 +45,8 @@ window.createDataExSelection = function ({ state, viewer, renderPage }) {
   function sync() {
     regionMode.disabled = !ready(); textMode.disabled = !ready();
     info.hidden = !active; selectedBar.hidden = !active?.accepted;
-    label.textContent = active ? `選択範囲：PDF p.${active.page}` : '';
-    selectedLabel.textContent = active ? `選択中：PDF p.${active.page}` : '';
+    label.textContent = active ? `範囲の所在：PDF p.${active.page}（表示ページは上部のページ欄）` : '';
+    selectedLabel.textContent = active ? `抽出対象の選択範囲：PDF p.${active.page}` : '';
     previewButton.disabled = busy; previewButton.textContent = busy ? '画像を作成中…' : 'プレビュー';
   }
   function dropCrop() { cropTask?.cancel(); cropTask = null; blob = null; if (url) URL.revokeObjectURL(url); url = null; image.removeAttribute('src'); }

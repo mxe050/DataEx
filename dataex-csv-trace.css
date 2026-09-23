@@ -1,0 +1,16 @@
+.csv-trace-dialog {max-width: min(1000px, 94vw);}
+.csv-trace-dialog fieldset {margin: 12px 0; padding: 12px; border: 1px solid #bbcbd3; border-radius: 8px;}
+.csv-trace-dialog label {display: block; margin: 8px 0;}
+.csv-trace-dialog input:not([type=checkbox]),.csv-trace-dialog textarea,.csv-trace-dialog select {display: block; width: 100%; box-sizing: border-box;}
+.csv-trace-dialog input[type=checkbox] {margin-right: 8px;}
+.csv-trace-dialog pre {white-space: pre-wrap; overflow-wrap: anywhere; max-height: 38vh; overflow: auto;}
+.csv-trace-dialog button {margin: 6px 8px 6px 0;}
+.csv-trace-card-controls {margin: 10px 0;}
+.csv-trace-card-controls input {width: 100%; box-sizing: border-box;}
+
+.csv-trace-dialog .trace-check{display:flex;align-items:flex-start;gap:10px;min-width:0;max-width:100%;white-space:normal}
+.csv-trace-dialog .trace-check input[type=checkbox]{display:inline-block;flex:0 0 20px;width:20px;min-width:20px;max-width:20px;height:20px;padding:0;margin:3px 0 0}
+.csv-trace-dialog .trace-check span{display:block;flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;color:#172b3a;line-height:1.5}
+.csv-trace-dialog fieldset{min-width:0}.csv-trace-dialog p{overflow-wrap:anywhere}
+.trace-selected-target{background:#eef7fc;padding:10px;border-left:3px solid #247ba6}.trace-selected-target strong,.trace-selected-target small{display:block}.trace-selected-target small{font-size:12px;color:#526777}
+.trace-unsaved-warning{padding:12px;border:2px solid #a97524;background:#fff7df;border-radius:6px}.trace-unsaved-warning[hidden]{display:none}

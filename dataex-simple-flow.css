@@ -1,0 +1,35 @@
+/* SIMPLE-FLOW-2.0: one selected row, one approval surface, one cumulative CSV. */
+.focus-workspace{font-size:15px;line-height:1.5}
+.simple-comparison-step{padding:12px;border-bottom:1px solid #cbd5e1;background:#f8fafc}
+.simple-comparison-step select{width:100%;max-width:100%;white-space:normal}
+.simple-selected-row{background:#eaf4ff;outline:2px solid #3476ac;outline-offset:-2px}
+.simple-selected-row strong{display:block;color:#12507d}
+.simple-selected-actions{border:2px solid #3476ac!important;background:#f6faff;padding:12px!important}
+.simple-selected-actions .focus-card{border:0;box-shadow:none;margin:0;padding:0}
+.simple-selected-actions .focus-card>h4,.simple-selected-actions .focus-matrix,.simple-selected-actions .focus-formal-name,.simple-selected-actions .focus-comparison,.simple-selected-actions .focus-time,.simple-selected-actions .focus-subtitle,.simple-selected-actions .focus-population{display:none}
+.simple-selected-actions .focus-actions{position:static;display:flex;flex-wrap:wrap;gap:7px;background:transparent;border:0;padding:10px 0}
+.simple-selected-actions .focus-adoption-target,.simple-selected-actions .focus-declaration{width:100%;margin:0;white-space:normal;overflow-wrap:anywhere}
+.simple-selected-actions .focus-source-status{font-size:13px}
+.focus-value,.focus-overview-value{font-size:17px!important}
+.focus-export-footer{display:none!important}
+.simple-reviewer{display:block;width:100%;font-size:14px}
+.simple-flow-setup,.simple-batch-details{padding:6px}
+.simple-csv-dialog{width:min(1100px,95vw);max-width:95vw}
+.simple-csv-dialog>select{max-width:100%;white-space:normal}
+.simple-csv-table{overflow:auto;max-height:55vh;border:1px solid #bccbd6}
+.simple-csv-table table{border-collapse:collapse;font-size:14px}
+.simple-csv-table td,.simple-csv-table th{padding:8px;border:1px solid #ccd6df;white-space:nowrap;vertical-align:top}
+.simple-csv-table th{position:sticky;top:0;background:#eef3f7;z-index:1}
+.simple-csv-table pre{white-space:pre-wrap;min-width:260px;max-width:550px;font-size:13px}
+.simple-new-row{background:#e9f6ee}.simple-csv-dialog>div:last-child{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+@media(max-width:700px){.simple-selected-actions{display:table-cell!important}.simple-csv-dialog{padding:12px}.focus-workspace button{min-height:34px}.simple-selected-row td:before{white-space:normal!important}}
+
+.simple-selected-actions .focus-adoption-target{display:none}.simple-selected-actions .focus-actions{margin:0 0 8px}.simple-arm-pair{display:flex;flex-wrap:wrap;gap:10px}.simple-arm-pair label{flex:1 1 160px}.simple-arm-pair select{width:100%}.simple-download-alternative{margin-top:12px}
+
+/* PREVIEW-BATCH-1.0: compact queue and readable diagnostic states. */
+.batch-workspace{margin:12px 0;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;background:#f8fafc}
+.batch-workspace h3{font-size:16px;margin:0 0 8px}.batch-workspace h4{font-size:15px}
+.batch-workspace>div:first-of-type{display:flex;flex-wrap:wrap;gap:6px}.batch-workspace button{font-size:14px;padding:7px 9px}
+.batch-workspace textarea{box-sizing:border-box;width:100%;min-height:5em;font-size:13px}.batch-workspace select{max-width:100%;font-size:14px;min-height:34px}
+.batch-workspace pre,.simple-csv-dialog article pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;max-height:260px;overflow:auto}.batch-workspace strong{overflow-wrap:anywhere}
+.simple-csv-dialog article{border:1px solid #cbd5e1;padding:10px;margin:8px 0;overflow-wrap:anywhere}.simple-csv-dialog [role=status]{white-space:pre-wrap;overflow-wrap:anywhere}

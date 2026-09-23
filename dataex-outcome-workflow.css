@@ -1,0 +1,9 @@
+.outcome-workflow{border:1px solid #baccc9;border-radius:10px;background:#f4f9f8;padding:12px;margin:12px 0;font-size:14px;line-height:1.5;color:#203834}
+.outcome-workflow h4{font-size:16px;margin:0 0 6px}.outcome-workflow p{font-size:14px;overflow-wrap:anywhere;margin:6px 0}
+.outcome-workflow button,.workflow-export button{font-size:14px;white-space:normal;line-height:1.4;margin:3px;padding:7px 10px;min-height:36px}
+.outcome-workflow label{display:block;margin:8px 0}.outcome-workflow textarea,.outcome-workflow select{width:100%;max-width:100%;box-sizing:border-box;font:inherit;white-space:normal}
+.workflow-study{display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #d4dfde;padding:10px 0}.workflow-study strong{font-size:15px}.workflow-study small{font-size:13px;white-space:normal;overflow-wrap:anywhere}
+.workflow-export{border:1px solid #aabfbb;border-radius:9px;padding:10px;margin:12px 0;background:#f4f9f8}.workflow-export p{font-size:14px;overflow-wrap:anywhere}
+.workflow-dialog{font-size:14px;line-height:1.5;max-width:min(900px,90vw)}.workflow-dialog label{display:block;margin:10px 0}.workflow-dialog input,.workflow-dialog textarea,.workflow-dialog select{display:block;width:100%;box-sizing:border-box;font:inherit;padding:6px}.workflow-dialog p{white-space:pre-wrap;overflow-wrap:anywhere}
+.workflow-dialog>div{overflow:auto}.workflow-dialog textarea[readonly]{min-height:120px}.outcome-workflow [hidden],.workflow-export[hidden]{display:none!important}
+.focus-export-footer[hidden]{display:none!important}

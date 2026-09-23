@@ -42,9 +42,17 @@ window.DataExResultsUI = (() => {
     for(const values of rows){const tr=el('tr');values.forEach((v,i)=>{const cell=el(i===0?'th':'td');if(i===0)cell.scope='row';if(v instanceof Node)cell.append(v);else cell.textContent=v==null?'—':String(v);tr.append(cell);});body.append(tr);}
     t.append(caption,head,body);wrap.append(t);return wrap;
   }
-  function render({root,study,context,loaded,navigation,review}) {
-    const view=model.build(study,context), raw=view.raw, armMap=new Map(raw.study.arms.map(a=>[a.id,a])), outcomeMap=new Map(raw.outcomes.map(o=>[o.id,o]));
-    const paper=window.DataExPaperModel.build(view,context), crossing=paper.comparisons.isCrossover;
+  function render({root,study,context,reviewContext=context,loaded,navigation,review}) {
+    const buildPresentation=()=>{const view=model.build(study,context);return {view,paper:window.DataExPaperModel.build(view,context)};};
+    const presentation=window.DataExPresentationCache?.get(study,context,buildPresentation)||buildPresentation();
+    const view=presentation.view, raw=view.raw, armMap=new Map(raw.study.arms.map(a=>[a.id,a])), outcomeMap=new Map(raw.outcomes.map(o=>[o.id,o]));
+    // Current SR hints are transient; historical extraction context and Final decisions stay intact.
+    const mappingUpdates=[];
+    function refreshReviewContext(next) { reviewContext=next;for(const update of mappingUpdates)update(); }
+    const paper=presentation.paper, crossing=paper.comparisons.isCrossover;
+    const ontology=paper.comparisons.armOntology, factorial=ontology.isFactorial;
+    const outerRoot=root;let legacyBuilt=false;
+    if(window.DataExFocusReview){const focus=document.createElement("section"),details=document.createElement("details"),summary=document.createElement("summary"),content=document.createElement("div");summary.textContent="全Outcome・Raw / Trace・既存の詳細操作";details.className="focus-legacy";details.append(summary,content);outerRoot.replaceChildren(focus,details);window.DataExFocusReview.render({root:focus,study,view,paper,loaded,navigation,review,context,reviewContext});root=content;}
     root.replaceChildren();root.classList.add('result-workspace','paper-workspace');
     const labels={headings:uniq(raw.sources.map(s=>s.row?.split(/\s+\/\s+/)).filter(p=>p?.length>1).map(p=>p[0])),rows:uniq(raw.sources.map(s=>s.row?.split(/\s+\/\s+/).at(-1)).filter(Boolean))};
     const go=async (anchor,rawId)=>{if(anchor){const result=await navigation.navigateToSource(anchor,labels);if(rawId)await review?.viewed(rawId,result);return result;}};
@@ -60,12 +68,22 @@ window.DataExResultsUI = (() => {
       const presented={...row,display},b=sourceButton(row.sourceAnchor,display,row.raw.id);b.className='result-value';b.dataset.rawId=row.raw.id;
       b.setAttribute('aria-label',`${display} — ${armMap.get(row.raw.armId)?.label||row.raw.population||'比較効果'}, ${row.raw.timepoint}の原著`);return review?review.wrapValue(presented,b):b;
     }
-    function matrix(rows,o,caption) {
-      const regular=rows.filter(r=>!r.raw.comparatorArmId&&armMap.has(r.raw.armId));
+    function matrix(rows,o,caption,displayArms) {
+      if(!displayArms&&factorial){
+        const box=el('div'),nodes=new Set(ontology.analysisNodes.map(a=>a.id)),meta=new Set(ontology.metadata.map(a=>a.id));
+        const original=rows.filter(r=>!meta.has(r.raw.armId)&&(model.baseline(r.raw.timepoint)||!nodes.has(r.raw.armId)));
+        const analysis=rows.filter(r=>!meta.has(r.raw.armId)&&!original.includes(r));
+        if(original.length)box.append(matrix(original,o,caption+' · Original randomized arms',ontology.originalArms));
+        if(analysis.length)box.append(matrix(analysis,o,caption+' · Derived analysis nodes',ontology.analysisNodes));
+        const metadata=rows.filter(r=>meta.has(r.raw.armId));if(metadata.length)box.append(rowTable(metadata,'Study metadata — 治療群ではありません'));
+        return box;
+      }
+      const arms=displayArms||ontology.treatmentArms;
+      const regular=rows.filter(r=>!r.raw.comparatorArmId&&arms.some(a=>a.id===r.raw.armId));
       const times=uniq([...(o?.timepoints||[]).filter(t=>rows.some(r=>r.raw.timepoint===t)),...regular.map(r=>r.raw.timepoint)]);
       const shortTime=t=>t.replace(/weeks?/i,'週').replace(/Treatment period through /i,'治療期間 ～ ');
       const result=el('div');
-      if(regular.length)result.append(table(['時点',...armHeaders(raw.study.arms)],times.map(time=>[shortTime(time),...raw.study.arms.map(a=>{
+      if(regular.length)result.append(table(['時点',...treatmentHeaders(arms)],times.map(time=>[shortTime(time),...arms.map(a=>{
         const matches=regular.filter(r=>r.raw.timepoint===time&&r.raw.armId===a.id),cell=el('div',null,'result-cell');
         if(!matches.length)cell.append(el('span','未報告','result-missing'));
         matches.forEach(r=>{cell.append(valueButton(r));if(matches.length>1)cell.append(sourceButton(r.sourceAnchor));});return cell;
@@ -118,14 +136,16 @@ window.DataExResultsUI = (() => {
     const isEffect=r=>r.raw.resultType==='effect'||!!r.raw.comparatorArmId;
     function treatmentHeaders(arms) {
       const headers=armHeaders(arms);
+      arms.forEach((arm,i)=>{headers[i].title=arm.fullLabel||arm.label;if(arm.pooled)headers[i].append(el('small','Derived / pooled analysis node','paper-node-badge'));});
       if(crossing)arms.forEach((arm,i)=>{const c=paper.comparisons.items.find(c=>c.armIds.includes(arm.id));if(c)headers[i].textContent=arm.id===c.interventionArmId?c.intervention:c.comparator;});
       return headers;
     }
     function statistic(row,o) {return window.DataExPaperModel.classify(row.raw,o,raw);}
     function setDescriptor(set,o) {
       const comparison=paper.comparisons.items.find(c=>c.id===set.comparisonId);
+      const effect=set.rows.length===1&&set.rows[0].raw.comparatorArmId?set.rows[0].raw:null;
       return {...set,label:model.name(outcomeMap.get(o.parentOutcomeId)||o),pointIds:set.rawValueIds||set.rows.map(r=>r.raw.id),outcomeId:o.parentOutcomeId||o.id,
-        comparison:comparison?{...comparison,intervention:comparison.interventionArmId,comparator:comparison.comparatorArmId}:set.comparison};
+        comparison:effect?{label:factorial&&comparison?comparison.label:`${armMap.get(effect.armId)?.label||effect.armId} vs ${armMap.get(effect.comparatorArmId)?.label||effect.comparatorArmId}`,intervention:effect.armId,comparator:effect.comparatorArmId,direction:window.DataExPaperModel.comparisonDirection(effect,raw)}:comparison?{...comparison,intervention:comparison.interventionArmId,comparator:comparison.comparatorArmId}:set.comparison};
     }
     function datum(row,o) {
       const box=el('div',null,'paper-datum'),type=el('span',null,'paper-statistic-type'),sample=el('span',null,'paper-sample-size');
@@ -147,21 +167,22 @@ window.DataExResultsUI = (() => {
       if(readiness&&/片側/.test(readiness.hint||'')&&severity[state?.readiness]<2)state=readiness;
       if(state){const badge=el('p','● '+(state.label||state.readiness),'paper-readiness');badge.dataset.readiness=state.readiness||'';box.append(badge);}
       for(const info of unique) {
+        if(info.effectClassification?.reportedLabel)box.append(el('strong',info.effectClassification.reportedLabel,'paper-effect-type'));
         const line=el('div',null,'paper-meta-line'), text=el('span',info.hint||info.label||'統計量と解析方法を確認してください。');
         line.append(text);if(info.row.sourceAnchor)line.append(sourceButton(info.row.sourceAnchor,'統計量の原著',info.row.raw.id));box.append(line);
         if(info.details)box.append(fold('統計量の扱い · 詳細',d=>{for(const t of Array.isArray(info.details)?info.details:[info.details])d.append(el('p',t));}));
       }
       // Guidance may be shared; conversions belong to each separate arm's Raw/Final row.
-      for(const info of infos){const derived=info.derivedCandidates;if(!derived?.length)continue;
-        const arm=armMap.get(info.row.raw.armId),label=(/HR/i.test(info.statisticType)?'log(HR) / SE変換候補':'変換候補を見る')+' · '+(arm?armAliases.get(arm.label.toLowerCase())||compact(arm.label,24):'比較効果');
-        const detail=fold(label,d=>{d.classList.add('paper-derived-preview');d.append(el('p',[arm?.label,shortTime(info.row.raw.timepoint)].filter(Boolean).join(' / ')),el('p','Derivedの確認用候補です。Rawを保持し、自動採用・CSV反映はしません。','hint'),el('pre',JSON.stringify(derived,null,2)));});
+      for(const info of infos){const derived=info.derivedCandidates?.filter(d=>d.kind!=='EFFECT_CI'||!review?.attachResultSet||rows.length!==1||info.readiness!=='CONVERTIBLE');if(!derived?.length)continue;
+        const arm=armMap.get(info.row.raw.armId),label=(info.effectClassification?.logLabel?info.effectClassification.logLabel+' / SE変換候補':'変換候補を見る')+' · '+(arm?armAliases.get(arm.label.toLowerCase())||compact(arm.label,24):'比較効果');
+        const detail=fold(label,d=>{d.classList.add('paper-derived-preview');d.append(el('p',[arm?.label,shortTime(info.row.raw.timepoint)].filter(Boolean).join(' / ')),el('p','Derivedの確認用候補です。Rawを保持し、自動採用・CSV反映はしません。','hint'));for(const item of derived)d.append(el('pre',JSON.stringify(window.DataExPaperModel.derivedPreview({...item,rawInputs:rows.find(r=>r.raw.id===info.row.raw.id)?.raw.statistics,basis:info.row.raw.humanDecisionStatus?'HUMAN_FINAL':'AI_RAW'}),null,2)));});
         detail.dataset.derivedRawId=info.row.raw.id;box.append(detail);
       }
       };refresh();review?.watchFinal?.(refresh);return box;
     }
     function selectionSuggestion() {
-      const eligible=paper.mainOutcomes.flatMap((o,index)=>(o.paperResultSets||[]).filter(s=>!s.sequenceDetail&&s.resultType!=='baseline'&&s.rows.length).map(set=>({o,set,index})));
-      const typeRank={endpoint:0,event:0,effect:1,change:2,other:3};
+      const eligible=paper.mainOutcomes.flatMap((o,index)=>(o.paperResultSets||[]).filter(s=>!s.sequenceDetail&&!s.ontologyDetail&&s.resultType!=='baseline'&&s.rows.length).map(set=>({o,set,index})));
+      const typeRank=factorial?{effect:0,endpoint:1,event:1,change:2,other:3}:{endpoint:0,event:0,effect:1,change:2,other:3};
       eligible.sort((a,b)=>a.index-b.index||(typeRank[a.set.resultType]??3)-(typeRank[b.set.resultType]??3));
       const choice=eligible[0];if(!choice)return null;
       const {o,set}=choice,stats=set.rows.map(r=>r.raw.statistics||{}),finite=n=>typeof n==='number'&&Number.isFinite(n);
@@ -185,7 +206,9 @@ window.DataExResultsUI = (() => {
       const title=button(shortName,()=>{if(body.hidden)open();go(o.sourceAnchor);},'outcome-title');title.disabled=!loaded;title.title=formalName;h.append(title);
       const toggle=button('値を表示',open,'outcome-toggle');toggle.setAttribute('aria-expanded','false');header.append(h,toggle);article.append(header);
       const formal=el('p',formalName,'outcome-formal-name');formal.title=formalName;article.append(formal);
-      if(o.reviewMapping){const mapping=el('p',`SR: ${o.reviewMapping.reviewConcept} ↳ 原著: ${o.reportedName}`,'outcome-review-mapping');mapping.title=o.reviewMapping.reason+'（対応候補）';article.append(mapping);}
+      const mapping=el('p',null,'outcome-review-mapping');article.append(mapping);
+      const updateMapping=()=>{const candidate=window.DataExICO.outcome(o,reviewContext);mapping.hidden=!candidate;mapping.textContent=candidate?`SR: ${candidate.reviewConcept} ↳ 原著: ${o.reportedName}`:'';mapping.title=candidate?candidate.reason+'（対応候補）':'';};
+      mappingUpdates.push(updateMapping);updateMapping();
       const range=o.scale?.min!=null&&o.scale?.max!=null?`${o.scale.min}–${o.scale.max}`:'';
       const unit=range?String(o.scale?.unit||'').replace('('+range+')','').replace('('+range.replace('–','-')+')','').trim():o.scale?.unit;
       const direction=/lower.*better|higher.*worse|低.*良|高.*悪/i.test(o.scale?.direction||'')?'低いほど良い':/higher.*better|lower.*worse|高.*良|低.*悪/i.test(o.scale?.direction||'')?'高いほど良い':'';
@@ -193,24 +216,49 @@ window.DataExResultsUI = (() => {
       if(o.sourceAnchor)sub.append(sourceButton(o.sourceAnchor));article.append(sub,body);
       function buildBody() {
         const sets=o.paperResultSets||paper.resultSets.filter(s=>s.outcomeId===o.id);
-        const mainSets=sets.filter(s=>!s.sequenceDetail), detailSets=sets.filter(s=>s.sequenceDetail);
+        const mainSets=sets.filter(s=>!s.sequenceDetail&&!s.ontologyDetail), detailSets=sets.filter(s=>s.sequenceDetail);
+        const variants=o.variants||[],adjustedVariants=variants.filter(v=>/adjusted/i.test(model.textOf(v)));
+        const effectSets=[...mainSets.filter(s=>s.resultType==='effect').map(set=>({set,outcome:o})),...adjustedVariants.flatMap(v=>paper.resultSets.filter(s=>s.outcomeId===v.id&&!s.sequenceDetail).map(set=>({set,outcome:v})))];
+        const givSets=effectSets.filter(({set})=>set.rows.length===1);
         const mainRows=distinctRows(mainSets.flatMap(s=>s.rows));
         const ordinary=mainRows.filter(r=>!isBase(r)&&!isEffect(r));
         const featuredEffects=ordinary.length?[]:mainRows.filter(isEffect);
-        const times=uniq([...ordinary,...featuredEffects].map(r=>r.raw.timepoint));
+        const times=uniq([...ordinary,...featuredEffects,...givSets.flatMap(({set})=>set.rows)].map(r=>r.raw.timepoint));
         const availableComparisons=paper.comparisons.items.filter(c=>mainSets.some(s=>s.comparisonId===c.id));
         let selectedComparison=availableComparisons[0]?.id||null;
         let selectedTime=times[0]||mainSets.find(s=>s.resultType!=='baseline')?.timepoint||'';
         const tabs=el('div',null,'paper-time-tabs');tabs.setAttribute('role','group');tabs.setAttribute('aria-label',formalName+'の時点');
         const candidates=el('div',null,'paper-current-result');
+        let changePanel=null;
+        // Expanded Change controls reuse the candidate IDs from the main view.
+        function drawChanges() {
+          if(!changePanel)return;
+          changePanel.replaceChildren();
+          const changes=(o.followUpRows||[]).filter(r=>r.raw.resultType==='change');
+          changePanel.append(matrix(changes,o,'原著のchange（正負の定義はRaw参照）'));
+          for(const set of mainSets.filter(s=>s.resultType==='change'&&(!selectedComparison||s.comparisonId===selectedComparison))){
+            const target=el('section',null,'paper-result-set');
+            target.dataset.resultSetId=set.id;target.dataset.resultType='change';target.dataset.timepoint=set.timepoint;
+            target.append(el('p',`Result type: change · ${shortTime(set.timepoint)}`,'paper-result-type'),metaHint(set.rows,o,set.readiness));
+            review?.attachResultSet?.(target,setDescriptor(set,o));changePanel.append(target);
+          }
+        }
         function draw() {
           candidates.replaceChildren();tabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.timepoint===selectedTime)));
-          const endpoint=ordinary.filter(r=>r.raw.timepoint===selectedTime&&r.raw.resultType!=='change');
-          const change=ordinary.filter(r=>r.raw.timepoint===selectedTime&&r.raw.resultType==='change');
+          const selectedRows=factorial?distinctRows(mainSets.filter(s=>s.comparisonId===selectedComparison).flatMap(s=>s.rows)):ordinary;
+          const endpoint=selectedRows.filter(r=>!isEffect(r)&&r.raw.timepoint===selectedTime&&r.raw.resultType!=='change');
+          const change=selectedRows.filter(r=>r.raw.timepoint===selectedTime&&r.raw.resultType==='change');
           const baselines=mainRows.filter(isBase);
-          const clinicalArms=crossing?raw.study.arms.filter(a=>mainRows.some(r=>r.raw.armId===a.id&&!r.raw.comparatorArmId)):raw.study.arms;
+          const activeComparison=paper.comparisons.items.find(c=>c.id===selectedComparison);
+          const clinicalArms=factorial?ontology.analysisNodes.filter(a=>activeComparison?.armIds.includes(a.id)):crossing?ontology.treatmentArms.filter(a=>mainRows.some(r=>r.raw.armId===a.id&&!r.raw.comparatorArmId)):ontology.treatmentArms;
           const cell=(rows,a)=>{const c=el('div',null,'result-cell');const matches=rows.filter(r=>r.raw.armId===a.id);if(!matches.length)c.append(el('span','未報告','result-missing'));for(const r of matches)c.append(datum(r,o));return c;};
-          if(o.dataType==='continuous'&&clinicalArms.length) {
+          if(factorial&&clinicalArms.length&&(endpoint.length||change.length)){
+            const contrast=el('section',null,'paper-factorial-comparison');contrast.dataset.comparisonId=selectedComparison;
+            contrast.append(el('p',activeComparison.label+' · '+shortTime(selectedTime),'paper-result-type'));
+            const values=el('div',null,'paper-factorial-values');
+            for(const arm of clinicalArms){const group=el('section',null,'paper-analysis-node');group.dataset.armId=arm.id;const title=el('strong',arm.label);title.title=arm.fullLabel;group.append(title);if(arm.pooled)group.append(el('small','Derived / pooled analysis node','paper-node-badge'));group.append(cell(endpoint.length?endpoint:change,arm));values.append(group);}
+            contrast.append(values,el('p','原著の同じ表・解析モデルの報告値を対応づけています。調整済み平均のSEはSDへ転用しません。','hint'));candidates.append(contrast);
+          } else if(o.dataType==='continuous'&&clinicalArms.length) {
             const baselineCell=a=>{
               const rows=baselines.filter(r=>r.raw.armId===a.id), endpointLabel=endpoint.find(r=>r.raw.armId===a.id)?.sourceAnchor?.label;
               const sameReport=endpointLabel?rows.filter(r=>r.sourceAnchor?.label===endpointLabel):[];
@@ -232,21 +280,36 @@ window.DataExResultsUI = (() => {
           // Each control addresses exactly one comparison, timepoint and result type.
           for(const set of selectedSets){const target=el('section',null,'paper-result-set');target.dataset.resultSetId=set.id;target.dataset.resultType=set.resultType;
             target.append(el('p',`Result type: ${set.resultType} · ${shortTime(set.timepoint)}`,'paper-result-type'),metaHint(set.rows,o,set.readiness));
-            review?.attachResultSet?.(target,setDescriptor(set,o));candidates.append(target);}
+            review?.attachResultSet?.(target,setDescriptor(set,o));if(factorial&&!isEffect(set.rows[0]))candidates.append(fold('調整平均の扱い・判断',d=>d.append(target)));else candidates.append(target);}
+          // Surface the selected time's GIV candidate without opening the adjusted-effect/JSON folds.
+          // Use the original Result set ID so both views share one human decision and basket entry.
+          for(const {set,outcome} of givSets.filter(({set})=>set.timepoint===selectedTime&&!selectedSets.some(s=>s.id===set.id))){
+            const comparison=paper.comparisons.items.find(c=>c.id===selectedComparison),row=set.rows[0].raw;
+            if(comparison&&![row.armId,row.comparatorArmId].every(id=>comparison.armIds.includes(id)))continue;
+            const target=el('section',null,'paper-giv-result');target.dataset.effectRawId=set.rawValueIds.join(',');
+            const label=el('p',null,'paper-result-type');
+            const refresh=()=>{const info=statistic({...set.rows[0],raw:review?.readFinalRow?.(row.id)||row},outcome);target.hidden=info.readiness!=='CONVERTIBLE'||!info.derivedCandidates?.some(d=>d.kind==='EFFECT_CI');label.textContent=info.statisticType+' · '+shortTime(set.timepoint);};
+            refresh();review?.watchFinal?.(refresh);
+            if(factorial){const evidence=el('div',null,'paper-factorial-effect');evidence.append(el('strong',/Net benefit/i.test(set.rows[0].sourceAnchor?.column||'')?'Adjusted net benefit':'Reported adjusted effect'),valueButton(set.rows[0]),sourceButton(set.rows[0].sourceAnchor));target.append(label,evidence);}else target.append(label,rowTable(set.rows,'Reported effect — 原著の効果量・CI'));
+            review?.attachResultSet?.(target,setDescriptor(set,outcome));candidates.append(target);
+          }
           if(!guidanceRows.length&&detailSets.length)candidates.append(el('p','● 確認が必要 · paired analysis / within-person情報を優先します。','paper-readiness'));
+          drawChanges();
         }
         for(const t of times){const b=button(shortTime(t),()=>{selectedTime=t;draw();},'paper-time-button');b.dataset.timepoint=t;b.title=t;tabs.append(b);}
         if(times.length>1)body.append(el('p','時点','paper-time-label'),tabs);
         if(availableComparisons.length>1){const label=el('label','採用する比較','paper-comparison-choice'),select=el('select');select.setAttribute('aria-label',formalName+'の採用する比較');for(const c of availableComparisons){const option=el('option',c.label);option.value=c.id;select.append(option);}select.value=selectedComparison;select.addEventListener('change',()=>{selectedComparison=select.value;draw();});label.append(select);body.append(label);}
         body.append(candidates);draw();
+        if(factorial)body.append(fold(`元の${ontology.originalArms.length} randomized groupsを見る`,d=>{d.append(el('p','Original randomized arms — pooled nodeと研究全体の合計は含めません。','hint'));const originalIds=new Set(ontology.originalArms.map(a=>a.id));const rows=(o.rows||[]).filter(r=>originalIds.has(r.raw.armId)&&(!ontology.analysisNodes.some(a=>a.id===r.raw.armId)||isBase(r)));d.append(matrix(rows,o,'原著の割付群別の報告値',ontology.originalArms));}));
         if(o.nMissing)body.append(warning('n未確定 · 詳細','時点別の尺度解析nは未確定。追跡人数を自動代入していません。'));
         if(detailSets.length)body.append(fold('Sequence / periodの詳細',d=>{d.append(el('p','投与順序・期間別の値です。独立した介入群として扱いません。','hint'));for(const set of detailSets){d.append(rowTable(set.rows,set.label||[set.timepoint,set.resultType].join(' / ')),metaHint(set.rows,o,set.readiness));review?.attachResultSet?.(d,setDescriptor(set,o));}}));
-        const changes=(o.followUpRows||[]).filter(r=>r.raw.resultType==='change');if(changes.length)body.append(fold('Change / 改善量を表示',d=>d.append(matrix(changes,o,'原著のchange（正負の定義はRaw参照）'))));
-        const variants=o.variants||[],adjustedVariants=variants.filter(v=>/adjusted/i.test(model.textOf(v)));
+        const changes=(o.followUpRows||[]).filter(r=>r.raw.resultType==='change');if(changes.length)body.append(fold('Change / 改善量を表示',d=>{changePanel=el('div',null,'paper-change-results');d.append(changePanel);drawChanges();}));
         const effects=distinctRows([...(o.followUpRows||[]).filter(isEffect),...adjustedVariants.flatMap(v=>v.rows)]);
-        if(effects.length)body.append(fold('調整済み効果を表示',d=>{d.classList.add('outcome-effects');d.append(rowTable(effects,'Reported effect — 原著の効果量・CI'),metaHint(effects,o));
-          for(const set of mainSets.filter(s=>s.resultType==='effect'))review?.attachResultSet?.(d,setDescriptor(set,o));
-          for(const v of adjustedVariants)for(const set of paper.resultSets.filter(s=>s.outcomeId===v.id&&!s.sequenceDetail))review?.attachResultSet?.(d,setDescriptor(set,v));
+        if(effects.length)body.append(fold('調整済み効果を表示',d=>{d.classList.add('outcome-effects');
+          effectSets.sort((a,b)=>effects.findIndex(r=>a.set.rawValueIds.includes(r.raw.id))-effects.findIndex(r=>b.set.rawValueIds.includes(r.raw.id)));
+          const covered=new Set();
+          for(const {set,outcome} of effectSets){const section=el('section',null,'paper-effect-candidate');section.dataset.effectRawId=set.rawValueIds.join(',');set.rawValueIds.forEach(id=>covered.add(id));section.append(rowTable(set.rows,'Reported effect — 原著の効果量・CI'),metaHint(set.rows,outcome,set.readiness));review?.attachResultSet?.(section,setDescriptor(set,outcome));d.append(section);}
+          for(const row of effects.filter(r=>!covered.has(r.raw.id)))d.append(rowTable([row],'Reported effect — 原著の効果量・CI'),metaHint([row],o));
           d.append(fold('調整方法・その他の効果',x=>{uniq(effects.map(r=>r.raw.adjustment).filter(Boolean)).forEach(s=>x.append(el('p',s)));variants.forEach(v=>x.append(el('p',model.name(v)+' — '+v.mapping.reason)));}));}));
         const otherEffects=variants.filter(v=>!adjustedVariants.includes(v));if(otherEffects.length)body.append(fold('関連する効果（NNTなど）',d=>{for(const v of otherEffects){d.append(el('p',model.name(v)),rowTable(v.rows,'関連する効果'),el('p',v.mapping.reason));}}));
         if(o.baselineRows?.length)body.append(fold('Baselineを表示',d=>{d.append(matrix(o.baselineRows,{timepoints:['Baseline']},'Baseline — 原著の各報告を保持'));if(o.baselineRows.some((r,i,rows)=>rows.some((other,j)=>i!==j&&other.raw.armId===r.raw.armId&&other.display!==r.display)))d.append(warning('Baselineに報告差 · 詳細','表によってBaselineの値・SDが異なります。両方の報告を保持しています。'));}));
@@ -256,12 +319,13 @@ window.DataExResultsUI = (() => {
       }
       if(initiallyOpen)open();return article;
     }
+    function buildLegacy(){if(legacyBuilt)return;legacyBuilt=true;
     const summary=el('section',null,'result-study');summary.id='fuzzy-study-summary';
     const studyTitle=(raw.study.label||study.pdf.filename).split(/\s+[—–]\s+/)[0];summary.append(el('h3',studyTitle));
     summary.append(el('p',paper.comparisons.design,'result-study-line'));
     const comparisons=el('section',null,'paper-comparisons');comparisons.setAttribute('aria-label','使えそうな比較');comparisons.append(el('h4','使えそうな比較'));
     for(const c of paper.comparisons.items.slice(0,3)){
-      const item=el('div',null,'paper-comparison-card');item.dataset.comparisonId=c.id;item.append(el('strong',c.label));
+      const item=el('div',null,'paper-comparison-card');item.dataset.comparisonId=c.id;item.title=c.fullLabel;item.append(el('strong',c.label));if(c.pooled)item.append(el('small','Derived / pooled analysis node','paper-node-badge'));
       const names=paper.mainOutcomes.filter(o=>c.outcomeIds?.includes(o.id)).slice(0,3).map(o=>outcomeAliases.get(model.name(o))||compact(model.name(o),35));
       item.append(el('p',names.length?names.join(' / '):'原著の比較可能な結果を確認','paper-comparison-outcomes'));comparisons.append(item);
     }
@@ -269,8 +333,15 @@ window.DataExResultsUI = (() => {
     summary.append(comparisons);
     if(paper.comparisons.warning)summary.append(el('p',paper.comparisons.warning,'paper-design-warning'));
     const suggestion=selectionSuggestion();if(suggestion)summary.append(suggestion);
-    summary.append(fold(crossing?'Sequence / period・研究集団の詳細':`${raw.study.arms.length}群すべてを見る`,d=>d.append(table(['原著の報告単位','割付 n','解析集団 n','Safety n'],raw.study.arms.map(a=>[a.label,a.randomizedN,a.analyzedN,a.safetyN]),'研究集団（尺度別・時点別のnとは別）'))));
-    if(context.intervention||context.comparator)summary.append(fold('SRのICOとの対応候補',d=>{for(const m of window.DataExICO.arms(raw,context)){const p=el('p',`SR: ${m.reviewConcept||'Needs review（対応未確定）'} ↳ 原著: ${m.paperTerm}`);p.title=m.reason;d.append(p);}d.append(el('p','元の全群を保持しています。対応候補から群の数値を自動統合しません。','hint'));}));
+    summary.append(fold(factorial?`元の${ontology.originalArms.length} randomized groupsを見る`:crossing?'Sequence / period・研究集団の詳細':`${ontology.originalArms.length}群すべてを見る`,d=>d.append(table(['原著の報告単位','割付 n','解析集団 n','Safety n'],ontology.originalArms.map(a=>[a.label,a.randomizedN,a.analyzedN,a.safetyN]),'Original randomized arms（尺度別・時点別のnとは別）'))));
+    if(factorial)summary.append(fold('Derived analysis nodesを見る',d=>{d.append(table(['解析ノード','区分','元の割付群'],ontology.analysisNodes.map(a=>[a.label,a.badge,a.memberArmIds.map(id=>ontology.originalArms.find(x=>x.id===id)?.label||id).join(' / ')||'要確認']),'原著で報告された解析ノード'));d.append(el('p','原著がNHS/privateのsetting差を検討したうえで報告したpoolです。DataExが数値を再計算・群統合したものではありません。','hint'));}));
+    if(ontology.metadata.length)summary.append(fold('Study metadataを見る',d=>{d.append(table(['研究全体','人数'],ontology.metadata.map(a=>[a.label,a.randomizedN]),'Study metadata — Treatment armではありません'));const ids=new Set(ontology.metadata.map(a=>a.id));d.append(rowTable(view.rawViews.filter(r=>ids.has(r.raw.armId)),'研究全体の記述値（解析比較・Treatment arm CSVには使用しません）'));}));
+    const armMapping=el('div',null,'review-context-arm-mapping');summary.append(armMapping);
+    const updateArms=()=>{
+      const open=!!armMapping.querySelector('details[open]');armMapping.replaceChildren();
+      if(reviewContext.intervention||reviewContext.comparator){const details=fold('SRのICOとの対応候補',d=>{for(const m of window.DataExICO.arms({...raw,study:{...raw.study,arms:ontology.treatmentArms}},reviewContext)){const p=el('p',`SR: ${m.reviewConcept||'Needs review（対応未確定）'} ↳ 原著: ${m.paperTerm}`);p.title=m.reason;d.append(p);}d.append(el('p','元の全群を保持しています。対応候補から群の数値を自動統合しません。','hint'));});details.open=open;armMapping.append(details);}
+    };
+    mappingUpdates.push(updateArms);updateArms();
     summary.append(fold('研究概要・人数・実施状況',d=>{
       d.append(el('p',raw.study.design),el('p',raw.study.followUp),el('p',raw.study.analysisUnit));
       for(const id of raw.study.sourceIds||[]){const s=raw.sources.find(s=>s.id===id);if(s)d.append(sourceButton(model.sourceAnchor(s,raw)));}
@@ -292,7 +363,9 @@ window.DataExResultsUI = (() => {
       const c=el('div');c.id='fuzzy-candidates';rawBrowser(c);d.append(c);
     }));
     review?.attachStudy(root);
-    return view;
+    }
+    const legacy=outerRoot.querySelector(":scope > .focus-legacy");if(legacy)legacy.addEventListener("toggle",()=>{if(legacy.open)buildLegacy();});else buildLegacy();
+    return {...view,refreshReviewContext};
   }
   return Object.freeze({render});
 })();

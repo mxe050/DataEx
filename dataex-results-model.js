@@ -7,7 +7,25 @@
   'use strict';
   const VERSION = '2.0.0';
   const norm = text => String(text || '').normalize('NFKC').toLowerCase().replace(/[−–—]/g, '-').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-  const baseline = text => /baseline|pre.?treatment|^0\s*(weeks?|days?|months?)?$|ベースライン/i.test(text || '');
+  // Time is not the adjustment variable: post-baseline and baseline-adjusted are not baseline.
+  function timePhase(text) {
+    const t=String(text||'').normalize('NFKC').toLowerCase().replace(/[−–—‐‑]/g,'-').trim();
+    if (/change|difference from baseline|変化量|ベースラインからの変化/.test(t)) return 'change';
+    if (/post[-\s]*(?:baseline|treatment|intervention)|after (?:baseline|treatment|intervention)|介入後|治療後/.test(t)) return 'post';
+    if (/baseline[-\s]*adjust|adjust(?:ed|ment).*baseline|ベースライン.*調整/.test(t)) return 'unspecified';
+    // A leading pre-treatment time can include a window/examination qualifier.
+    // Covariate descriptions and pre/post comparisons are not baseline measurements.
+    if (/^(?:pre[-\s]?(?:treatment|intervention)|before (?:treatment|intervention))(?=\s|\d|$)/.test(t) && !/adjust|covariate|versus|\bvs\b|compar|post|after/.test(t)) return 'baseline';
+    if (/^(?:at\s+)?baseline\s+(?:pre[-\s]?[a-z]+|at (?:inclusion|enrolment|enrollment|randomization))$/.test(t)) return 'baseline';
+    if (/^(?:at\s+)?(?:baseline|pre[-\s]?(?:treatment|intervention)|before (?:treatment|intervention)|ベースライン|介入前|治療前)(?:\s*\([^)]*\))?$/.test(t) || /^(?:0\s*(?:weeks?|days?|months?|years?)?|(?:week|day|month|year)\s*0)$/.test(t)) return 'baseline';
+    return 'unspecified';
+  }
+  const baseline = text => timePhase(text)==='baseline';
+  function isBaselineRow(row) {
+    const phase=timePhase(row.timepoint);
+    if (phase==='post'||phase==='change'||/change/i.test(row.resultType||'')) return false;
+    return phase==='baseline'||/^(?:baseline|pre[- ]?(?:treatment|intervention))$/i.test(row.resultType||'');
+  }
   const name = o => o.reportedName || o.conceptCandidate || o.id;
   const textOf = o => [name(o), o.conceptCandidate, o.instrument].join(' ');
   const refs = row => [...new Set(Object.values(row.sourceRefs || {}).filter(Boolean))];
@@ -41,9 +59,9 @@
   function category(o, rows) {
     const text = textOf(o);
     if (/follow.?up.*(?:participants?|denominator|analysis.*n\b)|(?:participants?|denominator).*(?:follow.?up)|analysis sample size|追跡.*人数/i.test(text)) return 'denominator';
-    if (/adherence|attendance|attended|visits completed|completion.*visits|reason.*(?:visits|sessions)|遵守|出席/i.test(text)) return 'conduct';
+    if (/adherence|attendance|attended|visits completed|completion.*visits|reason.*(?:visits|sessions)|(?:correct|accurate).*(?:treatment|allocation).*guess|(?:blinding|masking).*(?:success|assessment)|遵守|出席|割付.*正答/i.test(text)) return 'conduct';
     if (/adjusted.*(?:difference|effect|\bMD\b)|number.*needed.*treat|\bNNT\b|\bp.?value\b|analysis model/i.test(text)) return 'effect';
-    if (rows.length && rows.every(r => baseline(r.timepoint)) && o.timepoints?.every(baseline)) return 'baseline';
+    if (rows.length && rows.every(isBaselineRow) && o.timepoints?.every(baseline)) return 'baseline';
     return 'clinical';
   }
   const stop = new Set('adjusted mean difference differences effect effects number needed to treat nnt score scores change endpoint from baseline outcome primary in at the of and for a an with versus vs improvement clinically meaningful responder proportion participants patients achieving least points reduction response treatment'.split(' '));
@@ -111,12 +129,12 @@
       if (parent) { parent.variants.push(variant); variant.parentOutcomeId = parent.id; }
     }
     for (const o of clinical) {
-      const eligible = o.rows.filter(r => !baseline(r.raw.timepoint));
+      const eligible = o.rows.filter(r => !isBaselineRow(r.raw));
       const representative = [...(eligible.length ? eligible : o.rows)].sort((a,b) =>
         (a.sourceAnchor?.sourceType === 'table' ? 0 : 1) - (b.sourceAnchor?.sourceType === 'table' ? 0 : 1)).find(r=>r.sourceAnchor);
       o.sourceAnchor = representative ? {...representative.sourceAnchor, scope:'outcome', valueText:'', column:''} : null;
       o.nMissing = o.dataType === 'continuous' && eligible.some(r => !finite(r.raw.statistics.n));
-      o.followUpRows = eligible; o.baselineRows = o.rows.filter(r => baseline(r.raw.timepoint));
+      o.followUpRows = eligible; o.baselineRows = o.rows.filter(r => isBaselineRow(r.raw));
     }
     const secondary = clinical.filter(o => o.priority === 'B').sort((a,b) => {
       const rank = o => /responder|≥|>=|improv.*(?:point|%)/i.test(textOf(o)) ? 0 : /adverse|safety|harm|death/i.test(textOf(o)) ? 1 : 2;
@@ -127,5 +145,5 @@
       metadata:entries.filter(o=>o.presentationCategory!=='clinical'), issueGroups:issues(study),
       study, context, rawCount:raw.rawValues.length};
   }
-  return Object.freeze({VERSION, norm, baseline, name, textOf, refs, formatValue, sourceAnchor, category, effectParent, build});
+  return Object.freeze({VERSION, norm, baseline, timePhase, isBaselineRow, name, textOf, refs, formatValue, sourceAnchor, category, effectParent, build});
 });

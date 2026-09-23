@@ -52,6 +52,10 @@ try {
         throw 'Run start-dataex.ps1 from the DataEx folder containing dataex-chatgpt.html and dataex-dev-server.cjs.'
     }
     $dataexNode = Get-Command node.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Codex may still have the PATH inherited before Node.js was reinstalled.
+    if (-not $dataexNode -and (Test-Path -LiteralPath 'C:\Program Files\nodejs\node.exe' -PathType Leaf)) {
+        $dataexNode = [pscustomobject]@{ Source = 'C:\Program Files\nodejs\node.exe' }
+    }
     if (-not $dataexNode) { throw 'Node.js (node.exe) is required to start the local DataEx server.' }
     $dataexChild = Start-Process -FilePath $dataexNode.Source -ArgumentList @('"' + $dataexServer + '"') `
         -WorkingDirectory $dataexRoot -WindowStyle Hidden -PassThru

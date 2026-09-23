@@ -59,9 +59,17 @@
         // elsewhere in the quoted block must not be labelled as exact cells.
         const following=rowLabels.filter(label=>index(label).value!==index(row).value).flatMap(label=>matches(raw,label,{start:rows[0].end,end:bounds.end})).map(m=>m.start);
         bounds={start,end:following.length?Math.min(...following):bounds.end};context=true;
+        // A text-backed table row may have no extracted label for its next row.
+        // Bound a directly following numeric run at the next alphabetic label;
+        // never carry the entire quoted table into a claim of an exact cell.
+        if(anchor.sourceType==='table'){
+          const tail=raw.slice(rows[0].end,bounds.end),run=tail.match(/^[\s\d()[\]{}±−+–—.,:;<>=/%]+/u)?.[0]||'';
+          if((run.match(/\d+(?:\.\d+)?/g)||[]).length>=2)bounds.end=rows[0].end+run.length;
+        }
       }
     }
-    const exact=matches(raw,anchor.valueText,bounds);
+    const bareNumber=/^[−–+-]?\d+(?:\.\d+)?$/.test(String(anchor.valueText||'').trim());
+    const exact=matches(raw,anchor.valueText,bounds).filter(m=>!bareNumber||(!/\d\.?$/.test(raw.slice(Math.max(0,m.start-2),m.start))&&!/^\.?\d/.test(raw.slice(m.end,m.end+2))&&(!/[-−–]/.test(raw[m.start-1]||'')||/^[-−–]/.test(String(anchor.valueText).trim()))));
     if(context && exact.length===1)return {ranges:exact,status:'cell',matchedText:raw.slice(exact[0].start,exact[0].end)};
     const numeric=numericMatches(raw,anchor.valueText||'',bounds);
     if(context && numeric.length===1)return {ranges:numeric,status:'cell',matchedText:raw.slice(numeric[0].start,numeric[0].end)};
@@ -118,7 +126,10 @@
       const found=resolveText(data.raw,anchor,headings);
       result.rects=found.ranges.flatMap(r=>rangeBoxes(data,{matchStart:r.start,matchEnd:r.end})).filter(validRect);
       result.resolutionStatus=found.status;result.matchedText=found.matchedText;
-      if(anchor.sourceType==='figure') {
+      // A printed value in a uniquely selected caption is text evidence. Do
+      // not replace that exact match with a failed figure-label lookup.
+      // Graph selections and estimates retain the existing figure workflow.
+      if(anchor.sourceType==='figure'&&!(anchor.scope==='value'&&!anchor.selectionId&&found.status==='cell'&&!/^[≈~]/.test(anchor.valueText||''))) {
         if(currentSelection) {
           result.rects=[currentSelection.normalizedRect];result.resolutionStatus='selection';
         } else {
