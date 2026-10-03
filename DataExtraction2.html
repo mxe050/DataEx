@@ -48,8 +48,9 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 </style></head>
 <body>
 <header class="app-header"><div class="brand"><span class="brand-symbol">D<span>e</span></span><div><strong>DataExtraction2</strong><span class="brand-caption">論文を読み、解析を考え、原著で確かめる。</span></div></div><div class="header-right"><span id="saved" class="save-state">保存状態を読み込み中</span><button id="quick-backup" class="quiet">作業を保存</button></div></header>
-<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.5.1</span></nav>
+<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.5.2</span></nav>
 <div id="message" class="global-message" role="status" aria-live="polite"></div>
+<div id="backup-panel" class="global-message" hidden><a id="backup-download">作業ファイルをダウンロード</a> <span id="backup-filename" class="hint"></span><p class="hint">生成時点の作業ファイルです。このタブを閉じるまでは同じリンクから取得できます。作業を更新した後は、もう一度「作業を保存」を押してください。</p></div>
 <main id="prepare" class="page prepare-page">
 <section class="intro"><p class="eyebrow">START WITH YOUR QUESTION</p><h1>まず、使える表の<br class="mobile-break">たたき台を。</h1><p>AIの提案から始める。あるいは、一つの論文を丁寧に読む。<br>同じ作業の中で、どちらも選べます。</p></section>
 <section class="setup-section"><div class="section-heading"><span class="step">1</span><h2>今回、どこから始めますか</h2></div><div class="mode-grid"><label class="mode-card"><input id="mode-proposal" type="checkbox" checked><span class="mode-content"><span class="mode-tag">複数論文から考える</span><strong>AI提案モード</strong><span>比較・アウトカム・時点を整理し、メタ分析に使う表と採用候補を提案します。</span></span></label><label class="mode-card"><input id="mode-detailed" type="checkbox" checked><span class="mode-content"><span class="mode-tag">一つの論文を深く読む</span><strong>論文別の詳細抽出</strong><span>本文・表・図・補足を確認し、抽出値と不足する情報を論文ごとに整理します。</span></span></label></div><p class="hint">両方を選べます。作業中も切り替えられます。</p></section>
@@ -784,7 +785,15 @@ function validateRow(row) {
     if(row.kind==='continuous'){
       requireValue(row.spread_type===undefined||['SD','SE'].includes(row.spread_type),'SDとSEを区別してください。');
       if(row.spread_type==='SE')requireValue(['adjusted','unadjusted','unclear'].includes(row.adjustment)&&typeof row.adjustment_note==='string','SEの調整の有無と方法を明示してください。');
-      else requireValue(!row.adjustment||row.adjustment==='unadjusted','調整平均を生平均・SDとして保存できません。SEまたは報告効果量の型を使ってください。');
+      else {
+        // Keep source-reported means when their adjustment is unknown and no
+        // SD was obtained. This does not authorize treating them as raw means
+        // with SD, including after a later correction or CSV edit.
+        const incompleteUnclear=row.adjustment==='unclear'&&typeof row.adjustment_note==='string'&&row.adjustment_note.trim()&&
+          ['sd_treatment','sd_control'].every(key=>row.values?.[key]?.original===null&&row.values[key].current===null);
+        requireValue(!row.adjustment||row.adjustment==='unadjusted'||incompleteUnclear,
+          '調整平均を生平均・SDとして保存できません。調整不明の平均だけを保存する場合は、SDを未取得のままにし、調整の説明を残してください。');
+      }
     }
     if(row.kind==='comparative_effect')requireValue(['MD','SMD','RR','OR','HR','RD','IRR','MEDIAN_DIFFERENCE'].includes(row.statistic_type)&&['adjusted','unadjusted','unclear'].includes(row.adjustment)&&typeof row.adjustment_note==='string','効果量の型・調整の有無を明示してください。');
     if(row.kind==='reported_only')requireValue(row.statistic_type==='not_estimable'&&row.analysis_note.trim()&&Array.isArray(row.report_evidence)&&row.report_evidence.length>0&&row.confidence_level===undefined&&row.spread_type===undefined,'解析できない原著報告には理由と原文根拠が必要です。効果量や分散の型を装えません。');
@@ -855,7 +864,9 @@ function validateRow(row) {
 function warnings(row,{legacySourceLabels=false}={}) {
   const external=row.history?.some(h=>h.type==='external_edit')?['外部編集履歴あり：変更された値・意味と原著の対応を再確認してください']:[];
   const reportOnly=row.kind==='reported_only'?['原著報告のみ：解析数値欄はなく、同じメタ分析には投入できません。',...row.report_evidence.filter(e=>e.source_check==='unverified_page').map(e=>e.source_kind==='visual'?'画像からの転記は未照合。原著で確認してください':'PDFテキスト層で未照合。原著で確認してください')]:[];
-  return external.concat(row.extraction_limitation?['抽出範囲・未取得項目の注意あり：内容を確認してください']:[],reportOnly,keysFor(row).flatMap(k=> {
+  const unclearMean=row.kind==='continuous'&&row.spread_type!=='SE'&&row.adjustment==='unclear'?
+    ['平均の調整有無が不明でSDも未取得です。未調整の群平均・SDとして解析せず、原著の解析方法を確認してください。']:[];
+  return external.concat(row.extraction_limitation?['抽出範囲・未取得項目の注意あり：内容を確認してください']:[],reportOnly,unclearMean,keysFor(row).flatMap(k=> {
     const v=row.values[k], last=v.corrections.at(-1);
     const total=row.kind==='binary'&&k.startsWith('events_')?row.values['total_'+k.slice('events_'.length)]:null;
     const unresolvedPercent=!!(total&&reportedCountPercent(v.reported_lexical)&&(total.original===null||total.current===null));
@@ -1286,7 +1297,7 @@ outcome_reported、definition、実timepoint、population、treatment/control、
 4. 数値の保存形式
 各values要素はvalue、reported_lexical、evidenceを持ち、欠測はvalue=null・reported_lexical=""です。報告された片群値も残します。
 ・binary：events_treatment,total_treatment,events_control,total_control。eventsは結果を経験した患者数です。事象の反復件数を患者数へ変えません。人数(割合)セルは全体をreported_lexicalに保持しvalueは人数だけにします。分母既知なら割合の整合を確認し、不明ならtotal=null。割合から人数・分母を逆算しません。
-・continuous：statistic_type=endpointまたはchange。spread_type=SDならmean_treatment,sd_treatment,n_treatment,mean_control,sd_control,n_control、SEならsdの代わりにseを使います。SD/SE、終了値/変化量、期間平均/終了時点、調整平均/生平均を区別します。SEはadjustment=adjusted/unadjusted/unclearとadjustment_noteを明示し、不明なnだけnullにします。
+・continuous：statistic_type=endpointまたはchange。spread_type=SDならmean_treatment,sd_treatment,n_treatment,mean_control,sd_control,n_control、SEならsdの代わりにseを使います。SD/SE、終了値/変化量、期間平均/終了時点、調整平均/生平均を区別します。SEはadjustment=adjusted/unadjusted/unclearとadjustment_noteを明示し、不明な値はnullにします。調整方法不明で群平均だけ報告されている場合も、adjustment=unclearとadjustment_noteを付け、両群SDをnullのまま保存できます。SD未取得の枠はSD報告の主張ではありません。不明な解析nもnullとし、未調整平均として解析しません。
 ・comparative_effect：原著が直接報告したestimate,ci_low,ci_highを保存します。statistic_type=MD/SMD/RR/OR/HR/RD/IRR/MEDIAN_DIFFERENCE、adjustmentとadjustment_noteを明示します。群別events/totalやnが不明でも、直接報告された群間効果とCIは保存できます。群別データの欠測を理由にreported_onlyへ落としません。CIがあれば原著のconfidence_levelを小数で指定し、なければ上下限ともnull・confidence_levelは省略します。複数信頼水準は原著の主要水準を構造化し、他方の原表記・頁をanalysis_noteへ残し、同じ効果を重複行にしません。
 RDのパーセントポイントと割合尺度を区別し、原著がパーセントポイントで報告した数値はそのままvalue、unit=percentage pointsへ保存します。差の群順（どちらからどちらを引いたか）または比の分子/分母と、尺度の改善方向をdefinition/analysis_noteへ明示します。群順が不明なら不明と残し、符号や逆数を勝手に反転しません。中央値差はMDではなくMEDIAN_DIFFERENCEです。HR、IRR、一定期間の患者リスクは別であり、反復件数から人時間や率比を作りません。
 ・reported_only：values={}、report_evidenceへ原文断片を保存し、型・単位・各群・時点と解析に不足する情報をanalysis_noteへ記します。この行は報告の保存であり、解析数値や統合可能性を意味しません。
@@ -1971,7 +1982,8 @@ function planStatus(plan,rows){
   if(unassessed.length)issues.push({code:'unassessed_results',message:'提案作成後に追加・変更された結果があります。採用判断を見直してください。',row_ids:unassessed});
   const tables=compatibleTables(plan.row_refs.map(ref=>map.get(ref.id)).filter(Boolean));
   if(tables.length>1)issues.push({code:'split_scope',message:'定義・実時点・集団・型・単位・比較などに差があります。同じ比較検討表で差を確認し、解析への投入可否を判断してください。',row_ids:plan.row_refs.map(r=>r.id)});
-  return {stale:issues.some(i=>i.code==='stale_result'),issues,tables,study_rows:studyRows(plan,rows),pooling_permitted:false};
+  const stale=issues.some(i=>i.code==='stale_result');
+  return {stale,refresh_required:stale||unassessed.length>0,unassessed_result_ids:unassessed,issues,tables,study_rows:studyRows(plan,rows),pooling_permitted:false};
 }
 function validateCoverage(input,batch,{allowStale=false}={}){
   allowed(input,['study_id','document_sha256','sections'],'確認範囲');check(input.study_id===null||typeof input.study_id==='string'&&input.study_id.trim(),'確認範囲の研究IDが不正です。');
@@ -2040,10 +2052,11 @@ function workflowBrief(workflow,batch){
     rows:batch.rows.map(r=>({id:r.id,revision:r.revision,study_id:r.study_id,study:r.study,...scopeFor(r),outcome_reported:r.outcome_reported,priority:r.priority||'secondary',analysis_note:r.analysis_note||'',mapping_reason:r.mapping_reason||'',differences:r.differences||'',document_sha256:r.document.sha256,missing_fields:keysFor(r).filter(k=>r.values[k]?.current===null)})),
     documents:batch.documents.map(d=>({sha256:d.sha256,filename:d.filename,page_count:d.page_count,role:d.role||'primary'})),
     documents_without_rows:unrepresentedDocuments(batch),
-    existing_plans:current.plans.map(p=>({id:p.id,title:p.title,priority:p.priority,row_refs:clone(p.row_refs),stale:planStatus(p,batch.rows).stale})),coverage:clone(current.coverage),instructions:WORKFLOW_PROMPT};
+    existing_plans:current.plans.map(p=>{const status=planStatus(p,batch.rows);return {...clone(Object.fromEntries(planInputFields.map(k=>[k,p[k]]))),stale:status.stale,refresh_required:status.refresh_required,unassessed_result_ids:status.unassessed_result_ids,issues:status.issues,study_rows:status.study_rows};}),coverage:clone(current.coverage),instructions:WORKFLOW_PROMPT};
 }
 const WORKFLOW_PROMPT=`目的は、AIが研究横断の解析表を先に提案し、人が原著を見ながら修正できるようにすることです。各研究の値を保存した後、dataex_workflow_briefで最新の結果ID・版・解析条件を取得し、dataex_save_workflowで解析提案を保存してください。ツールの実際の名称と引数仕様を確認してください。
 提案モードでは、PICO・原著の主要評価項目・臨床的に重要な害に照らし、少数の主候補と必要な代替候補を実際に選び、その理由・不足を説明してください。全アウトカム全時点の羅列を提案と呼ばず、有意差や効果の大きさで採用を決めないでください。詳細抽出モードでは本文・表・図・補足を点検し、必要な研究別の結果を丁寧に残してください。両モードの場合は保存候補を維持しつつ、まず使う解析表を絞って提示します。
+既存表を更新するときはexisting_plansのIDを維持し、同じ表を新しいIDで重複追加しません。保存はIDごとの追加・更新であり、返却しなかった主表・代替表は保持されます。refresh_required=trueの既存表はunassessed_result_idsと現在の候補を確認し、採用・除外の判断とmissing_information・study_notesの古い不足理由を見直して同じIDで返してください。不足が解消した説明は削除・訂正し、残る不足と未確認を具体的に示します。別の比較・時点など新しい提案が必要な場合だけ新しいIDを使います。新表を一つ保存しただけで、他の表の再検討を完了扱いにしません。
 まずPICOに合う主要な有効性と重要な害の表を主候補にし、別時点・別解析集団・別統計量は、必要なものだけ代替候補にします。主表ごとに、採用する時点と解析集団を理由付きで定め、同じ研究の複数解析を独立した研究として並べません。各表のmissing_informationには不足する情報と次に確認する資料を具体的に記録し、別の時点や解析集団があるだけで全体を解析不能と呼ばないでください。
 reported_onlyは原著報告が保存されている状態であり、未報告ではありません。群別人数・分母が不足していても、原著に直接記載された群間効果と信頼区間がないか確認し、あればcomparative_effectの候補を採用できるか検討してください。保存済み行の型を提案文だけで変更したり、割合から人数を逆算したりしません。直接効果を追加抽出する必要があれば、その不足を具体的に示します。RDのpercentage pointsとproportion、SDとSE、患者人数と事象件数を区別し、効果の方向と信頼水準を原著で確認します。両群のゼロが明記される研究は比較表に残し、その効果指標への投入可否を別途判断します。
 提案はtitle/definition/comparison/window/format/category/priority/rationale/missing_informationと、既存行を参照するrow_refs=[{id,revision}]、除外理由exclusions=[{id,revision,reason}]、行を採用しない各研究のstudy_notes=[{study_id,status:missing|unresolved|excluded,reason}]で作成します。idは提案を一意に識別する文字列です。数値を提案へ再転記せず、参照先の原著値・訂正値を使います。解析表の共通名は原著の定義と区別し、研究ごとに比較群の選択・実時点・定義・集団・型・単位が合うか判断してください。合わない行は代替候補に分け、除外・保留の具体的な理由を示します。異なる実時点・定義の行も同じ比較検討用の表に参照して構いません。その場合は各行の相違点と採用理由を明示し、単なる比較検討と同じ解析への投入許可を区別します。アプリの厳密な条件別グループは診断情報であり、主表を細分化する指示ではありません。似た見出しを統合可能性の根拠にしません。同一試験の複数報告・時点・介入群を独立研究として重複採用しません。全研究の採用・欠測・未解決・除外を表に残してください。
@@ -2130,8 +2143,7 @@ function extractionScopes(rows){
   for(const r of rows)if(r.extraction_limitation){const key=JSON.stringify([r.study_id,r.source_submission,r.extraction_limitation]);if(!scopes.has(key))scopes.set(key,{study:r.study,note:r.extraction_limitation});}
   return [...scopes.values()];
 }
-function meanLabel(row){return row.spread_type!=='SE'?'平均':row.adjustment==='adjusted'?'調整平均':row.adjustment==='unadjusted'?'平均':'平均（調整不明）';}
-
+function meanLabel(row){return row.spread_type!=='SE'&&row.adjustment!=='unclear'?'平均':row.adjustment==='adjusted'?'調整平均':row.adjustment==='unadjusted'?'平均':'平均（調整不明）';}
 
 Object.assign(exports,{groupedRows,orderedRows,outputIdentity,checkedTargets,restoredLocation,sourceEvidenceLabel,extractionScopes,meanLabel});
 },
@@ -2633,13 +2645,13 @@ function mountWorkspaceBridge(runtime){
     tool('dataex_workflow_brief','Get current result IDs/revisions and definitions to propose useful meta-analysis tables. Existing numbers are not selection criteria. No re-extraction is needed to reorganize existing results.',obj({}),()=>({...workflowBrief(state().workflow,state()),pico:state().pico,
       documents:state().documents.map(d=>({sha256:d.sha256,filename:d.filename,page_count:d.page_count,role:d.role||'primary'})),
       missing_values:'Use row IDs; never put copies or inferred numeric values in a plan.'})),
-    tool('dataex_save_workflow','Save actual proposed analysis tables and per-document source coverage. Reference current row IDs/revisions, explain comparison/time/definition, show missing studies. This never approves or pools numbers. Obtain fresh revision from workflow_brief first.',workflowSubmissionSchema,async a=>{
+    tool('dataex_save_workflow','Save proposed analysis tables and source coverage. Reuse existing plan IDs when updating a table; omitted plans are retained. Reconsider every refresh_required plan and update obsolete missing reasons. Reference current row IDs/revisions. Never approves or pools numbers. Obtain fresh workflow_brief first.',workflowSubmissionSchema,async a=>{
       await runtime.session.transact(s=>{s.workflow=applyWorkflowSubmission(s.workflow||emptyWorkflow(),a,s);});await runtime.render();
       if(a.plans.length)runtime.onProposals?.();
       runtime.message(a.plans.length?'解析表の提案を保存しました。数値から原著を確認・訂正できます。':'資料の確認範囲を保存しました。');
-      const hasCurrentProposal=state().workflow.plans.some(p=>{const status=planStatus(p,state().rows);return !status.stale&&!status.issues.some(i=>i.code==='unassessed_results');});
-      const needsProposals=state().workflow.modes.includes('proposal')&&!hasCurrentProposal;
-      return {ok:true,batch_revision:state().revision,workflow_revision:state().workflow.revision,plans:state().workflow.plans.map(p=>({id:p.id,title:p.title})),needs_proposals:needsProposals,next:needsProposals?'Proposal mode remains unfinished: call workflow_brief and save proposed analysis tables.':'Saved; review original sources and correct as needed. No human approval or pooling was performed.',approval:null};
+      const pendingPlans=state().workflow.plans.flatMap(p=>{const status=planStatus(p,state().rows);return status.refresh_required?[{id:p.id,title:p.title,stale:status.stale,unassessed_result_ids:status.unassessed_result_ids}]:[];});
+      const needsProposals=state().workflow.modes.includes('proposal')&&(!state().workflow.plans.length||pendingPlans.length>0);
+      return {ok:true,batch_revision:state().revision,workflow_revision:state().workflow.revision,plans:state().workflow.plans.map(p=>({id:p.id,title:p.title})),plans_requiring_refresh:pendingPlans,needs_proposals:needsProposals,next:needsProposals?'Proposal mode remains unfinished: call workflow_brief, refresh all listed existing plans using the same IDs and current missing reasons, or create initial proposals if none exist.':'Saved; review original sources and correct as needed. No human approval or pooling was performed.',approval:null};
     },false)
   ];
   const connection=new NativeSiteConnection({tools,onState:s=>runtime.onConnection?.(s)});
@@ -2827,7 +2839,7 @@ const labelFor=(r,k)=>k.startsWith('mean_')?meanLabel(r):k==='estimate'?r.statis
 const formatKind=r=>r.kind==='reported_only'?'原著報告あり・数値形式を要確認':r.kind==='binary'?'二値（人数／分母）':r.kind==='continuous'?`${r.statistic_type==='change'?'変化量':'終了値'}・平均／${r.spread_type||'SD'}`:`${r.statistic_type}・${r.adjustment==='adjusted'?'調整済み':r.adjustment==='unadjusted'?'未調整':'調整条件不明'}`;
 const comparison=r=>`${r.treatment} / ${r.control}`;
 let backend,session,sourceRoom,bridge,renderEpoch=0,resultTab='proposal',pdfRole='primary',selectedDocs=new Set(),selectedRows=new Set(),outputConfirmation=null,backupRevision=-1,loading=false,switching=false,selectedAtRevision=null;
-let manualControls={},manualNumbers={},renderQueue=Promise.resolve(),manualImageUrl=null,manualPageEpoch=0,manualDirty=false;
+let manualControls={},manualNumbers={},renderQueue=Promise.resolve(),manualImageUrl=null,manualPageEpoch=0,manualDirty=false,backupDownloadUrl=null;
 const openAlternativePlans=new Set();
 const workflow=()=>session.state.workflow||emptyWorkflow();
 const modes=()=>({proposal:$('mode-proposal').checked,detailed:$('mode-detailed').checked});
@@ -2845,8 +2857,17 @@ function view(name){if(name==='prepare')clearSelection();if(sourceRoom?.isOpen()
 async function save(update){await session.transact(update);outputConfirmation=null;$('confirm-output').checked=false;$('csv-download').hidden=true;await render();}
 function filteredRows(){return session.state.rows.filter(r=>{const c=classifyOutcome(r);return(!$('filter-major').value||c.major===$('filter-major').value)&&(!$('filter-minor').value||c.minor===$('filter-minor').value)&&(!$('filter-comparison').value||comparison(r)===$('filter-comparison').value)&&(!$('filter-time').value||r.timepoint===$('filter-time').value);});}
 function empty(title,text){const box=el('div',null,'empty-panel');box.append(el('div','＋','empty-mark'),el('h2',title),el('p',text));return box;}
-function download(blob,filename){const u=URL.createObjectURL(blob),a=el('a');a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),30000);}
-async function saveBackup(){const blob=await makeBackup(backend.store);download(blob,`DataExtraction2_${new Date().toISOString().replace(/[:.]/g,'-')}.dataex`);backupRevision=session.state.revision;message('作業ファイルを保存しました。提案・PDF・途中の候補も含まれます。');}
+function download(blob,filename){
+  const u=URL.createObjectURL(blob);
+  if(filename.endsWith('.dataex')){
+    const a=$('backup-download'),previous=backupDownloadUrl;backupDownloadUrl=u;a.href=u;a.download=filename;
+    $('backup-filename').textContent=filename;$('backup-panel').hidden=false;
+    a.onclick=()=>message('作業ファイルのダウンロードを開始しました。ブラウザのダウンロード一覧で保存を確認してください。');
+    a.click();if(previous)URL.revokeObjectURL(previous);return;
+  }
+  const a=el('a');a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),30000);
+}
+async function saveBackup(){const blob=await makeBackup(backend.store);download(blob,`DataExtraction2_${new Date().toISOString().replace(/[:.]/g,'-')}.dataex`);backupRevision=session.state.revision;message('提案・PDF・途中の候補を含む作業ファイルを生成しました。ダウンロードが始まらない場合は「作業ファイルをダウンロード」を押してください。');}
 function syncWorkspaceInputs(){
   selectedDocs.clear();for(const d of session.state.documents)if(d.role!=='reference'&&!session.state.rows.some(r=>r.document.sha256===d.sha256)&&!session.state.jobs.some(j=>Object.hasOwn(j.submissions||{},d.sha256)))selectedDocs.add(d.sha256);
   $('pico').value=session.state.pico||'';$('reviewer').value=session.state.reviewer||'';$('mode-proposal').checked=workflow().modes.includes('proposal');$('mode-detailed').checked=workflow().modes.includes('detailed');
@@ -2888,11 +2909,38 @@ async function prepareProposalRequest(){if(!session.state.rows.length)throw Erro
 function planEditor(plan){
   const details=el('details',null,'plan-editor');details.append(el('summary','この表の候補・定義・時点を調整する'));const form=el('form'),fields=el('div',null,'manual-grid'),inputs={};
   for(const [key,label] of [['title','表の名前'],['comparison','比較'],['definition','共通の定義'],['window','採用する時点'],['format','解析値の形式']])inputs[key]=manualField(fields,key,label,plan[key]);
-  form.append(fields,el('p','チェックした候補をこの表に採用します。数値の訂正は表の数値から行えます。','hint'));
-  const choices=el('div',null,'plan-candidates'),picked=new Set(plan.row_refs.map(r=>r.id)),checks=[];
-  let choicesBuilt=false;const buildChoices=()=>{if(choicesBuilt)return;choicesBuilt=true;for(const row of session.state.rows){const label=el('label',null,'check-line'),check=el('input');check.type='checkbox';check.checked=picked.has(row.id);check.setAttribute('aria-label',`${row.study} ${row.outcome_reported} ${row.timepoint}を提案へ含める`);label.append(check,el('span',`${row.study} / ${row.outcome_reported} / ${row.timepoint} / ${row.population} / ${formatKind(row)}`));choices.append(label);checks.push({row,check});}};details.addEventListener('toggle',()=>{if(details.open)buildChoices();});
-  form.append(choices);const reason=manualField(form,'reason','採用・除外を変更する理由','',null,true);const status=el('p',null,'warning');form.append(status);const submit=el('button','この表の変更を保存','primary');submit.type='submit';form.append(submit);const expectedWorkflow=workflow().revision,expectedBatch=session.state.revision;
-  form.onsubmit=async event=>{event.preventDefault();try{buildChoices();if(!reason.value.trim())throw Error('変更理由を記入してください。');const chosen=checks.filter(x=>x.check.checked).map(x=>x.row.id),selectedStudies=new Set(session.state.rows.filter(r=>chosen.includes(r.id)).map(r=>r.study_id));await save(s=>{if(s.workflow.revision!==expectedWorkflow||s.revision!==expectedBatch)throw Error('提案または抽出候補が更新されています。一度開き直して現在の内容を確認してください。');const base=Object.fromEntries(['id','title','definition','comparison','window','format','category','priority','rationale','missing_information','row_refs','exclusions','study_notes'].map(k=>[k,structuredClone(plan[k])]));for(const [k,n] of Object.entries(inputs))base[k]=n.value.trim();base.rationale=plan.rationale+'\n確認者の変更理由：'+reason.value.trim();base.row_refs=chosen.map(id=>{const row=s.rows.find(r=>r.id===id);if(!row)throw Error('選択した結果がありません。');return {id,revision:row.revision};});base.exclusions=plan.exclusions.filter(r=>!chosen.includes(r.id)).map(ref=>({...ref,revision:s.rows.find(r=>r.id===ref.id)?.revision||ref.revision}));for(const ref of plan.row_refs.filter(r=>!chosen.includes(r.id))){const row=s.rows.find(r=>r.id===ref.id);if(row&&!base.exclusions.some(r=>r.id===ref.id))base.exclusions.push({id:row.id,revision:row.revision,reason:reason.value.trim()});}base.study_notes=plan.study_notes.filter(n=>!selectedStudies.has(n.study_id));for(const row of s.rows)if(!selectedStudies.has(row.study_id)&&!base.study_notes.some(n=>n.study_id===row.study_id))base.study_notes.push({study_id:row.study_id,status:'excluded',reason:reason.value.trim()});const next=createPlan(base,s.rows);s.workflow.plans=s.workflow.plans.map(p=>p.id===plan.id?next:p);s.workflow.revision++;});message('解析表の候補と条件を保存しました。原著値は変更していません。');}catch(e){status.textContent=e.message;}};details.append(form);return details;
+  form.append(fields);
+  const missingText=plan.missing_information.join('\n'),missing=manualField(form,'missing_information','不足情報・次に確認すること（1行に1項目。解消した項目は削除）',missingText,null,true);
+  form.append(el('p','チェックした候補をこの表に採用します。採用候補を変えたら、不足情報と研究別の理由も見直してください。数値の訂正は表の数値から行えます。','hint'));
+  const choices=el('div',null,'plan-candidates'),notes=el('div'),picked=new Set(plan.row_refs.map(r=>r.id)),checks=[],studyControls=[];
+  const selectedStudies=()=>new Set(checks.filter(x=>x.check.checked).map(x=>x.row.study_id));
+  const updateStudyNotes=()=>{const selected=selectedStudies();for(const item of studyControls)item.box.hidden=selected.has(item.study_id);};
+  let choicesBuilt=false;const buildChoices=()=>{
+    if(choicesBuilt)return;choicesBuilt=true;
+    for(const row of session.state.rows){const label=el('label',null,'check-line'),check=el('input');check.type='checkbox';check.checked=picked.has(row.id);check.setAttribute('aria-label',`${row.study} ${row.outcome_reported} ${row.timepoint}を提案へ含める`);check.onchange=updateStudyNotes;label.append(check,el('span',`${row.study} / ${row.outcome_reported} / ${row.timepoint} / ${row.population} / ${formatKind(row)}`));choices.append(label);checks.push({row,check});}
+    const studies=new Map(session.state.rows.map(row=>[row.study_id,row.study]));
+    for(const [study_id,study] of studies){const prior=plan.study_notes.find(n=>n.study_id===study_id),box=el('fieldset'),index=studyControls.length;box.append(el('legend',`${study}：採用しない研究の状態と理由`));const status=manualField(box,`study_note_${index}_status`,'状態',prior?.status||'unresolved',[['missing','該当値なし'],['unresolved','未解決'],['excluded','提案対象外']]),reason=manualField(box,`study_note_${index}_reason`,'不足・除外の理由',prior?.reason||'この研究の対応する結果はまだ選ばれていません。',null,true);notes.append(box);studyControls.push({study_id,box,status,reason});}
+    updateStudyNotes();
+  };details.addEventListener('toggle',()=>{if(details.open)buildChoices();});
+  form.append(choices,notes);const reason=manualField(form,'reason','候補・条件・注記を変更する理由','',null,true);const status=el('p',null,'warning');form.append(status);const submit=el('button','この表の変更を保存','primary');submit.type='submit';form.append(submit);const expectedWorkflow=workflow().revision,expectedBatch=session.state.revision;
+  form.onsubmit=async event=>{event.preventDefault();try{
+    buildChoices();if(!reason.value.trim())throw Error('変更理由を記入してください。');
+    const chosen=checks.filter(x=>x.check.checked).map(x=>x.row.id),selected=selectedStudies();
+    const studyNotes=studyControls.filter(x=>!selected.has(x.study_id)).map(x=>({study_id:x.study_id,status:x.status.value,reason:x.reason.value.trim()}));
+    if(studyNotes.some(n=>!n.reason))throw Error('採用しない研究の不足・除外理由を記入してください。');
+    await save(s=>{
+      if(s.workflow.revision!==expectedWorkflow||s.revision!==expectedBatch)throw Error('提案または抽出候補が更新されています。一度開き直して現在の内容を確認してください。');
+      const base=Object.fromEntries(['id','title','definition','comparison','window','format','category','priority','rationale','missing_information','row_refs','exclusions','study_notes'].map(k=>[k,structuredClone(plan[k])]));
+      for(const [k,n] of Object.entries(inputs))base[k]=n.value.trim();
+      if(missing.value!==missingText)base.missing_information=missing.value.split(/\r?\n/u).map(x=>x.trim()).filter(Boolean);
+      base.rationale=plan.rationale+'\n確認者の変更理由：'+reason.value.trim();
+      base.row_refs=chosen.map(id=>{const row=s.rows.find(r=>r.id===id);if(!row)throw Error('選択した結果がありません。');return {id,revision:row.revision};});
+      base.exclusions=plan.exclusions.filter(r=>!chosen.includes(r.id)).map(ref=>({...ref,revision:s.rows.find(r=>r.id===ref.id)?.revision||ref.revision}));
+      for(const ref of plan.row_refs.filter(r=>!chosen.includes(r.id))){const row=s.rows.find(r=>r.id===ref.id);if(row&&!base.exclusions.some(r=>r.id===ref.id))base.exclusions.push({id:row.id,revision:row.revision,reason:reason.value.trim()});}
+      base.study_notes=studyNotes;
+      const next=createPlan(base,s.rows);s.workflow.plans=s.workflow.plans.map(p=>p.id===plan.id?next:p);s.workflow.revision++;
+    });message('解析表の候補・条件・不足の説明を保存しました。原著値は変更していません。');
+  }catch(e){status.textContent=e.message;}};details.append(form);return details;
 }
 async function renderPlans(){const host=$('plans');host.replaceChildren();const plans=[...workflow().plans].sort((a,b)=>(a.priority==='primary'?0:1)-(b.priority==='primary'?0:1));$('proposal-status').replaceChildren();if(session.state.rows.length){const tools=el('div',null,'proposal-tools');tools.append(button('保存済みの候補からAIに表を提案してもらう',prepareProposalRequest));$('proposal-status').append(tools);}
   const unmatched=unrepresentedDocuments(session.state);if(unmatched.length){const box=el('details',null,'unrepresented-documents');box.open=true;box.append(el('summary',`対応する結果行がない原著・補足資料 ${unmatched.length}本`));for(const d of unmatched){const p=el('p');p.append(el('strong',d.filename),el('span',` — ${d.status_label||'未取得'}${d.limitation?'：'+d.limitation:''}`),button('原著を確認',()=>sourceRoom.openPage(d.sha256,1),'value'));box.append(p);}$('proposal-status').append(box);}
