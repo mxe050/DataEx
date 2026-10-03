@@ -46,7 +46,6 @@ body.source-room-open>.app-header{height:64px;min-height:64px;padding:7px 18px}b
 button.value{white-space:normal}button.value:focus-visible{outline:3px solid #126779;outline-offset:2px}.room-context button:focus-visible,#room-pdf button:focus-visible{outline:3px solid #126779;outline-offset:1px}
 @media(max-width:680px){.room-body{grid-template-columns:minmax(240px,43%) minmax(0,1fr)}.room-context{padding:12px}#room-pdf{padding:10px}.room-bar h1{font-size:14px}.source-room-open>header{padding:6px 10px}.source-room-open>header strong{font-size:16px}}
 @media(max-width:540px){.room-mobile-tabs{display:flex;gap:2px;grid-column:1/-1}.room-mobile-tabs button{font-size:12px;padding:5px}.room-bar{display:grid;grid-template-columns:auto 1fr;gap:4px;padding:6px}.room-body{display:block;overflow:hidden}.room-context,#room-pdf{height:100%}#source-room[data-mobile-pane=context] #room-pdf{display:none}#source-room[data-mobile-pane=pdf] .room-context{display:none}.room-status{font-size:12px;padding:5px 10px}.source-room-open #saved{display:none}#source-room:not([hidden]){height:calc(100dvh - 60px)}}
-
 </style></head>
 <body>
 <header class="app-header"><div class="brand"><span class="brand-symbol">D<span>e</span></span><div><strong>DataExtraction2</strong><span class="brand-caption">論文を読み、解析を考え、原著で確かめる。</span></div></div><div class="header-right"><span id="saved" class="save-state">保存状態を読み込み中</span><button id="quick-backup" class="quiet">作業を保存</button></div></header>
@@ -93,7 +92,6 @@ async function createBrowserBackend(options={}){
   }
   return {store,pdf,api};
 }
-
 
 Object.assign(exports,{createBrowserBackend});
 },
@@ -238,7 +236,6 @@ function createCheckPdf(){
 async function checkBrowserPdf(){
   const service=new BrowserPdf(new MemoryStore());try{const d=await service.add(createCheckPdf());const p=await service.page(d.sha256,1);check(d.page_count===1&&p.text.includes('SYNTHETIC PDF CHECK 0123456789'),'PDF文字層の読込みを確認できません。');const img=await service.render(d.sha256,1,900);return {page_count:d.page_count,png_bytes:img.size,parser:PDFJS_VERSION,synthetic:true};}finally{await service.clearCache();}
 }
-
 
 Object.assign(exports,{PDFJS_VERSION,PDFJS_BASE,loadPdfLibrary,within,pdfOptions,literalIndex,literalMatches,itemRectangle,assembleText,locateText,BrowserPdf,createCheckPdf,checkBrowserPdf});
 },
@@ -515,13 +512,11 @@ class ProbeSession {
   }
 }
 
-
 Object.assign(exports,{SCHEMA,canonical,validateProbeResult,ProbeSession});
 },
 "src/numeric.mjs":function(exports,require){
-/** Selected/reworked rules from legacy dataex-fuzzy-core.js and csv-trace.js.
- * No UI, no AI calls, no coercion of missing/invalid values to zero.
- * See docs/development/REUSE.md for original file hashes and differences.
+/** Numeric validation without UI or AI calls.
+ * Missing and invalid values are never coerced to zero.
  */
 class ContractError extends Error {
   constructor(code, message) { super(message); this.name = 'ContractError'; this.code = code; }
@@ -627,11 +622,10 @@ const sameDocument = (a, b) => {
   return !valid(a) || !valid(b) ? 'unknown' : a.toLowerCase() === b.toLowerCase() ? 'same_bytes' : 'different_bytes';
 };
 
-
 Object.assign(exports,{ContractError,fail,finite,reportedCountPercent,parseReportedNumber,validateStatistic,validateStatistics,seToSd,sameDocument});
 },
 "src/source-anchor.mjs":function(exports,require){
-/** Adapted from legacy source-navigation.index/matches, not its browser controller.
+/** Quote matching with source offsets.
  * Retains original character offsets. A unique quote is NOT proof of the correct arm/statistic.
  */
 function normalizedIndex(text) {
@@ -671,7 +665,6 @@ function classifyAnchor(raw, { quote, prefix, suffix, lexical }) {
     numeric: numbers.length === 1 ? { start: match.start + numbers[0].start, end: match.start + numbers[0].end } : null,
     semantic_verification: 'not_established_by_string_matching' };
 }
-
 
 Object.assign(exports,{normalizedIndex,findQuote,exactNumericOccurrences,classifyAnchor});
 },
@@ -1280,7 +1273,7 @@ function verifyDerivation(value,row,key){
 Object.assign(exports,{computeDerivation,verifyDerivation});
 },
 "src/extraction-protocol.mjs":function(exports,require){
-/** New requests only. Historical 0.5.0 protocol: docs/development/archive/batch-prompt-0.5.0.md. */
+/** Current source-preserving extraction protocol for new requests. */
 const BATCH_PROMPT_VERSION='dataex-next/prompt-0.5.1-source-preserving';
 const BATCH_PROMPT=`選択した原著から、報告済みの値とその根拠を保存してください。解析に不足があっても、確認できた原著値を消しません。保存候補と、最初に提案する解析表の採用候補は別です。論文ごとの追加指示を求めず進め、人の承認は行いません。
 
@@ -2116,7 +2109,6 @@ async function saveConfirmedCsv({session,collectRows,readConfirmation,write,seri
   }
 }
 
-
 Object.assign(exports,{saveConfirmedCsv});
 },
 "src/review-view.mjs":function(exports,require){
@@ -2798,7 +2790,6 @@ Site toolsを利用できない場合は、その事実を一度報告して止�
 以下は既存の抽出・検証指示です。\n\n` + protocol;
 }
 
-
 Object.assign(exports,{findModelContext,NativeSiteConnection,nativeRequest});
 },
 "src/extraction-schema.mjs":function(exports,require){
@@ -2989,7 +2980,7 @@ async function submitManual(e){e.preventDefault();try{const v=k=>manualControls[
   if(Object.values(spec.values).some(x=>x.value===null)&&!spec.analysis_note)throw Error('空欄の値について、欠測・未報告・未確認の理由を記入してください。');if(spec.kind==='comparative_effect'&&(spec.values.ci_low.value!==null||spec.values.ci_high.value!==null)&&!v('confidence_level'))throw Error('信頼区間を記入した場合は、原著に明記された信頼水準も入力してください。');if(v('report_quote')){if(spec.kind==='reported_only')spec.report_evidence=[evidence(v('report_page'),v('report_quote'))];else spec.definition_evidence=[evidence(v('report_page'),v('report_quote'))];}
   const [row]=await structuredRows({request_id:`manual-${crypto.randomUUID()}`,submission_id:`manual-${crypto.randomUUID()}`,rows:[spec]},doc,e=>backend.pdf.locate(e.document_sha256,e.pdf_page,e.quote),session.state.documents.filter(d=>d.role!=='reference'));row.history.push({type:'manual_add',reviewer:who,at:new Date().toISOString(),reason:'原著を見ながら手入力'});await save(s=>{if(s.rows.some(r=>duplicateKey(r)===duplicateKey(row)))throw Error('同じ研究結果がすでにあります。既存の行を訂正してください。');s.rows.push(row);s.reviewer=who;});$('reviewer').value=who;manualDirty=false;$('manual-dialog').close();message('手入力の抽出行を未承認で保存しました。原著と照合して承認できます。');}catch(error){$('manual-status').textContent=error.message;}}
 
-async function init(){backend=await createBrowserBackend();session=new CandidateRecoverySession((await backend.api('/api/batch')).state,(state,expected_revision)=>backend.api('/api/batch',{state,expected_revision}));await session.verifyIntegrity();if(!session.state.workflow)await session.transact(s=>{s.workflow=emptyWorkflow();});syncWorkspaceInputs();if(session.state.documents.length||session.state.rows.length||session.state.jobs.length||session.state.pico||workflow().plans.length){$('workspace-origin').textContent='以前の作業をこのブラウザから復元しています。';$('workspace-origin').hidden=false;}
+async function init(){backend=await createBrowserBackend();session=new CandidateRecoverySession((await backend.api('/api/batch')).state,(state,expected_revision)=>backend.api('/api/batch',{state,expected_revision}));await session.verifyIntegrity();if(!session.state.workflow)await session.transact(s=>{s.workflow=emptyWorkflow();});syncWorkspaceInputs();if(session.state.documents.length||session.state.rows.length||session.state.jobs.length||session.state.pico||session.state.reviewer||workflow().revision){$('workspace-origin').textContent='以前の作業をこのブラウザから復元しています。';$('workspace-origin').hidden=false;}
   sourceRoom=createSourceRoom({state:()=>session.state,save,api:backend.api,pdf:backend.pdf,scopedRows:()=>session.state.rows,keysFor,label:labelFor,correct,correctMetadata,approve,isApproved,warnings,validateRow,duplicateKey,evidenceLabel:sourceEvidenceLabel,literalMatches,candidateEditor,rejections:()=>pendingRejections(session.state),resolveRejected:async a=>{const r=await session.resolveRejected(a,e=>backend.pdf.locate(e.document_sha256,e.pdf_page,e.quote));await render();return r;},reviewer:$('reviewer'),testOnly:()=>$('test-only').checked,approvalNote:()=>$('approval-note').value,message,view});
   bridge=await mountWorkspaceBridge({session,backend,save,render,openPage:(...a)=>sourceRoom.openPage(...a),showValue:(...a)=>sourceRoom.showValue(...a),message,selectedDocuments,modes,pico:()=>$('pico').value.trim(),isBusy:()=>loading||switching,onProposals:()=>{view('review');switchResult('proposal');},onConnection:s=>{$('connection').textContent=s.registered&&!['error','call_error'].includes(s.phase)?'この画面でAIの読取り・返却を受け付けます。依頼文を同じチャットへ一度送ってください。':s.phase==='missing'?'このブラウザにはAI接続がありません。対応するWorkの内蔵ブラウザで開いてください。':['error','call_error'].includes(s.phase)?`AI接続エラー：${s.error}`:s.phase==='suspended'?'AI接続を一時停止中です。画面に戻ると再接続します。':'AIとの接続を確認しています。';}});
   $('prepare-tab').onclick=()=>view('prepare');$('results-tab').onclick=()=>view('review');$('resume-workspace').onclick=()=>view('review');$('add-more').onclick=()=>view('prepare');for(const tab of document.querySelectorAll('[data-result-tab]'))tab.onclick=()=>switchResult(tab.dataset.resultTab);
