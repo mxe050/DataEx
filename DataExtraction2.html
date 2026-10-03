@@ -1825,6 +1825,7 @@ function classifyOutcome(row){
     if(/serious|\bSAEs?\b|重篤/iu.test(label))return classification('harms','serious');
     // Severe/grade ≥3 is not the regulatory definition of serious.
     if(/severe|grade\s*(?:≥|>=|3|4|5)|重症|グレード/iu.test(label))return classification('harms','specific');
+    if(/\b(?:non[-\s]?)?ocular\b|眼/iu.test(label))return classification('harms','specific');
     if(/\b(?:any|all|overall|total)\b|全(?:ての|体|有害)|いずれか/iu.test(label))return classification('harms','any');
     return classification('harms',/有害事象$|^adverse events?$|安全性/iu.test(label.trim())?'other':'specific');
   }
@@ -1832,6 +1833,7 @@ function classifyOutcome(row){
   if(/\b(?:PFS|EFS|DFS|RFS)\b|progression.free|event.free|disease.free|無(?:増悪|病|再発|イベント)/iu.test(label))return classification('survival','event_free');
   if(/survival|mortality|生存|死亡/iu.test(label))return classification('survival',/overall|all.cause|全生存|全死亡/iu.test(label)?'overall':/specific|原因別/iu.test(label)?'specific':'other');
   if(/pain|疼痛|痛み|鎮痛/iu.test(label))return classification('pain',/response|responder|改善|緩和/iu.test(label)?'response':/intensity|score|強さ|スコア|\bVAS\b|\bNRS\b/iu.test(label)?'intensity':'other');
+  if(/\bBCVA\b|\bvisual[\s-]+acuity\b|視力/iu.test(label))return classification('function','specific');
   if(/function|disability|activities.of.daily|機能|障害|日常生活/iu.test(label))return classification('function',/physical|daily|身体|日常/iu.test(label)?'physical':'specific');
   if(/hospital|admission|入院|受診/iu.test(label))return classification('resources','hospitalization');
   if(/cost|費用|医療費/iu.test(label))return classification('resources','cost');
@@ -2263,7 +2265,7 @@ function createSourceRoom(d){
   }
   function editMeaning(){
     const row=current();if(!row)throw Error('結果を選択してください。');const {form,who}=openForm('定義・群・時点などを訂正');const inputs={};
-    for(const [k,l] of [['outcome','共通名'],['outcome_reported','原著名'],['definition','定義'],['timepoint','実時点'],['population','解析集団'],['treatment','治療群'],['control','比較群'],['unit','単位'],['mapping_reason','対応理由'],['analysis_note','解析上の注意']])inputs[k]=field(l,row[k],form,{area:['definition','mapping_reason','analysis_note'].includes(k)});
+    for(const [k,l] of [['outcome','共通名'],['outcome_reported','原著名'],['definition','定義'],['timepoint','実時点'],['population','解析集団'],['treatment','治療群'],['control','比較群'],['unit','単位'],['mapping_reason','対応理由'],['differences','他の候補との違い'],['adjustment_note','調整・解析方法'],['analysis_note','解析上の注意']])inputs[k]=field(l,row[k],form,{area:['definition','mapping_reason','differences','adjustment_note','analysis_note'].includes(k)});
     const why=field('訂正理由','',form,{area:true});const submit=btn('訂正を保存',()=>{});submit.type='submit';submit.onclick=null;form.append(submit,btn('キャンセル',()=>{draft=false;renderContext();}));
     form.onsubmit=run(async e=>{e.preventDefault();if(busy)return;const expected=active.revision,changes=Object.fromEntries(Object.entries(inputs).filter(([k,n])=>n.value!==String(row[k]??'')).map(([k,n])=>[k,n.value]));if(!Object.keys(changes).length)throw Error('変更がありません。');busy=true;submit.disabled=true;
       try{await d.save(async s=>{const i=s.rows.findIndex(r=>r.id===row.id);if(s.rows[i]?.revision!==expected)throw Error('訂正対象の版が変わりました。');const next=await d.correctMetadata(s.rows[i],changes,why.value,who.value);if(s.rows.some((r,j)=>j!==i&&d.duplicateKey(r)===d.duplicateKey(next)))throw Error('同じ研究結果が既にあります。重複する訂正は保存しません。');s.rows[i]=next;s.reviewer=who.value;});draft=false;await renderContext();setStatus('意味の訂正を保存しました。この行は再確認待ちです。');}finally{busy=false;submit.disabled=false;}});
