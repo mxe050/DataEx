@@ -2519,7 +2519,7 @@ function candidateEditor(entry,{document:dom,documents,onSubmit,onCancel,reviewe
   const options={statistic_type:stats[base.kind],adjustment:['adjusted','unadjusted','unclear'],priority:['primary','secondary','exploratory']};
   for(const [key,label] of Object.entries(metadata)){
     if(['adjustment','adjustment_note'].includes(key)&&!Object.hasOwn(base,key)&&
-      base.kind!=='comparative_effect'&&!(base.kind==='continuous'&&base.spread_type==='SE'))continue;
+      base.kind!=='comparative_effect'&&base.kind!=='continuous')continue;
     meta[key]=field(detail,label,base[key],
     {area:['definition','mapping_reason','differences','adjustment_note','analysis_note'].includes(key),
       choices:options[key]?options[key].map(x=>[x,x]):null});
@@ -2550,7 +2550,6 @@ function candidateEditor(entry,{document:dom,documents,onSubmit,onCancel,reviewe
   btn(section,'訂正画面を閉じる',()=>{if(!busy){section.remove();onCancel?.();}});
   return section;
 }
-
 
 Object.assign(exports,{editedCandidate,candidateEditor});
 },
