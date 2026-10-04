@@ -85,6 +85,7 @@ button{min-height:40px}button:disabled{cursor:not-allowed}button:focus-visible,a
 /* Native Site tools is the ordinary request path; file transfer stays optional. */
 .native-request-route{margin:20px 0}.native-send-guide{display:flex;align-items:center;justify-content:space-between;gap:22px;background:#f0f7f2;border:1px solid #c8dfd1;border-radius:9px;padding:20px}.native-send-guide h3{font-size:17px;margin:0 0 8px}.native-send-guide p{margin:0;font-size:13px;color:var(--muted);line-height:1.85}.native-send-guide button{flex-shrink:0;font-size:14px;min-height:46px}.native-request-route #request-copy-status{margin:13px 0;line-height:1.9}.native-request-route details{font-size:13px;color:var(--muted)}.native-request-route textarea{margin-top:12px;min-height:150px;max-height:350px;font-size:12px}.request-progress{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:20px 0 12px}.request-progress>div{padding:14px;background:#f7f9fa;border:1px solid var(--line);border-radius:8px}.request-progress strong{display:block;font-size:13px;color:var(--navy)}.request-progress p{font-size:12px;line-height:1.8;margin:8px 0 0;color:var(--muted)}.request-progress p[data-complete=true]{color:var(--green);font-weight:600}.request-technical{border-top:1px solid var(--line);margin-top:16px;padding-top:14px;font-size:12px;color:var(--muted)}#file-fallback .ai-file-route{margin-top:18px}
 @media(max-width:700px){.native-send-guide{display:block;padding:16px}.native-send-guide button{width:100%;margin-top:14px}.request-progress{grid-template-columns:1fr}.request-progress>div{padding:12px 14px}.request-progress p{margin-top:5px}}
+.connection-recovery{display:flex;align-items:center;gap:12px;margin:.65rem 0 1rem}.connection-recovery button{flex-shrink:0;font-size:.78rem}.connection-recovery p{margin:0}@media(max-width:700px){.connection-recovery{align-items:flex-start;flex-direction:column;gap:6px}}
 
 /* Full review subview, not a modal over hundreds of result rows. */
 #review>.split{display:block}#source-room{padding:0;margin:0;max-width:none;background:#f4f6f7}
@@ -121,7 +122,7 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 </style></head>
 <body>
 <header class="app-header"><div class="brand"><span class="brand-symbol">D<span>e</span></span><div><strong>DataExtraction2</strong><span class="brand-caption">論文を読み、解析を考え、原著で確かめる。</span></div></div><div class="header-right"><span id="saved" class="save-state">保存状態を読み込み中</span><button id="quick-backup" class="quiet">作業を保存</button></div></header>
-<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.5</span></nav>
+<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.6</span></nav>
 <div id="message" class="global-message" role="status" aria-live="polite"></div>
 <div id="backup-panel" class="global-message" hidden><a id="backup-download">作業ファイルをダウンロード</a> <span id="backup-filename" class="hint"></span><p class="hint">生成時点の作業ファイルです。このタブを閉じるまでは同じリンクから取得できます。作業を更新した後は、もう一度「作業を保存」を押してください。</p></div>
 <button id="retry-transfer-view" hidden>引継ぎ後の表示を再試行</button>
@@ -132,6 +133,7 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 <section class="setup-section"><div class="section-heading"><span class="step">2</span><h2>知りたいことを伝える <span class="optional">任意</span></h2></div><label class="sr-only" for="pico">対象・介入・比較・アウトカム</label><textarea id="pico" rows="3" placeholder="例：成人の顎関節症。保存的治療とPRPを比較し、3か月の疼痛・機能・有害事象を整理したい。"></textarea><p class="hint">空欄なら、原著の主要結果と重要な害から提案します。</p></section>
 <details class="mode-options"><summary>依頼内容を変更 <span>標準：論文別の抽出 ＋ AI推薦</span></summary><div class="mode-grid"><label class="mode-card"><input id="mode-proposal" type="checkbox" checked><span class="mode-content"><span class="mode-tag">複数論文から考える</span><strong>解析表の提案・AI推薦</strong><span>比較・アウトカム・時点を整理。複数研究では、最初に使う少数の表も推薦します。</span></span></label><label class="mode-card"><input id="mode-detailed" type="checkbox" checked><span class="mode-content"><span class="mode-tag">一つの論文を深く読む</span><strong>論文別の詳細抽出</strong><span>本文・表・図・補足を確認し、抽出値と不足する情報を論文ごとに整理します。</span></span></label></div><p class="hint">両方を一度に依頼できます。1研究の場合は抽出と解析条件を整理し、複数研究の推薦表は作りません。</p></details>
 <section class="start-panel"><div><strong>抽出 ＋ AI推薦を、一度に。</strong><p id="connection">選んだ原著をAIへ渡す準備をします。</p></div><button id="start-request" class="primary large">AIへ依頼する <span aria-hidden="true">→</span></button></section>
+<div class="connection-recovery"><button id="reconnect-native" type="button">AI接続を再登録</button><p id="connection-retry-status" class="hint" role="status" aria-live="polite">接続が止まったときに、同じ画面でやり直せます。PDF・候補・依頼IDは保持します。</p></div>
 <section id="request-panel" class="request-panel" aria-labelledby="request-heading" hidden>
 <div class="request-heading"><div><p class="eyebrow">AIへの依頼は、この1回で。</p><h2 id="request-heading">抽出と推薦を、まとめて依頼</h2></div><span class="route-badge">AIがこの画面へ保存</span></div>
 <p id="request-status" role="status"></p><p id="request-help"></p>
@@ -3306,9 +3308,10 @@ function mountWorkspaceBridge(runtime,{register=true}={}){
   const connection=new NativeSiteConnection({tools,onState:s=>runtime.onConnection?.(s)});
   const focus=()=>connection.refresh(),hide=()=>connection.suspend(),show=()=>connection.resume();
   if(register){connection.refresh();globalThis.addEventListener?.('focus',focus);globalThis.addEventListener?.('pagehide',hide);globalThis.addEventListener?.('pageshow',show);}
-  return {connection,refresh:()=>register?connection.refresh():Promise.resolve(connection.snapshot()),connectionCheckText:(id)=>{
+  const targetHint=id=>`接続先の目印はタブ名「DataExtraction2 · 依頼 ${id}」、この依頼の選択PDF ${preparedRequest(id).documents.length}本です。タイトルや件数だけで一致と判定せず、必ずツールの返した依頼IDを照合してください。利用可能な既存タブと共有可能な既存タブを確認し、この依頼IDを持つタブを優先します。ブラウザが公開した実際のツール名・引数仕様を使い、名前に識別用の接尾辞が付いている場合も省略しないでください。`;
+  return {connection,refresh:()=>register?connection.refresh():Promise.resolve(connection.snapshot()),reconnect:()=>register?connection.reconnect():Promise.resolve(connection.snapshot()),connectionCheckText:(id)=>{
     preparedRequest(id);
-    return `この会話の内蔵ブラウザで、利用可能な既存タブを確認し、依頼を準備したDataExtraction2タブのSite tools（WebMCP）を操作してください。同じURLの空のタブは新しく開かないでください。${exactRequestStep(id)}\n一致しない場合やSite toolsが使えない場合は、別の依頼を作成・代用せず処理を止め、接続できたタブのPDF件数・候補件数・保存済み依頼IDと具体的な障害を報告してください。同じURLでも別ブラウザの保存領域は自動共有されません。ファイルのダウンロード・添付・返答取込みへ勝手に切り替えず、既存タブへ接続できない制約と未実行の範囲を報告してください。\n${continueVerifiedRequest}${isRecommendationJob(preparedRequest(id))?'\n'+recommendationProtocol(state(),preparedRequest(id)):''}`;
+    return `この会話の内蔵ブラウザで、利用可能な既存タブを確認し、依頼を準備したDataExtraction2タブのSite tools（WebMCP）を操作してください。同じURLの空のタブは新しく開かないでください。${targetHint(id)}${exactRequestStep(id)}\n一致しない場合やSite toolsが使えない場合は、別の依頼を作成・代用せず処理を止め、接続できたタブのPDF件数・候補件数・保存済み依頼IDと具体的な障害を報告してください。同じURLでも別ブラウザの保存領域は自動共有されません。ファイルのダウンロード・添付・返答取込みへ勝手に切り替えず、既存タブへ接続できない制約と未実行の範囲を報告してください。\n${continueVerifiedRequest}${isRecommendationJob(preparedRequest(id))?'\n'+recommendationProtocol(state(),preparedRequest(id)):''}`;
   },transferRequestText:(id)=>{
     preparedRequest(id);
     return `添付のDataExtraction2引継ぎファイル（.dataex）で、依頼ID ${id} の作業を続けてください。別の依頼を作成・代用しないでください。\nアプリへ取り込む前に、ファイルの完全性検査に加え、data.transfer.request_idが ${id} と完全一致し、data.batch.jobsに同じidの停止されていない依頼があることを確認してください。不一致・欠落・停止なら取り込まず具体的な障害を報告してください。\n利用可能な既存のDataExtraction2タブを使い、同じURLの空のタブは新しく開かないでください。「引継ぎファイルを開く」でこのファイルを選び、期待する依頼IDとして ${id} を指定してください。現在のPDF・候補・依頼・提案を元の作業として退避保存してから切り替え、消失させないでください。別ブラウザの保存領域は自動共有されず、ファイルをチャットへ添付しただけでは取り込まれません。\n取り込み後、ページのSite tools（WebMCP）で${exactRequestStep(id)}一致しなければ処理を止め、PDF件数・候補件数・保存済み依頼IDと接続障害を報告してください。取り込み操作やSite toolsが使えないときは実行済みとしないでください。\n${continueVerifiedRequest}${isRecommendationJob(preparedRequest(id))?'\n'+recommendationProtocol(state(),preparedRequest(id)):''}`;
@@ -3345,6 +3348,8 @@ class NativeSiteConnection {
     this.failedContext = null;
     this.controller = null;
     this.inflight = null;
+    this.reconnecting = null;
+    this.activeCalls = 0;
     this.suspended = false;
     this.registered = false;
     this.callCount = 0;
@@ -3374,15 +3379,21 @@ class NativeSiteConnection {
     this.emit();
   }
   release(owned = this.owned) {
-    if (!owned) return;
+    if (!owned) return Promise.resolve();
     owned.controller.abort();
+    const cleanup=[];
     for (const name of owned.names.splice(0)) {
       if (typeof owned.context.unregisterTool === 'function') {
-        try { Promise.resolve(owned.context.unregisterTool(name)).catch(() => {}); } catch {}
+        try { cleanup.push(Promise.resolve(owned.context.unregisterTool(name))); } catch {}
       }
     }
+    // A delayed unregister must finish before a replacement with the same name
+    // is registered. Late registrations append their own cleanup to this chain.
+    owned.cleanup=Promise.allSettled([owned.cleanup,...cleanup]);
+    return owned.cleanup;
   }
   refresh() {
+    if (this.reconnecting) return this.reconnecting;
     if (this.suspended) return Promise.resolve(this.snapshot());
     if (this.inflight) return this.inflight;
     const pending = this.register();
@@ -3390,13 +3401,34 @@ class NativeSiteConnection {
     pending.finally(() => { if (this.inflight === pending) this.inflight = null; }).catch(() => {});
     return pending;
   }
+  reconnect() {
+    if (this.reconnecting) return this.reconnecting;
+    if (this.activeCalls) return Promise.reject(Error('AIが原著の読取り・保存を実行中です。完了後にSite toolsを再接続してください。依頼と処理は保持しています。'));
+    const pending=this.inflight,owned=this.owned;
+    this.verifiedRequestId=null;this.lastCall=null;this.registered=false;this.error='';
+    this.phase='reconnecting';this.emit();
+    const cleanup=this.release(owned);
+    const recovery=(async()=>{
+      // Explicit user action is the only way to retry a failure in the same
+      // context. Focus refresh continues to leave denied registrations alone.
+      if(pending)await pending;
+      await cleanup;
+      if(owned?.cleanup)await owned.cleanup;
+      this.failedContext=null;
+      if(this.suspended)return this.snapshot();
+      return this.register();
+    })();
+    this.reconnecting=recovery;
+    recovery.finally(()=>{if(this.reconnecting===recovery)this.reconnecting=null;}).catch(()=>{});
+    return recovery;
+  }
   async register() {
     let context;
     try { context = this.getContext(); }
     catch (error) { this.verifiedRequestId=null; this.phase='error'; this.error=String(error.message||error); this.emit(); return this.snapshot(); }
     if (this.context !== context) {
       this.verifiedRequestId=null;
-      if (this.context) this.release();
+      if (this.context) await this.release();
     }
     if (!context) {
       this.context=null; this.registered=false; this.phase='missing'; this.error='';
@@ -3404,6 +3436,8 @@ class NativeSiteConnection {
     }
     if (this.context === context && this.registered) return this.snapshot();
     if (this.failedContext === context) return this.snapshot();
+    if(this.owned?.cleanup)await this.owned.cleanup;
+    if(this.suspended)return this.snapshot();
     this.context=context; this.registered=false; this.error='';
     const controller = this.controller = new AbortController();
     const owned = this.owned = {context, controller, names:[]};
@@ -3414,6 +3448,7 @@ class NativeSiteConnection {
         const wrapped = {...original, execute:async (...args) => {
           if (controller.signal.aborted || this.suspended || this.controller !== controller)
             return {isError:true,error:'このページのSite toolsは停止しました。現在のページで再開してください。'};
+          this.activeCalls++;
           try {
             const result = await original.execute(...args);
             if (!controller.signal.aborted && this.controller === controller) {
@@ -3439,18 +3474,20 @@ class NativeSiteConnection {
               this.phase='call_error';this.error=String(error.message||error);this.emit();
             }
             throw error;
+          } finally {
+            this.activeCalls--;
           }
         }};
         await context.registerTool(wrapped, {signal:controller.signal});
         owned.names.push(original.name);
-        if (controller.signal.aborted) this.release(owned);
+        if (controller.signal.aborted) await this.release(owned);
       }
       if (!controller.signal.aborted && !this.suspended && this.controller === controller) {
         this.registered=true;this.phase='registered';this.emit();
       }
     } catch (error) {
       const interrupted=controller.signal.aborted;
-      this.release(owned);
+      await this.release(owned);
       if (!interrupted && !this.suspended && this.controller === controller) {
         this.failedContext=context;this.registered=false;this.phase='error';
         this.error=String(error.message||error);this.emit();
@@ -4434,8 +4471,21 @@ async function copyNativeRequest(){
   if(!copied){$('native-request-preview').open=true;$('request-check-text').focus();$('request-check-text').select();}
   const status=copied?'依頼文をコピーしました。このチャットへ貼り付けて送信してください。ファイルの保存・添付・返答取込みは不要です。':'自動コピーできませんでした。下の依頼文を選択しています。Ctrl+Cでコピーし、このチャットへ貼り付けて送信してください。';
   $('request-copy-status').textContent=status;message(status);
-  try{await bridge.refresh?.();}catch(error){$('connection').textContent='Site toolsの再確認に失敗しました：'+(error.message||String(error))+'。依頼IDと依頼文は保持しています。';}
+  try{await reconnectNative({quiet:true});}catch(error){$('connection-retry-status').textContent='再登録できませんでした：'+(error.message||String(error))+'。依頼IDと依頼文は保持しています。';}
   return copied;
+}
+async function reconnectNative({quiet=false}={}){
+  if(loading||switching||session.busy||aiResponsePending)throw Error('保存・読込み中です。完了後に接続を再登録してください。');
+  $('reconnect-native').disabled=true;
+  $('connection-retry-status').textContent='この画面のAI接続を再登録しています…';
+  try{
+    const state=await bridge.reconnect();
+    const note=state.registered?'Site toolsを再登録しました。AIによるこのタブの取得・依頼IDの照合はこれからです。':state.phase==='missing'?'この画面ではSite toolsが提供されていません。登録のやり直しはできませんでした。':`Site toolsを再登録できませんでした。${state.error||'現在の接続状態を確認してください。'}`;
+    $('connection-retry-status').textContent=note;
+    if(!quiet)message(note,!state.registered);
+    return state;
+  }catch(error){$('connection-retry-status').textContent='再登録できませんでした：'+(error.message||String(error));throw error;}
+  finally{$('reconnect-native').disabled=false;}
 }
 async function upgradeLegacyRequest(){
   const upgrade=pendingLegacyUpgrade&&structuredClone(pendingLegacyUpgrade);
@@ -4741,7 +4791,7 @@ async function init(){backend=await createBrowserBackend();activeRequestId=(awai
   $('prepare-tab').onclick=()=>view('prepare');$('results-tab').onclick=()=>view('review');$('resume-workspace').onclick=()=>view('review');$('add-more').onclick=()=>view('prepare');for(const tab of document.querySelectorAll('[data-result-tab]'))tab.onclick=()=>switchResult(tab.dataset.resultTab);
   for(const id of ['filter-major','filter-minor','filter-comparison','filter-time'])$(id).onchange=action(async()=>{clearSelection();if(id==='filter-major')$('filter-minor').value='';await render();});$('study-select').onchange=action(changeDetailedDocument);
   for(const key of ['major','minor','outcome','time','kind'])$('detail-'+key).onchange=action(e=>changeDetailedFilter(key,e.target.value));$('detail-filter-reset').onclick=action(async()=>{detailedFilters={};clearSelection();await renderDetailedResults();});
-  $('recommendation-start').onclick=action(showPreparedRequest);$('recommendation-switch').onclick=action(showPreparedRequest);$('recommendation-site').onclick=action(copyNativeRequest);$('upgrade-request').onclick=action(upgradeLegacyRequest);$('ai-file-export').onclick=action(saveAiRequestFile);$('ai-response-open').onclick=()=>$('ai-response-input').click();$('ai-response-input').onchange=action(e=>importAiResponse(e.target.files[0]));$('ai-file-copy').onclick=action(async()=>message(await copyRequestText('ai-file-prompt')?'添付時の依頼文をコピーしました。生成した .dataex と一緒にこのチャットへ送ってください。':'依頼文を選択しました。Ctrl+Cでコピーしてください。'));$('recommendation-add').onclick=()=>view('prepare');$('recommendation-copy').onclick=action(async()=>message(await copyRequestText('recommendation-request-text')?'AI推薦の依頼文をコピーしました。このチャットへ送ってください。':'依頼文を選択しました。Ctrl+Cでコピーしてください。'));$('recommendation-transfer').onclick=action(async()=>{const job=currentRequest();if(!job)throw Error('有効な依頼がありません。');activeRequestId=job.id;await saveAiRequestFile();view('prepare');$('request-panel').scrollIntoView({behavior:'smooth',block:'center'});});
+  $('recommendation-start').onclick=action(showPreparedRequest);$('reconnect-native').onclick=action(()=>reconnectNative());$('recommendation-switch').onclick=action(showPreparedRequest);$('recommendation-site').onclick=action(copyNativeRequest);$('upgrade-request').onclick=action(upgradeLegacyRequest);$('ai-file-export').onclick=action(saveAiRequestFile);$('ai-response-open').onclick=()=>$('ai-response-input').click();$('ai-response-input').onchange=action(e=>importAiResponse(e.target.files[0]));$('ai-file-copy').onclick=action(async()=>message(await copyRequestText('ai-file-prompt')?'添付時の依頼文をコピーしました。生成した .dataex と一緒にこのチャットへ送ってください。':'依頼文を選択しました。Ctrl+Cでコピーしてください。'));$('recommendation-add').onclick=()=>view('prepare');$('recommendation-copy').onclick=action(async()=>message(await copyRequestText('recommendation-request-text')?'AI推薦の依頼文をコピーしました。このチャットへ送ってください。':'依頼文を選択しました。Ctrl+Cでコピーしてください。'));$('recommendation-transfer').onclick=action(async()=>{const job=currentRequest();if(!job)throw Error('有効な依頼がありません。');activeRequestId=job.id;await saveAiRequestFile();view('prepare');$('request-panel').scrollIntoView({behavior:'smooth',block:'center'});});
   $('choose-primary').onclick=()=>{pdfRole='primary';$('pdf-input').click();};$('choose-reference').onclick=()=>{pdfRole='reference';$('pdf-input').click();};$('pdf-input').onchange=action(e=>addFiles(e.target.files,pdfRole));$('start-request').onclick=action(beginRequest);$('copy-request').onclick=action(async()=>message(await copyRequestText('request-text')?'詳細な依頼文をコピーしました。チャットへ貼り付けて送ってください。':'依頼文を選択しました。Ctrl+Cでコピーしてください。'));
   $('copy-connection-check').onclick=action(copyNativeRequest);$('transfer-request').onclick=action(saveAiRequestFile);$('copy-transfer').onclick=action(async()=>message(await copyRequestText('transfer-text')?'添付時の依頼文をコピーしました。生成したファイルと一緒に送ってください。':'依頼文を選択しました。Ctrl+Cでコピーしてください。'));
   $('retry-transfer-view').onclick=action(async()=>{syncWorkspaceInputs();await render();await renderWorkspaceArchives();view('prepare');$('retry-transfer-view').hidden=true;message('引継ぎ後の表示を更新しました。');});$('open-transfer').onclick=()=>$('backup-input').click();$('transfer-cancel').onclick=()=>{if(!switching)$('transfer-dialog').close();};$('transfer-dialog').addEventListener('cancel',e=>{if(switching)e.preventDefault();});$('transfer-dialog').addEventListener('close',()=>{pendingTransfer=null;});$('transfer-form').onsubmit=async e=>{e.preventDefault();try{await applyRequestTransfer();}catch(error){$('transfer-error').textContent=error.message||String(error);}};
