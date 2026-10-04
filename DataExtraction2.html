@@ -122,7 +122,7 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 </style></head>
 <body>
 <header class="app-header"><div class="brand"><span class="brand-symbol">D<span>e</span></span><div><strong>DataExtraction2</strong><span class="brand-caption">論文を読み、解析を考え、原著で確かめる。</span></div></div><div class="header-right"><span id="saved" class="save-state">保存状態を読み込み中</span><button id="quick-backup" class="quiet">作業を保存</button></div></header>
-<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.7</span></nav>
+<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.8</span></nav>
 <div id="message" class="global-message" role="status" aria-live="polite"></div>
 <div id="backup-panel" class="global-message" hidden><a id="backup-download">作業ファイルをダウンロード</a> <span id="backup-filename" class="hint"></span><p class="hint">生成時点の作業ファイルです。このタブを閉じるまでは同じリンクから取得できます。作業を更新した後は、もう一度「作業を保存」を押してください。</p></div>
 <button id="retry-transfer-view" hidden>引継ぎ後の表示を再試行</button>
@@ -2971,14 +2971,29 @@ Object.assign(exports,{detailedBrowser});
  * Browser connectivity is not inferred here. Saved request identities and source
  * data are never repurposed when a user resumes or explicitly switches work.
  */
-const {emptyWorkflow,updateWorkflowModes}=require("src/analysis-workflow.mjs");
-const {AI_RECOMMENDATION_INTENT,isRecommendationJob,recommendationEligibility,validateRecommendationJob}=require("src/ai-recommendation.mjs");
+const {emptyWorkflow,updateWorkflowModes,planStatus}=require("src/analysis-workflow.mjs");
+const {AI_RECOMMENDATION_INTENT,isRecommendationJob,recommendationEligibility,validateRecommendationJob,recommendationDocumentAccounted}=require("src/ai-recommendation.mjs");
+const {receivedDocuments}=require("src/candidate-review.mjs");
 
 const check=(ok,message)=>{if(!ok)throw Error(message);};
 const text=value=>typeof value==='string'&&value.trim().length>0;
 const active=job=>['running','recovered'].includes(job.status);
 const sameList=(a,b)=>a.length===b.length&&a.every(value=>b.includes(value));
 const requestModes=(state,job)=>[...(job?.modes||state.workflow?.modes||['proposal','detailed'])];
+const requestPendingDocuments=(state,job)=>job?job.documents.filter(sha=>!receivedDocuments(job).includes(sha)&&!recommendationDocumentAccounted(state,job,sha)):[];
+
+/** A save receipt alone is not final completion. Older versions wrote receipts
+ * for coverage-only saves, and saved proposals may need review after edits.
+ * An explicit no-compatible-table recommendation is a valid final response.
+ */
+function requestWorkflowComplete(state,job){
+  const receipt=job?.recommendation_result||job?.workflow_result;
+  if(!receipt||requestPendingDocuments(state,job).length)return false;
+  if(!requestModes(state,job).includes('proposal'))return true;
+  const plans=state.workflow?.plans||[];
+  if(plans.some(plan=>planStatus(plan,state.rows).refresh_required))return false;
+  return isRecommendationJob(job)?receipt.plan_ids.every(id=>plans.some(plan=>plan.id===id)):plans.length>0;
+}
 
 function requestPreparation(state,pico,documents,modes=requestModes(state)){
   check(Array.isArray(documents)&&documents.length>0,'抽出する原著・補足PDFを選択してください。');
@@ -2989,9 +3004,22 @@ function requestPreparation(state,pico,documents,modes=requestModes(state)){
   const chosen=updateWorkflowModes(emptyWorkflow(),modes).modes;
   const kind=chosen.includes('proposal')&&eligibility.primary_document_count>=2?'recommendation':'extraction';
   const latest=state.jobs.at(-1);
-  const resume_job=latest&&latest.status!=='stopped'&&!latest.recommendation_result&&!latest.workflow_result&&
+  const resume_job=latest&&latest.status!=='stopped'&&!requestWorkflowComplete(state,latest)&&
     latest.pico===pico&&sameList(latest.documents,eligibility.document_sha256s)&&sameList(requestModes(state,latest),chosen)?latest:null;
-  return {kind,modes:[...chosen],eligibility,resume_job:resume_job||null,blocking_jobs:state.jobs.filter(job=>active(job)&&job.id!==resume_job?.id)};
+  return {kind,modes:[...chosen],eligibility,resume_job:resume_job||null,reopen_extraction:!!resume_job&&['complete','needs_review'].includes(resume_job.status)&&requestPendingDocuments(state,resume_job).length>0,blocking_jobs:state.jobs.filter(job=>active(job)&&job.id!==resume_job?.id)};
+}
+
+/** Recover older premature completion only on the user's explicit same-request
+ * resume. Recheck scope/revision and never create or stop another request.
+ */
+function reopenRequestExtraction(state,{request_id,expected_revision,pico,documents,modes}={}){
+  check(state.revision===expected_revision,'再開前に作業が更新されています。同じ依頼の状態を確認し直してください。');
+  const prepared=requestPreparation(state,pico,documents,modes);
+  check(prepared.resume_job?.id===request_id&&prepared.reopen_extraction,'未処理PDFがある同じ依頼だけを再開できます。');
+  const job=prepared.resume_job;job.status='running';
+  delete job.workflow_result;delete job.recommendation_result;
+  delete job.finished_at;delete job.reorganized_at;
+  return job;
 }
 
 /** Call within session.transact after checking preparation.resume_job. A switch
@@ -3020,7 +3048,7 @@ function applyUnifiedRequest(state,{id,pico,documents,started_at,modes=requestMo
   return job;
 }
 
-Object.assign(exports,{requestModes,requestPreparation,applyUnifiedRequest});
+Object.assign(exports,{requestModes,requestPendingDocuments,requestWorkflowComplete,requestPreparation,reopenRequestExtraction,applyUnifiedRequest});
 },
 "src/file-request.mjs":function(exports,require){
 /** Readable, source-preserving request files for environments without the user's tab.
@@ -3103,7 +3131,7 @@ const {pendingRejections,receivedDocuments}=require("src/candidate-recovery.mjs"
 const {existingStudySources,resolveStudySources}=require("src/candidate-review.mjs");
 const {NativeSiteConnection}=require("src/native-site-connection.mjs");
 const {isRecommendationJob,validateRecommendationJob,recommendationProtocol,recommendationEligibility,recommendationDocumentAccounted}=require("src/ai-recommendation.mjs");
-const {requestModes}=require("src/request-preparation.mjs");
+const {requestModes,requestWorkflowComplete,requestPendingDocuments}=require("src/request-preparation.mjs");
 const {obj,str,pos,rowSchema,mapping}=require("src/extraction-schema.mjs");
 const {emptyWorkflow,workflowBrief,applyWorkflowSubmission,planStatus,WORKFLOW_PROMPT,WORKFLOW_SUBMISSION_SCHEMA}=require("src/analysis-workflow.mjs");
 const check=(ok,message)=>{if(!ok)throw Error(message);};
@@ -3218,8 +3246,8 @@ function mountWorkspaceBridge(runtime,{register=true}={}){
       }
       if(isRecommendationJob(j))validateRecommendationJob(j);
       const existingResults=state().rows.filter(r=>r.source_request!==j.id&&rowInRequest(r,j));
-      const pendingDocuments=j.documents.filter(sha=>!receivedDocuments(j).includes(sha)&&!recommendationDocumentAccounted(state(),j,sha));
-      return {...j,request_match:!!a.request_id,diagnostics,next:isRecommendationJob(j)?recommendationNext(j):['complete','needs_review'].includes(j.status)?finalStep(j):'Read pending originals, save candidates, finish_batch, then '+finalStep(j),batch_revision:state().revision,modes:requestModes(state(),j),
+      const pendingDocuments=requestPendingDocuments(state(),j),reopenRequired=pendingDocuments.length>0&&['complete','needs_review'].includes(j.status);
+      return {...j,request_match:!!a.request_id,diagnostics,next:reopenRequired?'This older request was completed with unprocessed PDFs. Resume this exact request using 「AIへ依頼する」; preserve its ID and PDFs. Then read and submit pending originals before final workflow completion.':isRecommendationJob(j)?recommendationNext(j):['complete','needs_review'].includes(j.status)?finalStep(j):'Read pending originals, save candidates, finish_batch, then '+finalStep(j),batch_revision:state().revision,modes:requestModes(state(),j),reopen_extraction_required:reopenRequired,
         received:receivedDocuments(j),pending_documents:pendingDocuments,...(isRecommendationJob(j)?{documents_to_review:[...j.documents],pending_documents_meaning:'Documents without a retained result or an existing extraction receipt; read ALL documents_to_review even when this list is empty.'}:{}),
         documents:j.documents.map(sha=>state().documents.find(d=>d.sha256===sha)),
         supporting_sources:existingStudySources(state(),j).map(s=>({...s,study:state().rows.find(r=>r.id===s.source_result_ids[0])?.study,document:state().documents.find(d=>d.sha256===s.document_sha256)})),
@@ -3305,27 +3333,31 @@ function mountWorkspaceBridge(runtime,{register=true}={}){
           // This is an explicit current shortlist, never the union of all
           // tables refreshed across previous submissions.
           job.recommendation_result={plan_ids:[...recommended_plan_ids],saved_at:new Date().toISOString(),...(a.summary?.trim()?{summary:a.summary.trim()}:{})};
-          job.status=pendingRejections(s,job.id).length?'needs_review':'complete';
-          savedRecommendation=structuredClone(job.recommendation_result);
-        }
-        if(sourceJob&&!job){
-          sourceJob.workflow_result={plan_ids:a.plans.map(p=>p.id),saved_at:new Date().toISOString()};
-          sourceJob.status=pendingRejections(s,sourceJob.id).length?'needs_review':'complete';
+          if(requestPendingDocuments(s,job).length){delete job.recommendation_result;}
+          else{job.status=pendingRejections(s,job.id).length?'needs_review':'complete';savedRecommendation=structuredClone(job.recommendation_result);}
         }
         s.workflow=nextWorkflow;
+        if(sourceJob&&!job){
+          sourceJob.workflow_result={plan_ids:a.plans.map(p=>p.id),saved_at:new Date().toISOString()};
+          // Coverage and partial proposal updates are durable progress, not a
+          // final receipt that would prevent this same request from resuming.
+          if(!requestWorkflowComplete(s,sourceJob))delete sourceJob.workflow_result;
+          if(!requestPendingDocuments(s,sourceJob).length)sourceJob.status=pendingRejections(s,sourceJob.id).length?'needs_review':'complete';
+        }
       });
-      const committed=state(),hasRecommended=!!savedRecommendation?.plan_ids.length;
+      const committed=state(),hasRecommended=!!savedRecommendation?.plan_ids.length,pendingDocuments=requestPendingDocuments(committed,request),reopenRequired=pendingDocuments.length>0&&['complete','needs_review'].includes(committed.jobs.find(j=>j.id===request?.id)?.status);
       const display=await updateDisplay([
         ['保存結果の画面更新',()=>runtime.render?.()],
         ['結果タブの表示',()=>(runtime.onWorkflowSaved||runtime.onProposals)?.(request?.id,{modes:requestModes(committed,request),intent:request?.intent||null,has_plans:a.plans.length>0,has_recommendations:hasRecommended})],
-        ['保存結果の通知',()=>runtime.message(recommendation?(hasRecommended?'AI推薦の表と原著の確認範囲を保存しました。人の承認は行っていません。':'研究横断の表を推薦できない理由と原著の確認範囲を保存しました。'):a.plans.length?'解析表の提案を保存しました。数値から原著を確認・訂正できます。':'資料の確認範囲を保存しました。')]
+        ['保存結果の通知',()=>runtime.message(pendingDocuments.length?`確認範囲を途中保存しました。未処理のPDF ${pendingDocuments.length}本を同じ依頼で続けてください。`:recommendation?(hasRecommended?'AI推薦の表と原著の確認範囲を保存しました。人の承認は行っていません。':'研究横断の表を推薦できない理由と原著の確認範囲を保存しました。'):a.plans.length?'解析表の提案を保存しました。数値から原著を確認・訂正できます。':'資料の確認範囲を保存しました。')]
       ]);
       const pendingPlans=committed.workflow.plans.flatMap(p=>{const status=planStatus(p,committed.rows);return status.refresh_required?[{id:p.id,title:p.title,stale:status.stale,unassessed_result_ids:status.unassessed_result_ids}]:[];});
-      const needsProposals=requestModes(committed,request).includes('proposal')&&(!committed.workflow.plans.length||pendingPlans.length>0);
+      const needsProposals=requestModes(committed,request).includes('proposal')&&(!committed.workflow.plans.length&&!savedRecommendation||pendingPlans.length>0);
       return {ok:true,saved:true,...display,batch_revision:committed.revision,workflow_revision:committed.workflow.revision,plans:committed.workflow.plans.map(p=>({id:p.id,title:p.title})),plans_requiring_refresh:pendingPlans,needs_proposals:needsProposals,
+        pending_documents:pendingDocuments,needs_extraction:pendingDocuments.length>0,reopen_extraction_required:reopenRequired,
         ...(request?{request_id:request.id,request_match:true}:{}),
-        ...(recommendation?{recommendation_result:savedRecommendation,recommendation_status:hasRecommended?'saved':'no_compatible_table'}:request?{workflow_result:structuredClone(committed.jobs.find(j=>j.id===request.id).workflow_result)}:{}),
-        next:recommendation&&!hasRecommended?'Saved the reason no compatible multi-study table is recommended, and source coverage. No meta-analysis table, human approval or pooling was claimed.'+(pendingPlans.length?' Existing plans still require refresh; inspect plans_requiring_refresh and update them using the same IDs.':''):needsProposals?'Proposal mode remains unfinished: call workflow_brief, refresh all listed existing plans using the same IDs and current missing reasons, or create initial proposals if none exist.':'Saved; review original sources and correct as needed. No human approval or pooling was performed.',approval:null};
+        ...(recommendation?{recommendation_result:savedRecommendation,recommendation_status:pendingDocuments.length?'pending_extraction':hasRecommended?'saved':'no_compatible_table'}:request?{workflow_result:structuredClone(committed.jobs.find(j=>j.id===request.id).workflow_result)}:{}),
+        next:pendingDocuments.length?'Partial progress saved; extraction remains unfinished. '+(reopenRequired?'Resume this exact older request using 「AIへ依頼する」 first. ':'')+'Read every pending_document and submit source-grounded candidates or an explicit reason with rows=[], then finish_batch as needed and save_workflow again using this same request_id. Do not create another request.':recommendation&&!hasRecommended?'Saved the reason no compatible multi-study table is recommended, and source coverage. No meta-analysis table, human approval or pooling was claimed.'+(pendingPlans.length?' Existing plans still require refresh; inspect plans_requiring_refresh and update them using the same IDs.':''):needsProposals?'Proposal mode remains unfinished: call workflow_brief, refresh all listed existing plans using the same IDs and current missing reasons, or create initial proposals if none exist.':'Saved; review original sources and correct as needed. No human approval or pooling was performed.',approval:null};
     },false)
   ];
   connection=new NativeSiteConnection({tools,onState:s=>runtime.onConnection?.(s)});
@@ -3450,21 +3482,47 @@ class NativeSiteConnection {
     recovery.finally(()=>{if(this.reconnecting===recovery)this.reconnecting=null;}).catch(()=>{});
     return recovery;
   }
-  async register() {
+  async contextLookupFailed(error) {
+    const owned=this.owned;
+    if(owned)owned.retired=true;
+    this.verificationGeneration++;
+    this.context=null;this.registered=false;this.verifiedRequestId=null;this.lastCall=null;
+    this.phase='error';this.error=String(error?.message||error);this.emit();
+    await this.releaseWhenIdle(owned);
+    return this.snapshot();
+  }
+  async releaseWhenIdle(owned) {
+    while(this.activeCalls)await new Promise(resolve=>this.idleWaiters.push(resolve));
+    return this.release(owned);
+  }
+  retireContext(owned,context,error) {
+    // Reject new calls immediately, but do not abort an already-running save.
+    // register() waits for activeCalls before cleaning up this registration.
+    owned.retired=true;
+    this.verificationGeneration++;
+    this.registered=false;this.verifiedRequestId=null;this.lastCall=null;
+    this.phase=error?'error':context?'registering':'missing';
+    this.error=error?String(error?.message||error):'';this.emit();
+    const pending=this.refresh();
+    pending.then(()=>{
+      // A registration already in progress may have consumed that refresh.
+      if(this.owned===owned&&owned.retired&&!this.suspended)return this.refresh();
+    }).catch(()=>{});
+    return {isError:true,error:'Site toolsの接続先が変更されたか確認できないため、この呼出しでは読取り・保存を行っていません。現在の接続で依頼IDを再確認してください。'};
+  }
+  async register(reconciliationsLeft=8) {
+    // A host that continuously changes context must not trap the UI in an
+    // endless microtask retry chain. Explicit reconnect starts a fresh attempt.
+    if(reconciliationsLeft<=0)return this.contextLookupFailed(Error('Site toolsの接続先が安定せず再登録できませんでした。接続先を確認し、「AI接続を再登録」で再試行してください。'));
     // Focus/context refresh must preserve a running save just as reconnect does.
     // Read the host only after the call and any previous cleanup have settled.
     while(this.activeCalls)await new Promise(resolve=>this.idleWaiters.push(resolve));
+    if(this.owned?.retired)await this.release();
     if(this.owned?.cleanup)await this.owned.cleanup;
     if(this.suspended)return this.snapshot();
     let context;
     try { context = this.getContext(); }
-    catch (error) {
-      this.verificationGeneration++;
-      this.context=null;this.registered=false;this.verifiedRequestId=null;this.lastCall=null;
-      this.phase='error';this.error=String(error?.message||error);
-      const cleanup=this.release();this.emit();await cleanup;
-      return this.snapshot();
-    }
+    catch (error) { return this.contextLookupFailed(error); }
     if (this.context !== context) {
       this.verificationGeneration++;
       this.context=context;this.registered=false;this.verifiedRequestId=null;this.lastCall=null;this.error='';
@@ -3472,7 +3530,7 @@ class NativeSiteConnection {
         this.phase=context ? 'registering' : 'missing';this.emit();
         await this.release();
         // The host may have changed again while unregisterTool was pending.
-        return this.register();
+        return this.register(reconciliationsLeft-1);
       }
     }
     if (!context) {
@@ -3487,12 +3545,17 @@ class NativeSiteConnection {
     const controller = this.controller = new AbortController();
     const owned = this.owned = {context, controller, names:[]};
     this.phase='registering'; this.emit();
+    let failedRegistration=false;
     try {
       for (const original of this.tools) {
-        if (controller.signal.aborted || this.suspended) break;
+        if (controller.signal.aborted || this.suspended || owned.retired) break;
         const wrapped = {...original, execute:async (...args) => {
-          if (controller.signal.aborted || this.suspended || this.controller !== controller)
+          if (controller.signal.aborted || this.suspended || this.controller !== controller || owned.retired)
             return {isError:true,error:'このページのSite toolsは停止しました。現在のページで再開してください。'};
+          let latestContext;
+          try { latestContext=this.getContext(); }
+          catch(error) { return this.retireContext(owned,null,error); }
+          if(latestContext!==context)return this.retireContext(owned,latestContext);
           this.activeCalls++;
           // A new identity check revokes its predecessor immediately. Otherwise
           // a slow successful brief could revive a receipt after a newer mismatch.
@@ -3532,16 +3595,25 @@ class NativeSiteConnection {
         owned.names.push(original.name);
         if (controller.signal.aborted) await this.release(owned);
       }
-      if (!controller.signal.aborted && !this.suspended && this.controller === controller) {
-        this.registered=true;this.phase='registered';this.emit();
-      }
     } catch (error) {
-      const interrupted=controller.signal.aborted;
-      await this.release(owned);
+      const interrupted=controller.signal.aborted||owned.retired;
+      owned.retired=true;
+      await this.releaseWhenIdle(owned);
       if (!interrupted && !this.suspended && this.controller === controller) {
+        failedRegistration=true;
         this.failedContext=context;this.registered=false;this.phase='error';
         this.error=String(error.message||error);this.contextFailures.set(context,this.error);this.emit();
       }
+    }
+    if (!this.suspended && this.controller === controller && (!controller.signal.aborted || failedRegistration)) {
+      // A focus refresh shares this pending registration. Re-read the host now
+      // so a context replaced while registerTool awaited is not lost forever.
+      // Reconcile a failed old registration too, without retrying that context.
+      let latestContext;
+      try { latestContext=this.getContext(); }
+      catch (error) { return this.contextLookupFailed(error); }
+      if(latestContext!==context||(owned.retired&&!failedRegistration))return this.register(reconciliationsLeft-1);
+      if(!failedRegistration){this.registered=true;this.phase='registered';this.emit();}
     }
     return this.snapshot();
   }
@@ -4156,7 +4228,7 @@ const {outcomeOptions,resultMatchesOutcome,planMatchesOutcome}=require("src/outc
 const {mountSelectionResize}=require("src/selection-resize.mjs");
 const {detailedBrowser}=require("src/detailed-browser.mjs");
 const {recommendationEligibility,isRecommendationJob}=require("src/ai-recommendation.mjs");
-const {requestPreparation,applyUnifiedRequest}=require("src/request-preparation.mjs");
+const {requestPreparation,applyUnifiedRequest,requestWorkflowComplete,reopenRequestExtraction}=require("src/request-preparation.mjs");
 const {makeFileRequest,fileRequestText}=require("src/file-request.mjs");
 const {canonical}=require("src/probe-session.mjs");
 const {stageFileResponse,commitFileResponse}=require("src/file-response.mjs");
@@ -4248,7 +4320,7 @@ function syncWorkspaceInputs(){
 }
 function currentRequest(){const job=activeRequestId?session.state.jobs.find(j=>j.id===activeRequestId):session.state.jobs.at(-1);return job?.status==='stopped'?null:job;}
 function renderRequestConnection(){
-  const job=currentRequest(),s=connectionState,verified=!!job&&s?.verified_request_id===job.id,receipt=job?.recommendation_result||job?.workflow_result;
+  const job=currentRequest(),s=connectionState,verified=!!job&&s?.verified_request_id===job.id,receipt=requestWorkflowComplete(session.state,job)?job.recommendation_result||job.workflow_result:null;
   $('request-panel').hidden=!job;
   const selection=selectedDocuments(),selected=Object.entries(modes()).filter(([,enabled])=>enabled).map(([mode])=>mode);
   const preparation=selection.length&&selected.length?requestPreparation(session.state,$('pico').value.trim(),selection,selected):null;
@@ -4630,7 +4702,7 @@ function recommendationGrid(rows){
   return host;
 }
 async function renderRecommendation(){
-  const job=currentRequest(),receipt=job?.recommendation_result,completed=receipt||job?.workflow_result,busy=loading||switching||session.busy||aiResponsePending;
+  const job=currentRequest(),receipt=job?.recommendation_result,completed=requestWorkflowComplete(session.state,job),busy=loading||switching||session.busy||aiResponsePending;
   const scope=(job?.documents||selectedDocuments()).filter(sha=>session.state.documents.some(doc=>doc.sha256===sha&&doc.role!=='reference'));
   const eligibility=recommendationEligibility(session.state,scope);
   $('recommendation-start').disabled=busy;$('recommendation-start').textContent=completed?'論文・目的を確認する':job?'同じ依頼の準備画面へ':'論文を選んでAIへ依頼する';
@@ -4794,7 +4866,11 @@ async function beginRequest({file=false}={}){
   if(!selectedModes.length)throw Error('少なくとも一つのモードを選んでください。');
   if(!docs.length)throw Error('抽出する原著PDFを選択してください。');
   const prepared=requestPreparation(session.state,pico,docs,selectedModes);
-  if(prepared.resume_job)activeRequestId=prepared.resume_job.id;
+  if(prepared.resume_job){
+    const id=prepared.resume_job.id,expected=session.state.revision;
+    if(prepared.reopen_extraction)await save(s=>reopenRequestExtraction(s,{request_id:id,expected_revision:expected,pico,documents:docs,modes:selectedModes}));
+    activeRequestId=id;
+  }
   else{
     const replace=prepared.blocking_jobs.map(j=>j.id),expected=session.state.revision;
     if(replace.length&&!window.confirm('選んだ論文・問い・モードで新しく依頼します。進行中の依頼を停止しますか？ 保存済み候補は残ります。停止した依頼への返答は取り込めなくなります。'))return;
