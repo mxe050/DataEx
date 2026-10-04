@@ -130,9 +130,9 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 <div class="results-heading"><div><p class="eyebrow">YOUR EVIDENCE WORKSPACE</p><h1>提案を見て、原著で確かめる。</h1></div><button id="add-more">論文を追加</button></div>
 <nav class="result-tabs" aria-label="結果の表示"><button data-result-tab="recommendation" aria-selected="true">AI推薦</button><button data-result-tab="proposal" aria-selected="false">解析表の提案</button><button data-result-tab="detailed" aria-selected="false">論文別の抽出</button><button data-result-tab="export" aria-selected="false">保存・CSV</button></nav>
 <section id="recommendation-pane" class="result-pane">
-<section class="recommendation-intro"><p class="eyebrow">複数論文から、まず行う解析を。</p><h2>AIにメタ分析のたたき台を選んでもらう</h2><p>原著を横断して読み、主要な有効性と重要な害から、最初に使う少数の表を推薦します。各表は2研究以上、1研究につき1候補を基本にします。</p><p id="recommendation-pico"></p><p id="recommendation-scope" class="hint"></p><div class="button-row"><button id="recommendation-start" class="primary large">AI推薦</button><button id="recommendation-add">論文・目的を確認</button></div><p class="hint">押すとPDF・候補・依頼IDをまとめたファイルを保存します。そのファイルをチャットへ添付するとAIが原著を確認し、返答ファイルを返します。1論文、同じ試験の別報告だけでは推薦表を作りません。</p></section>
+<section class="recommendation-intro"><p class="eyebrow">複数論文から、まず行う解析を。</p><h2>AIにメタ分析のたたき台を選んでもらう</h2><p>原著を横断して読み、主要な有効性と重要な害から、最初に使う少数の表を推薦します。各表は2研究以上、1研究につき1候補を基本にします。</p><p id="recommendation-pico"></p><p id="recommendation-scope" class="hint"></p><div class="button-row"><button id="recommendation-start" class="primary large">AI推薦</button><button id="recommendation-add">論文・目的を確認</button></div><p class="hint">押すとPDF・候補・依頼IDをまとめたファイルを準備します。自動ではダウンロードしません。必要なときだけ下の保存リンクを押し、ファイルをチャットへ添付するとAIが原著を確認し、返答ファイルを返します。1論文、同じ試験の別報告だけでは推薦表を作りません。</p></section>
 <section id="recommendation-transition" class="recommendation-transition" hidden><h3>この画面でAI推薦へ切り替えられます</h3><p id="recommendation-transition-note"></p><button id="recommendation-switch" class="primary">進行中の依頼を停止してAI推薦へ</button></section>
-<section class="ai-file-route" aria-labelledby="ai-file-title"><h3 id="ai-file-title">タブ接続なしで、AI推薦を受け取る</h3><ol><li><strong>依頼ファイルをチャットへ添付</strong><p>「AI推薦」で保存した .dataex を、このチャットへ添付して送ります。すでに依頼を準備した場合は、下のボタンで同じIDのファイルを作れます。</p><button id="ai-file-export">この依頼をファイルにする</button> <a id="ai-file-download" hidden>AIへ渡すファイルをダウンロード</a></li><li><strong>AIの返答をこの画面へ読み込む</strong><p>AIが返した .dataex-response ファイルを保存し、下のボタンで選びます。依頼ID・保存版・原著根拠を検査して、候補と推薦表を保存します。</p><button id="ai-response-open">AIの返答ファイルを読み込む</button><input id="ai-response-input" type="file" accept=".dataex-response,application/json,.json" hidden></li></ol><p class="hint">返答を待つ間に候補や解析条件を変更すると、古い返答は取り込めません。変更後の依頼ファイルを送り直してください。PDFや作業データを公開サイトへ送ることはありません。</p><p id="ai-file-status" class="hint" role="status"></p><section id="ai-file-instructions" hidden><button id="ai-file-copy">添付時の依頼文をコピー</button><textarea id="ai-file-prompt" rows="4" readonly aria-label="依頼ファイルに添える文"></textarea></section></section>
+<section class="ai-file-route" aria-labelledby="ai-file-title"><h3 id="ai-file-title">タブ接続なしで、AI推薦を受け取る</h3><ol><li><strong>依頼ファイルをチャットへ添付</strong><p>「AI推薦」で準備した .dataex を、下の保存リンクから必要なときだけ保存し、このチャットへ添付します。同じ内容を添付済みなら保存し直す必要はありません。下のボタンは同じIDの保存リンクを準備します。</p><button id="ai-file-export">この依頼をファイルにする</button> <a id="ai-file-download" hidden>依頼ファイルを保存（必要なときだけ）</a></li><li><strong>AIの返答をこの画面へ読み込む</strong><p>AIが返した .dataex-response ファイルを保存し、下のボタンで選びます。依頼ID・保存版・原著根拠を検査して、候補と推薦表を保存します。</p><button id="ai-response-open">AIの返答ファイルを読み込む</button><input id="ai-response-input" type="file" accept=".dataex-response,application/json,.json" hidden></li></ol><p class="hint">返答を待つ間に候補や解析条件を変更すると、古い返答は取り込めません。変更後の依頼ファイルを送り直してください。PDFや作業データを公開サイトへ送ることはありません。</p><p id="ai-file-status" class="hint" role="status"></p><section id="ai-file-instructions" hidden><button id="ai-file-copy">添付時の依頼文をコピー</button><textarea id="ai-file-prompt" rows="4" readonly aria-label="依頼ファイルに添える文"></textarea></section></section>
 <details class="recommendation-native"><summary>このタブをAIが直接操作できる場合</summary><p id="recommendation-request-status" class="hint" role="status"></p><p class="hint">接続できる既存タブがある場合だけ使います。about:blankしか取得できない場合は、上のファイル方式で進めてください。</p><button id="recommendation-site">Site toolsで依頼する</button>
 <section id="recommendation-request" class="request-panel" hidden><h3>この依頼文をチャットへ送信</h3><button id="recommendation-copy" class="primary">AI推薦の依頼文をコピー</button><textarea id="recommendation-request-text" rows="5" readonly aria-label="AI推薦の依頼文"></textarea><p class="hint">原著確認と提案保存は、AIから返答されるまで未実行です。接続できない場合はエラーを表示し、推薦済みにしません。</p><button id="recommendation-transfer">この依頼をファイルで引き継ぐ</button></section>
 </details><div id="recommendation-plans"></div><p class="hint">推薦は修正できるたたき台です。原著確認・人の承認・同じ解析へ統合する判断を完了した意味ではありません。</p>
@@ -3931,6 +3931,7 @@ const {mountSelectionResize}=require("src/selection-resize.mjs");
 const {detailedBrowser}=require("src/detailed-browser.mjs");
 const {recommendationEligibility,recommendationPreparation,isRecommendationJob,applyRecommendationRequest,applyRecommendationTransition}=require("src/ai-recommendation.mjs");
 const {makeFileRequest,fileRequestText}=require("src/file-request.mjs");
+const {canonical}=require("src/probe-session.mjs");
 const {stageFileResponse,commitFileResponse}=require("src/file-response.mjs");
 const {outputIdentity,meanLabel,sourceEvidenceLabel}=require("src/review-view.mjs");
 const {createSourceRoom}=require("src/source-room.mjs");
@@ -3955,7 +3956,7 @@ const openAlternativePlans=new Set();
 const candidateStudyOpen=new Map();
 let draftSaves,focusedOutcome=null;
 let detailedFilters={};
-let aiFileDownloadUrl=null,aiFileRequestId=null,aiFileStatus='',aiResponsePending=false,pendingRecommendationTransition=null;
+let aiFileDownloadUrl=null,aiFileRequestId=null,aiFileBatchFingerprint=null,aiFileStatus='',aiResponsePending=false,pendingRecommendationTransition=null;
 const recommendationOpen=new Map();
 const draftPendingLabels=[];
 const workflow=()=>session.state.workflow||emptyWorkflow();
@@ -4295,20 +4296,39 @@ async function prepareRecommendation({file=false,transition=null}={}){
   const copied=await copyRequestText('recommendation-request-text');
   message(copied?'AI推薦の依頼文をコピーしました。このチャットへ貼り付けて送ると、原著確認と推薦表の保存を進められます。':'AI推薦の依頼を保存しました。下の依頼文を Ctrl+C でコピーして、このチャットへ送ってください。');
 }
+function clearAiRequestFile(){
+  if(aiFileDownloadUrl)URL.revokeObjectURL(aiFileDownloadUrl);
+  aiFileDownloadUrl=null;aiFileRequestId=null;aiFileBatchFingerprint=null;
+  $('ai-file-download').hidden=true;$('ai-file-download').href='';$('ai-file-instructions').hidden=true;
+}
 async function saveAiRequestFile(){
   if(loading||switching||session.busy||aiResponsePending)throw Error('保存・読込み中です。完了後に操作してください。');
   if(document.querySelector('.plan-editor[data-dirty="true"],.coverage-editor[data-dirty="true"]')||$('manual-dialog').open||sourceRoom?.isOpen())throw Error('編集中の内容を保存し、原著確認画面を閉じてから依頼ファイルを作ってください。');
   await synchronizeWorkspace();await draftSaves.flush();
-  const job=latestRecommendation();if(!job||job.status==='stopped')throw Error('先にAI推薦の依頼を準備してください。');
+  // The cache and the exported file must describe the same immutable snapshot.
+  const source=await backend.store.read(),job=source.batch.jobs.findLast(isRecommendationJob);
+  if(!job||job.status==='stopped')throw Error('先にAI推薦の依頼を準備してください。');
   if($('pico').value.trim()!==job.pico)throw Error('問いが変更されています。現在の問いでAI推薦を準備してください。');
-  const blob=await makeFileRequest(backend.store,job.id),previous=aiFileDownloadUrl;
-  aiFileDownloadUrl=URL.createObjectURL(blob);aiFileRequestId=job.id;
-  const link=$('ai-file-download');link.href=aiFileDownloadUrl;link.download=`DataExtraction2_AI_request_${job.id}.dataex`;link.textContent='AIへ渡すファイルをダウンロード';link.hidden=false;link.click();if(previous)URL.revokeObjectURL(previous);
+  const fingerprint=canonical(source.batch),reused=!!aiFileDownloadUrl&&aiFileRequestId===job.id&&aiFileBatchFingerprint===fingerprint;
+  if(!reused){
+    clearAiRequestFile();
+    const snapshot=new MemoryStore(source);snapshot.persistent=!!backend.store.persistent;
+    const blob=await makeFileRequest(snapshot,job.id);
+    if(canonical((await backend.store.read()).batch)!==fingerprint)throw Error('準備中に作業が変更されました。現在の内容で依頼ファイルを準備し直してください。');
+    aiFileDownloadUrl=URL.createObjectURL(blob);aiFileRequestId=job.id;aiFileBatchFingerprint=fingerprint;
+  }
+  const link=$('ai-file-download');link.href=aiFileDownloadUrl;link.download=`DataExtraction2_AI_request_${job.id}.dataex`;link.textContent='依頼ファイルを保存（必要なときだけ）';link.hidden=false;
+  link.onclick=event=>{
+    if(aiFileRequestId!==latestRecommendation()?.id||aiFileBatchFingerprint!==canonical(session.state)){
+      event.preventDefault();clearAiRequestFile();message('作業が変更されています。「この依頼をファイルにする」で現在の内容を準備してください。',true);
+    }
+  };
   $('ai-file-prompt').value=fileRequestText(job.id);$('ai-file-instructions').hidden=false;
   const copied=await copyRequestText('ai-file-prompt');
-  aiFileStatus='依頼ファイルを生成しました。まだAIによる原著確認・推薦は実行されていません。';$('ai-file-status').textContent=aiFileStatus;
-  message(`同じ依頼IDのPDF・候補をまとめました。ダウンロードした .dataex をこのチャットへ添付し、${copied?'コピーした':'下の'}依頼文と一緒に送ってください。既存タブへの接続は不要です。`);
+  aiFileStatus=reused?'準備済みの同じファイルを使えます。自動ダウンロードは行いません。':'依頼ファイルを準備しました。まだAIによる原著確認・推薦は実行されていません。自動ダウンロードは行いません。';$('ai-file-status').textContent=aiFileStatus;
+  message(`依頼ファイルを準備しました。必要なときだけ「依頼ファイルを保存」を押し、.dataex をこのチャットへ添付して${copied?'コピーした':'下の'}依頼文と一緒に送ってください。同じ内容を添付済みなら、保存し直す必要はありません。`);
 }
+
 async function importAiResponse(file){
   if(!file)return;
   if(loading||switching||session.busy||aiResponsePending)throw Error('保存・読込み中です。完了後に操作してください。');
@@ -4361,8 +4381,8 @@ async function renderRecommendation(){
   pendingRecommendationTransition=canSwitch?{expected_revision:session.state.revision,pico:$('pico').value.trim(),documents:[...eligibility.document_sha256s],replace_request_ids:blocking_jobs.map(j=>j.id)}:null;
   $('recommendation-transition-note').textContent=canSwitch?`進行中の依頼：${blocking_jobs.map(j=>`${isRecommendationJob(j)?'AI推薦':'論文の抽出'}（${j.id}）`).join('、')}。下のボタンはこの依頼を停止し、新しいIDでAI推薦を準備します。PDF・保存済み候補・訂正・承認履歴は保持します。停止した依頼への返答は受け付けなくなります。`:'';
   $('ai-file-export').disabled=!job||job.status==='stopped'||loading||switching;$('ai-response-open').disabled=!job||job.status==='stopped'||aiResponsePending||loading||switching;
+  if(aiFileRequestId&&(aiFileRequestId!==job?.id||aiFileBatchFingerprint!==canonical(session.state))){clearAiRequestFile();if(!receipt)aiFileStatus='作業が更新されたため、前の保存リンクを閉じました。必要なら現在の内容で依頼ファイルを準備してください。';}
   $('ai-file-status').textContent=[job?`依頼ID：${job.id}`:'',aiFileStatus||(receipt?'推薦の返答を保存済みです。':'')].filter(Boolean).join(' · ');
-  if(aiFileRequestId&&aiFileRequestId!==job?.id){$('ai-file-download').hidden=true;$('ai-file-instructions').hidden=true;}
   $('recommendation-start').textContent=resume_job?'AI推薦を続ける':receipt?'AI推薦を更新':'AI推薦';
   $('recommendation-scope').textContent=`原著 ${eligibility.primary_document_count}本 · 保存済み研究ID ${eligibility.known_study_count}件。${eligibility.reason}`;
   $('recommendation-pico').textContent=session.state.pico?`今回の問い：${session.state.pico}`:'問いが未入力なので、原著から共通のPICOを仮説として提案します。';
