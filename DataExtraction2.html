@@ -103,9 +103,9 @@ button{min-height:40px}button:disabled{cursor:not-allowed}button:focus-visible,a
 #room-pdf #page-image{width:100%;display:block}#room-pdf #highlights{position:absolute;inset:0}#room-pdf .page-controls{flex-wrap:wrap;gap:3px}
 #room-pdf .page-controls button,#room-pdf .page-controls select{padding:4px 9px;margin:2px;font-size:13px}#room-pdf .page-controls input{width:58px}
 #room-pdf #source-status{font-size:12px;line-height:1.5;margin:7px 0}#room-pdf .highlight{background:#ffdf4266;outline:1px solid #b7870b}
-#room-pdf .human-highlight{background:#75c9ef3b;outline:2px solid #08749a;border:0}.room-mark-preview{position:absolute;border:2px solid #08749a;background:#75c9ef3b;pointer-events:none;z-index:2}
+#room-pdf .candidate-highlight{background:#b68ae940;outline:2px dashed #7845aa}#room-pdf .human-highlight{background:#75c9ef3b;outline:2px solid #08749a;border:0}.room-mark-preview{position:absolute;border:2px solid #08749a;background:#75c9ef3b;pointer-events:none;z-index:2}
 .mark-mode{cursor:crosshair;touch-action:none;user-select:none}.room-source-bar{font-size:12px;margin:5px 0}.room-search{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:6px 0}
-.room-search input{min-width:80px;flex:1;font-size:13px}.room-search button{font-size:12px;padding:5px 8px}.room-search-results{font-size:12px;max-height:170px;overflow:auto}.room-search-results button{display:block;width:100%;text-align:left;font-size:12px}
+.room-search input{min-width:80px;flex:1;font-size:13px}.room-search button{font-size:12px;padding:5px 8px}.room-search-results{font-size:12px;max-height:170px;overflow:auto}.room-search-results button[aria-pressed=true]{background:#eee4f8;border-color:#7845aa}.room-search-results button{display:block;width:100%;text-align:left;font-size:12px}
 .room-kicker{font-size:12px;color:#476a78;margin:0 0 7px}.room-value{font-size:24px;font-weight:700;color:#153d49;margin:0 0 8px}.room-raw{font-size:12px;overflow-wrap:anywhere}
 .room-fields{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin:12px 0}.room-fields button{font-size:12px;text-align:left;padding:7px;margin:0;overflow-wrap:anywhere}.room-fields button[aria-pressed=true]{background:#dbecef;border:2px solid #126779}
 .room-row-nav{display:flex;justify-content:space-between}.room-row-nav button{font-size:12px;padding:5px 10px}.room-meta{font-size:13px;display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px 9px;margin:14px 0}.room-meta dt{color:#56717a}.room-meta dd{margin:0;overflow-wrap:anywhere}
@@ -122,7 +122,7 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 </style></head>
 <body>
 <header class="app-header"><div class="brand"><span class="brand-symbol">D<span>e</span></span><div><strong>DataExtraction2</strong><span class="brand-caption">論文を読み、解析を考え、原著で確かめる。</span></div></div><div class="header-right"><span id="saved" class="save-state">保存状態を読み込み中</span><button id="quick-backup" class="quiet">作業を保存</button></div></header>
-<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.9</span></nav>
+<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.10</span></nav>
 <div id="message" class="global-message" role="status" aria-live="polite"></div>
 <div id="backup-panel" class="global-message" hidden><a id="backup-download">作業ファイルをダウンロード</a> <span id="backup-filename" class="hint"></span><p class="hint">生成時点の作業ファイルです。このタブを閉じるまでは同じリンクから取得できます。作業を更新した後は、もう一度「作業を保存」を押してください。</p></div>
 <button id="retry-transfer-view" hidden>引継ぎ後の表示を再試行</button>
@@ -245,7 +245,7 @@ function literalIndex(raw){
   }
   if(text.endsWith(' ')){text=text.slice(0,-1);starts.pop();ends.pop();}return {text,starts,ends};
 }
-function literalMatches(raw,quote){
+function literalMatches(raw,quote,acceptMatch=null){
   check(typeof quote==='string'&&quote.trim()&&quote.length<=20000,'有効な原文引用を指定してください。');
   const h=literalIndex(raw),n=literalIndex(quote).text,hits=[];
   check(n.length>0,'引用が空です。');
@@ -257,7 +257,7 @@ function literalMatches(raw,quote){
     let valid=!(startsNumber?/[\p{L}\p{N}_.,·+\-−﹣]/u.test(before):word(n[0])&&word(before));
     valid=valid&&!(endsNumber?/[\p{L}\p{N}_·]/u.test(after)||/[.,]/u.test(after)&&/\d/u.test(h.text[at+n.length+1]||''):word(n.at(-1))&&word(after));
     if(/^[\d.]/u.test(n)&&/[+\-−﹣]\s*$/u.test(h.text.slice(0,at)))valid=false;
-    if(valid)hits.push({start:h.starts[at],end:h.ends[at+n.length-1]});
+    if(valid){const hit={start:h.starts[at],end:h.ends[at+n.length-1]};if(!acceptMatch||acceptMatch(hit))hits.push(hit);}
     at=h.text.indexOf(n,at+1);
   }
   return hits;
@@ -3832,6 +3832,8 @@ Object.assign(exports,{FILE_RESPONSE_SCHEMA,FILE_RESPONSE_MAX_BYTES,readFileResp
 /** In-page source review, one canonical result state. No model/server calls.
  * Merely entering, changing pages or returning does not alter scientific data.
  */
+const {resolveDisplayLocation}=require("src/source-display.mjs");
+
 function checkedMark(row,mark,documents){
   const d=documents.find(d=>d.sha256===mark.document_sha256);
   const r=mark.rect;
@@ -3931,18 +3933,27 @@ function createSourceRoom(d){
     const doc=d.state().documents.find(x=>x.sha256===sha);if(!doc||!Number.isInteger(page)||page<1||page>doc.page_count)throw Error('PDFまたはページが不正です。');
     savePlace();pendingMark=null;toggleMark(false);const epoch=++sourceEpoch,identity=keyId();shown={sha,page,quote,kind,evidence,owner:keyId()};
     $('source-title').textContent=doc.filename;$('source-status').textContent=`PDF ${page}/${doc.page_count}ページを読み込み中…`;
-    $('page').value=page;$('page').max=doc.page_count;$('page-image').hidden=true;drawMarks([]);$('page-text').textContent='';$('room-search-results').replaceChildren();
+    $('page').value=page;$('page').max=doc.page_count;$('page-image').hidden=true;drawMarks([]);$('page-text').textContent='';$('room-search-results').replaceChildren();$('room-search').disabled=true;$('room-search-submit').disabled=true;
     try{
       // Failure to resolve a quote does not block original-page rendering.
       const loc=quote?d.api('/api/locate',{sha,page,quote}).catch(e=>({specificity:'page',rects:[],lookup_error:e.message})):Promise.resolve({specificity:'page',rects:[]});
-      const [text,img,location]=await Promise.all([d.api(`/api/page?sha=${sha}&page=${page}`),d.api(`/api/image?sha=${sha}&page=${page}`),loc]);
+      const [text,img,location,pageData]=await Promise.all([d.api(`/api/page?sha=${sha}&page=${page}`),d.api(`/api/image?sha=${sha}&page=${page}`),loc,
+        quote?d.pdf.page(sha,page).catch(()=>null):Promise.resolve(null)]);
       if(epoch!==sourceEpoch||identity!==keyId()||room.hidden)return {cancelled:true};
       const url=URL.createObjectURL(img),old=imageUrl;imageUrl=url;$('page-image').src=url;$('page-image').hidden=false;
       try{await $('page-image').decode();}finally{if(old)URL.revokeObjectURL(old);}
       if(epoch!==sourceEpoch||identity!==keyId()||room.hidden)return {cancelled:true};
       $('page-text').textContent=text.text||'文字層はありません。原著ページの画像を確認してください。';
-      const rects=location.specificity==='quote'&&location.verbatim_match!==false?location.rects||[]:[];
-      drawMarks(rects);let note=rects.length?'黄色：一致した引用を含む文字ブロック。数値・群の正しさは原著で確認してください。':quote?'引用位置は未特定または複数一致です。推測した位置は塗りません。':'ページ全体を表示しています。';
+      $('room-search').value=quote;
+      // Display candidates never become evidence, corrected values or approvals.
+      const display=quote&&pageData?resolveDisplayLocation(pageData,quote,{allowNumericFragment:kind==='unverified'}):null;
+      const strict=location.specificity==='quote'&&location.verbatim_match!==false;
+      const rects=display?display.rects:strict?location.rects||[]:[];
+      const candidate=kind==='unverified'||display&&display.match_kind!=='exact'||!strict;
+      drawMarks(rects,candidate?'highlight candidate-highlight':'highlight');
+      let note=rects.length?displayNote(display?.match_kind||'exact',candidate):quote?'引用の位置を特定できません。原著画像を確認するか、ページ内検索で前後の原文を探してください。':'ページ全体を表示しています。';
+      if(display?.match_count>1){note=`引用の候補が${display.truncated_matches?'50件超':display.match_count+'件'}あります。下の前後の原文から場所を選んでください。`;showDisplayChoices(display,{epoch,unverified:kind==='unverified'});}
+      else if(display?.match_count===1&&!rects.length)note='文字層に引用候補がありますが位置情報を取得できません。原著画像で場所を確認してください。';
       if(kind==='unverified')note='元の引用は未照合です。'+note;
       $('source-status').textContent=`PDF ${page}/${doc.page_count}ページ${text.pdf_page_label?' / PDFラベル '+text.pdf_page_label:''}。${note}`;
       if(evidence){const p=[evidence.table,evidence.row,evidence.column].filter(Boolean);$('room-source-bar').textContent=p.length?'保存されている表・行・列：'+p.join(' / '):'原著のPDFページと引用を照合';}else $('room-source-bar').textContent='原著を表示中';
@@ -3950,12 +3961,13 @@ function createSourceRoom(d){
       else {$('room-zoom').value='100';applyZoom();win.requestAnimationFrame(()=>{if(epoch===sourceEpoch)jumpTo(rects[0]);});}
       return {document_sha256:sha,pdf_page:page,location,image_rendered:true,image_understanding:'Rendering is not scientific or visual confirmation. Inspect the displayed original.'};
     }catch(e){if(epoch===sourceEpoch){$('page-image').hidden=true;drawMarks([]);$('source-status').textContent='原著ページを表示できません：'+e.message;setStatus('PDF表示でエラーが出ました。左の候補と入力は保持しています。',true);}throw e;}
+    finally{if(epoch===sourceEpoch){const blocked=$('page-image').hidden;$('room-search').disabled=blocked;$('room-search-submit').disabled=blocked;}}
   }
   function applyZoom(){$('page-frame').style.width=$('room-zoom').value+'%';}
   function evidenceChoices(row,key){
     evidenceBox.replaceChildren();const list=reviewEvidence(row,key);
     if(!list.length)evidenceBox.append(el('p','この項目には数値別の出典がありません。ページを探して原著を確認できます。','warning'));
-    list.forEach((e,i)=>{const n=el('section',null,'room-evidence');const b=btn(`根拠 ${i+1} · PDF ${e.pdf_page}`,()=>{active.evidenceIndex=i;return loadPage(e.document_sha256,e.pdf_page,{quote:e.source_check==='unverified_page'?'':e.quote,kind:e.source_check==='unverified_page'?'unverified':'quote',evidence:e});});
+    list.forEach((e,i)=>{const n=el('section',null,'room-evidence');const b=btn(`根拠 ${i+1} · PDF ${e.pdf_page}`,()=>{active.evidenceIndex=i;return loadPage(e.document_sha256,e.pdf_page,{quote:e.quote||'',kind:e.source_check==='unverified_page'?'unverified':'quote',evidence:e});});
       n.append(b,el('small',d.evidenceLabel(e)),el('blockquote',e.quote||'引用なし'));const names=[['表',e.table],['行',e.row],['列',e.column]].filter(x=>x[1]).map(x=>x.join('：'));if(names.length)n.append(el('small',names.join(' / ')+'（保存された指定）'));evidenceBox.append(n);});
     const marks=(Array.isArray(row.review_marks)?row.review_marks:[]).filter(m=>m.key===key&&m.source==='human_selected');
     for(const m of marks){try{checkedMark(row,m.mark,d.state().documents);}catch{continue;}
@@ -3999,7 +4011,7 @@ function createSourceRoom(d){
     savePlace();row=freshRow(row.id);key=[...d.keysFor(row),'definition','report'].includes(key)?key:(d.keysFor(row)[0]||'report');
     const prior=evidenceIndex===null?places.get(JSON.stringify(['row',row.id,key,undefined])):null;enter();active={type:'row',id:row.id,key,revision:row.revision,evidenceIndex:evidenceIndex??0};draft=false;pendingMark=null;
     const target=active;await renderContext();if(active!==target||room.hidden)return {cancelled:true};const ev=reviewEvidence(row,key),e=ev[evidenceIndex??0];
-    const load=prior?loadPage(prior.sha,prior.page,{quote:prior.quote,kind:prior.kind,evidence:prior.evidence,restore:prior}):e?loadPage(e.document_sha256,e.pdf_page,{quote:e.source_check==='unverified_page'?'':e.quote,kind:e.source_check==='unverified_page'?'unverified':'quote',evidence:e}):loadPage(row.document.sha256,1);
+    const load=prior?loadPage(prior.sha,prior.page,{quote:prior.quote,kind:prior.kind,evidence:prior.evidence,restore:prior}):e?loadPage(e.document_sha256,e.pdf_page,{quote:e.quote||'',kind:e.source_check==='unverified_page'?'unverified':'quote',evidence:e}):loadPage(row.document.sha256,1);
     setStatus('左で数値の意味と根拠、右で原著を確認します。見るだけでは値・承認を変更しません。');if(edit)editValue();
     try{return await load;}catch(e){if(active!==target)return {cancelled:true};return {error:e.message};}
   }
@@ -4042,14 +4054,34 @@ function createSourceRoom(d){
     }
     if(!allowLeave())return {cancelled:true};savePlace();enter();active={type:'document',id:sha,key:'page'};draft=false;navEpoch++;contextBox.replaceChildren(el('h2','原著ページの確認'),el('p','研究の原著を直接表示しています。特定の数値を承認した状態ではありません。'));meaningBox.replaceChildren();editorBox.replaceChildren();evidenceBox.replaceChildren();foot.replaceChildren();focusTitle.textContent='原著を確認';return loadPage(sha,page,{quote});
   }
+  function displayNote(kind,candidate=true){
+    if(kind==='numeric_fragment')return '紫の破線：数値部分の候補（符号未確認）。枠は隣接する数値を含む文字ブロックです。符号を含む引用全体は一致していません。原著画像で「＋／−」・群・時点を確認してください。';
+    if(kind==='typographic')return '紫の破線：マイナス記号・合字・組版空白の違いを考慮した候補の文字ブロックです。原著画像で引用・数値・群・時点を確認してください。';
+    return candidate?'紫の破線：引用に対応する文字ブロックの候補です。数値・群・時点は未確認です。':'黄色：一致した引用を含む文字ブロック。数値・群・時点の正しさは原著で確認してください。';
+  }
+  function showDisplayChoices(display,{epoch,serial=searchSerial,unverified=false,search=false}={}){
+    const host=$('room-search-results');host.replaceChildren();
+    const count=display.truncated_matches?'50件超':display.match_count+'件';
+    host.append(el('p',`${search?'検索結果':'表示候補'} ${count}。前後の原文で位置を選択してください。選択しても根拠・数値・承認は変わりません。`));
+    display.candidates.slice(0,50).forEach((hit,i)=>{
+      const label=hit.match_kind==='numeric_fragment'?'数値部分・符号未確認':hit.match_kind==='typographic'?'表記差を含む候補':'引用の候補';
+      const b=btn(`${i+1} · ${label}：${hit.excerpt}`,()=>{
+        if(epoch!==sourceEpoch||serial!==searchSerial)throw Error('表示ページまたは検索が変わりました。検索し直してください。');
+        const candidate=unverified||search||hit.match_kind!=='exact';
+        drawMarks(hit.rects,candidate?'highlight candidate-highlight':'highlight');jumpTo(hit.rects[0]);
+        $('source-status').textContent=`候補 ${i+1}/${count}。${hit.rects.length?displayNote(hit.match_kind,candidate):'位置情報を取得できません。原著画像を確認してください。'}`;
+        for(const n of host.querySelectorAll('button'))n.setAttribute('aria-pressed',String(n===b));
+      });b.setAttribute('aria-pressed','false');host.append(b);
+    });
+  }
   async function searchPage(){
-    if(!shown)throw Error('原著ページを開いてください。');const query=$('room-search').value.trim();if(!query)throw Error('このページで探す原文または数値を入力してください。');
-    const epoch=sourceEpoch,serial=++searchSerial,info=shown,host=$('room-search-results');host.replaceChildren(el('p','このページの文字層を検索中…'));
+    if(!shown)throw Error('原著ページを開いてください。');if($('room-search').disabled)throw Error('原著ページの読込み完了を待って検索してください。');const query=$('room-search').value.trim();if(!query)throw Error('このページで探す原文または数値を入力してください。');
+    const epoch=sourceEpoch,serial=++searchSerial,info=shown,host=$('room-search-results');host.replaceChildren(el('p','このページの文字層を検索中…'));drawMarks([]);
     const page=await d.pdf.page(info.sha,info.page);if(epoch!==sourceEpoch||serial!==searchSerial)return;
-    const matches=d.literalMatches(page.text,query);host.replaceChildren();if(!matches.length){host.append(el('p','このページの文字層に一致しません。画像の原著を確認するか、前後のページを探してください。'));return;}
-    host.append(el('p',`このページに ${matches.length>50?'50件超':matches.length+'件'}。場所を選んで表示します。検索結果は承認や根拠保存ではありません。`));
-    matches.slice(0,50).forEach((hit,i)=>{const b=btn(`${i+1}：${page.text.slice(Math.max(0,hit.start-24),Math.min(page.text.length,hit.end+35)).replace(/\s+/g,' ')}`,()=>{
-      if(epoch!==sourceEpoch)throw Error('表示ページが変わりました。検索し直してください。');const runs=page.segments.filter(s=>s.start<hit.end&&s.end>hit.start);const rects=runs.length&&runs.every(s=>s.rect)?runs.map(s=>s.rect):[];drawMarks(rects);jumpTo(rects[0]);$('source-status').textContent=`検索結果 ${i+1}/${matches.length}。文字ブロックの位置です。数値・群・時点の正しさは原著で確認してください。`;});host.append(b);});
+    const display=resolveDisplayLocation(page,query,{allowNumericFragment:true});host.replaceChildren();
+    if(!display.match_count){host.append(el('p','このページの文字層に一致しません。画像の原著を確認するか、前後のページを探してください。'));$('source-status').textContent='この検索に対応する位置は見つかりませんでした。原著画像を確認してください。';return;}
+    $('source-status').textContent='検索結果から表示する位置を選んでください。';
+    showDisplayChoices(display,{epoch,serial,search:true});
   }
   function toggleMark(value){markMode=value;$('page-frame').classList.toggle('mark-mode',value);$('room-mark').setAttribute('aria-pressed',String(value));$('room-mark').textContent=value?'範囲指定をやめる':'原著の範囲を指定';if(!value){drag=null;if($('room-mark-preview'))$('room-mark-preview').hidden=true;}}
   function point(event){const r=$('page-image').getBoundingClientRect();return {x:Math.max(0,Math.min(1,(event.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(event.clientY-r.top)/r.height))};}
@@ -4080,7 +4112,7 @@ function createSourceRoom(d){
     const oldZoom=right.querySelector('select[aria-label="原著の拡大率"]');if(oldZoom)oldZoom.remove();
     const z=el('select');z.id='room-zoom';z.setAttribute('aria-label','原著の拡大率');for(const n of [100,125,150,200,300]){const o=el('option',`${n}%`);o.value=n;z.append(o);}z.onchange=applyZoom;right.querySelector('.page-controls').append(z);
     const sourceBar=el('p',null,'room-source-bar');sourceBar.id='room-source-bar';right.querySelector('#source-status').after(sourceBar);
-    const search=el('form',null,'room-search'),searchInput=el('input');searchInput.id='room-search';searchInput.placeholder='このページで原文・数値を探す';searchInput.setAttribute('aria-label','このページの原文検索');const go=btn('検索',()=>searchPage());go.type='submit';go.onclick=null;search.append(searchInput,go);search.onsubmit=run(e=>{e.preventDefault();return searchPage();});
+    const search=el('form',null,'room-search'),searchInput=el('input');searchInput.id='room-search';searchInput.placeholder='このページで原文・数値を探す';searchInput.setAttribute('aria-label','このページの原文検索');const go=btn('検索',()=>searchPage());go.id='room-search-submit';go.disabled=true;searchInput.disabled=true;go.type='submit';go.onclick=null;search.append(searchInput,go);search.onsubmit=run(e=>{e.preventDefault();return searchPage();});
     const mark=btn('原著の範囲を指定',()=>{if(!current())throw Error('一覧の数値を開いてから、その根拠を指定してください。');if(draft)throw Error('入力中の訂正を保存またはキャンセルしてから、根拠範囲を指定してください。');if($('page-image').hidden)throw Error('原著ページの読込み完了を待ってください。');toggleMark(!markMode);setStatus('PDF上をドラッグして範囲を囲みます。保存するまでは研究データを変更しません。');});mark.id='room-mark';mark.setAttribute('aria-pressed','false');search.append(mark);sourceBar.after(search);
     const hits=el('div',null,'room-search-results');hits.id='room-search-results';search.after(hits);
     body.append(left,right);statusBox=el('p',null,'room-status');statusBox.id='room-status';statusBox.setAttribute('role','status');room.append(bar,statusBox,body);$('review').after(room);
@@ -4099,6 +4131,98 @@ function createSourceRoom(d){
 }
 
 Object.assign(exports,{checkedMark,addReviewMark,reviewEvidence,fieldMeaning,createSourceRoom});
+},
+"src/source-display.mjs":function(exports,require){
+/** Viewing aids only. Never use these candidates to authenticate or save evidence.
+ * The original quote, source_check, coordinates, values and approval stay untouched.
+ */
+const {literalMatches}=require("src/browser-pdf.mjs");
+
+const ligatures={'\ufb00':'ff','\ufb01':'fi','\ufb02':'fl','\ufb03':'ffi','\ufb04':'ffl','\ufb05':'st','\ufb06':'st'};
+const numeric=/^[+\-−﹣－]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-−﹣－]?\d+)?$/u;
+const empty=()=>({display_only:true,match_kind:'none',specificity:'page',match_count:0,truncated_matches:false,candidates:[],rects:[]});
+
+function displayIndex(raw){
+  let text='';const starts=[],ends=[],changes=[];
+  for(const m of String(raw).matchAll(/[^]/gu)){
+    let value=m[0],change=null;
+    if(ligatures[value]){value=ligatures[value];change='ligature';}
+    else if(/[−﹣－]/u.test(value)){value='-';change='minus_glyph';}
+    else if(value==='\u00ad'){value='';change='soft_hyphen';if(changes.length)changes[changes.length-1]=changes.at(-1)||change;}
+    for(let i=0;i<value.length;i++){starts.push(m.index);ends.push(m.index+m[0].length);changes.push(change);}
+    text+=value;
+  }
+  // A PDF text item can separate an actual sign and its digits. Only horizontal
+  // spacing immediately after an explicit sign is eligible; decimals, words,
+  // line breaks, exponent notation and precision are not repaired or inferred.
+  const gaps=[...text.matchAll(/[+\-]([\t \u00a0\u2000-\u200a\u202f\u205f\u3000]+)(?=\d|\.\d)/gu)].map(m=>({start:m.index+1,end:m.index+1+m[1].length}));
+  for(const gap of gaps.reverse()){
+    text=text.slice(0,gap.start)+text.slice(gap.end);
+    starts.splice(gap.start,gap.end-gap.start);ends.splice(gap.start,gap.end-gap.start);changes.splice(gap.start,gap.end-gap.start);
+    changes[gap.start-1]=changes[gap.start-1]||'sign_spacing';
+  }
+  return {text,starts,ends,changes};
+}
+
+function numericContextSafe(text,hit,quote){
+  if(!numeric.test(quote.trim()))return true;
+  const before=text.slice(0,hit.start),after=text.slice(hit.end);
+  if(!/^[+\-−﹣－]/u.test(quote.trim())&&/[+\-−﹣－]\s*$/u.test(before))return false;
+  // In particular, the exponent in "1e -6" is not the standalone value -6.
+  if(/\d\s*[eE]\s*$/u.test(before))return false;
+  // Do not match an incomplete mantissa when its exponent has layout spacing.
+  if(/^\s*[eE]\s*[+\-−﹣－]?\s*\d/u.test(after))return false;
+  return true;
+}
+
+function rectangle(r){return !!r&&[r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.x>=0&&r.y>=0&&r.width>0&&r.height>0&&r.x+r.width<=1.02&&r.y+r.height<=1.02;}
+function candidate(page,hit,kind,changes=[]){
+  const runs=(page.segments||[]).filter(s=>s.end>hit.start&&s.start<hit.end&&s.text?.trim());
+  const rects=runs.length&&runs.every(r=>rectangle(r.rect))?runs.map(r=>({...r.rect})):[];
+  return {...hit,match_kind:kind,changes:[...new Set(changes.filter(Boolean))],matched_text:page.text.slice(hit.start,hit.end),
+    excerpt:page.text.slice(Math.max(0,hit.start-42),Math.min(page.text.length,hit.end+42)).replace(/\s+/gu,' ').trim(),rects};
+}
+function result(candidates,kind){
+  if(!candidates.length)return empty();
+  const rects=candidates.length===1?candidates[0].rects:[];
+  return {display_only:true,match_kind:kind,specificity:candidates.length>1?'ambiguous':rects.length?'quote':'page',
+    match_count:candidates.length,truncated_matches:candidates.length>50,candidates,rects,
+    rectangle_precision:'text_item_not_glyph'};
+}
+
+function numericFragments(page,quote){
+  const signed=quote.trim().match(/^[+\-−﹣－]((?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+\-−﹣－]?\d+)?)$/u);
+  if(!signed)return [];
+  const magnitude=signed[1],escaped=magnitude.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  // A fragment means only that the complete magnitude occurs here. In particular,
+  // it does not establish the sign, repair a corrupt glyph, or verify the value.
+  const pattern=new RegExp(`(?<![\\p{L}\\p{N}_.,·])${escaped}(?![\\p{L}\\p{N}_·]|[.,]\\d)`,'gu');
+  const matches=[];
+  for(const m of page.text.matchAll(pattern)){
+    const hit={start:m.index,end:m.index+m[0].length},before=page.text.slice(0,hit.start),after=page.text.slice(hit.end);
+    if(/\d\s*[eE]\s*[+\-−﹣－]?\s*$/u.test(before))continue;
+    if(/^\s*[eE]\s*[+\-−﹣－]?\s*\d/u.test(after))continue;
+    matches.push(candidate(page,hit,'numeric_fragment',['sign_unverified']));
+    if(matches.length>50)break;
+  }
+  return matches;
+}
+
+function resolveDisplayLocation(pageData,quote,{allowNumericFragment=false}={}){
+  const page={...pageData,text:String(pageData?.text||'')};
+  const literal=literalMatches(page.text,quote,hit=>numericContextSafe(page.text,hit,quote));
+  if(literal.length)return result(literal.map(hit=>candidate(page,hit,'exact')),'exact');
+  const source=displayIndex(page.text),target=displayIndex(quote);
+  // No e/E-to-minus mapping, OCR repair, case folding, digit/decimal rewriting,
+  // dash/range conversion, word guessing or broad whitespace deletion.
+  const matches=literalMatches(source.text,target.text,hit=>numericContextSafe(source.text,hit,target.text));
+  const candidates=matches.map(hit=>candidate(page,{start:source.starts[hit.start],end:source.ends[hit.end-1]},'typographic',
+    [...source.changes.slice(hit.start,hit.end),...target.changes]));
+  if(candidates.length)return result(candidates,'typographic');
+  return allowNumericFragment?result(numericFragments(page,quote),'numeric_fragment'):empty();
+}
+
+Object.assign(exports,{resolveDisplayLocation});
 },
 "src/candidate-editor.mjs":function(exports,require){
 const {parseReportedNumber}=require("src/numeric.mjs");
