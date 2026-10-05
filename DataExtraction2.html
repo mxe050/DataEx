@@ -122,7 +122,7 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 </style></head>
 <body>
 <header class="app-header"><div class="brand"><span class="brand-symbol">D<span>e</span></span><div><strong>DataExtraction2</strong><span class="brand-caption">論文を読み、解析を考え、原著で確かめる。</span></div></div><div class="header-right"><span id="saved" class="save-state">保存状態を読み込み中</span><button id="quick-backup" class="quiet">作業を保存</button></div></header>
-<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.8</span></nav>
+<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page">1　論文と目的</button><button id="results-tab">2　提案・抽出結果 <span id="row-count" class="count">0</span></button><span class="version">再構築版 · 0.6.9</span></nav>
 <div id="message" class="global-message" role="status" aria-live="polite"></div>
 <div id="backup-panel" class="global-message" hidden><a id="backup-download">作業ファイルをダウンロード</a> <span id="backup-filename" class="hint"></span><p class="hint">生成時点の作業ファイルです。このタブを閉じるまでは同じリンクから取得できます。作業を更新した後は、もう一度「作業を保存」を押してください。</p></div>
 <button id="retry-transfer-view" hidden>引継ぎ後の表示を再試行</button>
@@ -2982,6 +2982,24 @@ const sameList=(a,b)=>a.length===b.length&&a.every(value=>b.includes(value));
 const requestModes=(state,job)=>[...(job?.modes||state.workflow?.modes||['proposal','detailed'])];
 const requestPendingDocuments=(state,job)=>job?job.documents.filter(sha=>!receivedDocuments(job).includes(sha)&&!recommendationDocumentAccounted(state,job,sha)):[];
 
+/** Existing tables can serve another request. Their mere presence cannot
+ * complete a proposal for newly selected originals. Keep the existing refresh
+ * requirements, and require at least one table referencing this request's PDF
+ * sources. A recommendation with an explicit no-table result remains valid.
+ */
+function requestNeedsProposals(state,job){
+  if(!requestModes(state,job).includes('proposal'))return false;
+  const plans=state.workflow?.plans||[];
+  if(plans.some(plan=>planStatus(plan,state.rows).refresh_required))return true;
+  if(isRecommendationJob(job))return !job.recommendation_result;
+  if(!job)return plans.length===0;
+  const rowMap=new Map(state.rows.map(row=>[row.id,row]));
+  return !plans.some(plan=>plan.row_refs.some(ref=>{
+    const row=rowMap.get(ref.id);
+    return row&&[row.document,...(row.documents||[])].some(source=>source&&job.documents.includes(source.sha256));
+  }));
+}
+
 /** A save receipt alone is not final completion. Older versions wrote receipts
  * for coverage-only saves, and saved proposals may need review after edits.
  * An explicit no-compatible-table recommendation is a valid final response.
@@ -2989,10 +3007,9 @@ const requestPendingDocuments=(state,job)=>job?job.documents.filter(sha=>!receiv
 function requestWorkflowComplete(state,job){
   const receipt=job?.recommendation_result||job?.workflow_result;
   if(!receipt||requestPendingDocuments(state,job).length)return false;
-  if(!requestModes(state,job).includes('proposal'))return true;
+  if(requestNeedsProposals(state,job))return false;
   const plans=state.workflow?.plans||[];
-  if(plans.some(plan=>planStatus(plan,state.rows).refresh_required))return false;
-  return isRecommendationJob(job)?receipt.plan_ids.every(id=>plans.some(plan=>plan.id===id)):plans.length>0;
+  return !isRecommendationJob(job)||receipt.plan_ids.every(id=>plans.some(plan=>plan.id===id));
 }
 
 function requestPreparation(state,pico,documents,modes=requestModes(state)){
@@ -3048,7 +3065,7 @@ function applyUnifiedRequest(state,{id,pico,documents,started_at,modes=requestMo
   return job;
 }
 
-Object.assign(exports,{requestModes,requestPendingDocuments,requestWorkflowComplete,requestPreparation,reopenRequestExtraction,applyUnifiedRequest});
+Object.assign(exports,{requestModes,requestPendingDocuments,requestNeedsProposals,requestWorkflowComplete,requestPreparation,reopenRequestExtraction,applyUnifiedRequest});
 },
 "src/file-request.mjs":function(exports,require){
 /** Readable, source-preserving request files for environments without the user's tab.
@@ -3131,7 +3148,7 @@ const {pendingRejections,receivedDocuments}=require("src/candidate-recovery.mjs"
 const {existingStudySources,resolveStudySources}=require("src/candidate-review.mjs");
 const {NativeSiteConnection}=require("src/native-site-connection.mjs");
 const {isRecommendationJob,validateRecommendationJob,recommendationProtocol,recommendationEligibility,recommendationDocumentAccounted}=require("src/ai-recommendation.mjs");
-const {requestModes,requestWorkflowComplete,requestPendingDocuments}=require("src/request-preparation.mjs");
+const {requestModes,requestWorkflowComplete,requestPendingDocuments,requestNeedsProposals}=require("src/request-preparation.mjs");
 const {obj,str,pos,rowSchema,mapping}=require("src/extraction-schema.mjs");
 const {emptyWorkflow,workflowBrief,applyWorkflowSubmission,planStatus,WORKFLOW_PROMPT,WORKFLOW_SUBMISSION_SCHEMA}=require("src/analysis-workflow.mjs");
 const check=(ok,message)=>{if(!ok)throw Error(message);};
@@ -3352,12 +3369,12 @@ function mountWorkspaceBridge(runtime,{register=true}={}){
         ['保存結果の通知',()=>runtime.message(pendingDocuments.length?`確認範囲を途中保存しました。未処理のPDF ${pendingDocuments.length}本を同じ依頼で続けてください。`:recommendation?(hasRecommended?'AI推薦の表と原著の確認範囲を保存しました。人の承認は行っていません。':'研究横断の表を推薦できない理由と原著の確認範囲を保存しました。'):a.plans.length?'解析表の提案を保存しました。数値から原著を確認・訂正できます。':'資料の確認範囲を保存しました。')]
       ]);
       const pendingPlans=committed.workflow.plans.flatMap(p=>{const status=planStatus(p,committed.rows);return status.refresh_required?[{id:p.id,title:p.title,stale:status.stale,unassessed_result_ids:status.unassessed_result_ids}]:[];});
-      const needsProposals=requestModes(committed,request).includes('proposal')&&(!committed.workflow.plans.length&&!savedRecommendation||pendingPlans.length>0);
+      const needsProposals=requestNeedsProposals(committed,committed.jobs.find(j=>j.id===request?.id));
       return {ok:true,saved:true,...display,batch_revision:committed.revision,workflow_revision:committed.workflow.revision,plans:committed.workflow.plans.map(p=>({id:p.id,title:p.title})),plans_requiring_refresh:pendingPlans,needs_proposals:needsProposals,
         pending_documents:pendingDocuments,needs_extraction:pendingDocuments.length>0,reopen_extraction_required:reopenRequired,
         ...(request?{request_id:request.id,request_match:true}:{}),
         ...(recommendation?{recommendation_result:savedRecommendation,recommendation_status:pendingDocuments.length?'pending_extraction':hasRecommended?'saved':'no_compatible_table'}:request?{workflow_result:structuredClone(committed.jobs.find(j=>j.id===request.id).workflow_result)}:{}),
-        next:pendingDocuments.length?'Partial progress saved; extraction remains unfinished. '+(reopenRequired?'Resume this exact older request using 「AIへ依頼する」 first. ':'')+'Read every pending_document and submit source-grounded candidates or an explicit reason with rows=[], then finish_batch as needed and save_workflow again using this same request_id. Do not create another request.':recommendation&&!hasRecommended?'Saved the reason no compatible multi-study table is recommended, and source coverage. No meta-analysis table, human approval or pooling was claimed.'+(pendingPlans.length?' Existing plans still require refresh; inspect plans_requiring_refresh and update them using the same IDs.':''):needsProposals?'Proposal mode remains unfinished: call workflow_brief, refresh all listed existing plans using the same IDs and current missing reasons, or create initial proposals if none exist.':'Saved; review original sources and correct as needed. No human approval or pooling was performed.',approval:null};
+        next:pendingDocuments.length?'Partial progress saved; extraction remains unfinished. '+(reopenRequired?'Resume this exact older request using 「AIへ依頼する」 first. ':'')+'Read every pending_document and submit source-grounded candidates or an explicit reason with rows=[], then finish_batch as needed and save_workflow again using this same request_id. Do not create another request.':recommendation&&!hasRecommended?'Saved the reason no compatible multi-study table is recommended, and source coverage. No meta-analysis table, human approval or pooling was claimed.'+(pendingPlans.length?' Existing plans still require refresh; inspect plans_requiring_refresh and update them using the same IDs.':''):needsProposals?'Proposal mode remains unfinished: call workflow_brief, refresh all listed existing plans using the same IDs and current missing reasons, and create a proposal for the selected originals if no saved table represents this request. Continue using the same request_id.':'Saved; review original sources and correct as needed. No human approval or pooling was performed.',approval:null};
     },false)
   ];
   connection=new NativeSiteConnection({tools,onState:s=>runtime.onConnection?.(s)});
@@ -4228,7 +4245,7 @@ const {outcomeOptions,resultMatchesOutcome,planMatchesOutcome}=require("src/outc
 const {mountSelectionResize}=require("src/selection-resize.mjs");
 const {detailedBrowser}=require("src/detailed-browser.mjs");
 const {recommendationEligibility,isRecommendationJob}=require("src/ai-recommendation.mjs");
-const {requestPreparation,applyUnifiedRequest,requestWorkflowComplete,reopenRequestExtraction}=require("src/request-preparation.mjs");
+const {requestPreparation,applyUnifiedRequest,requestWorkflowComplete,requestPendingDocuments,reopenRequestExtraction}=require("src/request-preparation.mjs");
 const {makeFileRequest,fileRequestText}=require("src/file-request.mjs");
 const {canonical}=require("src/probe-session.mjs");
 const {stageFileResponse,commitFileResponse}=require("src/file-response.mjs");
@@ -4336,14 +4353,15 @@ function renderRequestConnection(){
   const task=combined?'原著の抽出と、複数研究で成立する少数の推薦表を一度の依頼で作ります。':!includesProposal?'原著を詳しく読み、候補と確認範囲を保存します。推薦表は作成しません。':job&&!job.modes?'保存済みの旧形式の依頼を同じIDで続けます。抽出値・解析表は結果の各タブで確認できます。':'原著の抽出値と解析候補を整理します。1研究だけではメタ分析の推薦表を作りません。';
   $('request-help').textContent=receipt?'AIが保存した結果を「2 提案・抽出結果」のタブで確認できます。人の承認・解析実行は行っていません。':`コピーした依頼文をこのチャットへ貼り付けて送信してください。${task}AIがこのタブに接続できれば、候補と提案を直接この画面へ保存します。`;
   const submitted=job?Object.keys(job.submissions||{}).length:0,newRows=job?session.state.rows.filter(row=>row.source_request===job.id).length:0;
-  const extraction=receipt?`追加候補 ${newRows}件（未承認）`:submitted?`PDF ${submitted}/${job.documents.length}本の候補を受付・追加候補 ${newRows}件`:verified?'原著確認・候補保存を待っています':'原著確認は未開始です';
+  const pending=job?requestPendingDocuments(session.state,job):[],accounted=job?job.documents.length-pending.length:0;
+  const extraction=job&&accounted?`対象PDF ${accounted}/${job.documents.length}本の候補・処理記録あり · 追加候補 ${newRows}件（未承認）`:verified?'原著確認・候補保存を待っています':'原著確認は未開始です';
   const savedLabel=combined?(receipt?.plan_ids?.length?'推薦表・確認範囲を保存済み':'推薦できない理由・確認範囲を保存済み'):(receipt?.plan_ids?.length?'解析表・確認範囲を保存済み':'候補・確認範囲を保存済み');
-  const stage=receipt?savedLabel:job?.status==='complete'?'候補を整理済み・提案と確認範囲の保存待ち':submitted?'候補を受け付けました・処理継続中':verified?'依頼IDを確認済み・処理継続中':'AIからの接続待ち';
+  const stage=receipt?savedLabel:pending.length&&(accounted||job?.status==='complete')?`未処理PDF ${pending.length}本・同じ依頼で継続`:job?.status==='complete'?'候補を整理済み・提案と確認範囲の保存待ち':submitted?'候補を受け付けました・処理継続中':verified?'依頼IDを確認済み・処理継続中':'AIからの接続待ち';
   $('request-status').textContent=job?`依頼ID：${job.id} · ${stage}`:'';
   $('request-stage-connection').textContent=verified?'依頼IDの一致を確認済み':'この接続ではID照合待ち';
   $('request-stage-extraction').textContent=extraction;
   $('request-stage-workflow').textContent=receipt?`${savedLabel}（未承認）`:'最終保存は未完了';
-  $('request-stage-connection').dataset.complete=String(verified);$('request-stage-extraction').dataset.complete=String(submitted>0||!!receipt);$('request-stage-workflow').dataset.complete=String(!!receipt);
+  $('request-stage-connection').dataset.complete=String(verified);$('request-stage-extraction').dataset.complete=String(!!job&&pending.length===0);$('request-stage-workflow').dataset.complete=String(!!receipt);
   document.title=job?`DataExtraction2 · 依頼 ${job.id}`:'DataExtraction2';
   const sameCall=!s?.last_call?.request_id||s.last_call.request_id===job?.id;
   $('connection').textContent=['error','call_error'].includes(s?.phase)&&sameCall?`接続・保存を確認できません：${s.error}。下の依頼文には同じ依頼IDを保持しています。`:s?.phase==='missing'?'この画面ではSite toolsが利用できません。AIが既存タブを取得できるかは未確認です。':s?.phase==='suspended'?'この画面へのAI接続を一時停止中です。戻ると再接続します。':s?.registered?(verified?'AIがこの依頼IDを確認しました。候補と提案をこの画面へ保存します。':'Site toolsを登録済みです。AIによるタブ取得・依頼ID照合はまだです。'):'AIへの依頼文をコピーし、このチャットへ送って開始します。';
