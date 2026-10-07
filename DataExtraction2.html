@@ -163,7 +163,7 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 </style></head>
 <body>
 <header class="app-header"><div class="brand"><span class="brand-symbol">D<span>e</span></span><div><strong>DataExtraction2</strong><span class="brand-caption">論文を読み、解析を考え、原著で確かめる。</span></div></div><div class="header-right"><span id="saved" class="save-state">保存状態を読み込み中</span><button id="quick-backup" class="quiet" disabled>作業を保存</button></div></header>
-<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page" disabled>1　論文と目的</button><button id="results-tab" disabled>2　提案・抽出結果 <span id="row-count" class="count">0</span></button><button id="guide-tab" aria-controls="usage-guide">使い方</button><span class="version">公開版 · 0.6.19</span></nav>
+<nav class="main-nav" aria-label="主画面"><button id="prepare-tab" aria-current="page" disabled>1　論文と目的</button><button id="results-tab" disabled>2　提案・抽出結果 <span id="row-count" class="count">0</span></button><button id="guide-tab" aria-controls="usage-guide">使い方</button><span class="version">公開版 · 0.6.20</span></nav>
 <div id="message" class="global-message" role="status" aria-live="polite"></div>
 <div id="backup-panel" class="global-message" hidden><a id="backup-download">作業ファイルをダウンロード</a> <span id="backup-filename" class="hint"></span><p class="hint">生成時点の作業ファイルです。このタブを閉じるまでは同じリンクから取得できます。作業を更新した後は、もう一度「作業を保存」を押してください。</p></div>
 <button id="retry-transfer-view" hidden>引継ぎ後の表示を再試行</button>
@@ -250,7 +250,7 @@ button.value{white-space:normal}button.value:focus-visible{outline:3px solid #12
 <details class="guide-details"><summary>添付できない場合・ファイル形式の補足</summary><p>依頼文だけ、原著PDFだけ、ファイルの中身をコピーした文章だけでは、依頼ファイルの代わりになりません。実際のファイルを添付してください。</p><p>拡張子が受け付けられない場合の「同じ依頼をJSONで保存（拡張子の互換用）」は、同じ内容を <code>.dataex.json</code> で保存します。通常版と両方を添付する必要はありません。<code>.txt</code> を追加しても、入力上限や機能の不足は解消しません。返答の <code>.dataex-response.json</code> も同じ読込みボタンで検査します。</p><p>ファイル方式でAI側の専用ツールは不要です。<code>dataex_save_workflow</code> は返答JSONの <code>operations</code> の最後に記録する処理名で、読込み時にアプリが実行します。AIは <code>ai_file_request.response_schema</code> に沿う返答ファイルを作ります。</p></details>
 </section>
 <section id="guide-review" class="guide-section"><p class="guide-kicker">原著を見て確かめる</p><h2>数値だけでなく、その意味まで確認する</h2>
-<ol class="guide-steps compact"><li><h3>結果を絞り、数値を押す</h3><p>「論文別の抽出」で論文・アウトカム・時点を絞ります。数値を押すと、左に意味と出典、右に原著PDFが開きます。「AI推薦」「解析表の提案」からも確認できます。</p></li><li><h3>原著と照合する</h3><p>治療群／比較群、評価時点、解析集団、単位、終了値／変化量、SD／SE、人数／イベント件数、信頼水準を確認します。引用位置の一致だけでは、解釈が正しいとは限りません。本文・表・図・補足の確認範囲と、不足の記録も見ます。</p></li><li><h3>必要な訂正を保存する</h3><p>「この数値を訂正」や「定義・群・時点などを訂正」で、確認者と理由を記録します。元の値・引用と訂正履歴は残ります。PDF上の範囲を自分で指定して記録することもできます。</p></li><li><h3>確認した行を承認する</h3><p>必要な項目と注意事項を確認して承認します。閲覧・検索・ハイライト候補の選択だけでは承認されません。取得できない値をゼロや「未報告」に置き換えないでください。</p></li></ol>
+<ol class="guide-steps compact"><li><h3>結果を絞り、数値を押す</h3><p>「論文別の抽出」で論文・アウトカム・時点を絞ります。数値を押すと、左に意味と出典、右に原著PDFが開きます。「AI推薦」「解析表の提案」からも確認できます。</p></li><li><h3>原著と照合する</h3><p>治療群／比較群、評価時点、解析集団、単位、終了値／変化量、SD／SE、人数／イベント件数、信頼水準を確認します。引用位置の一致だけでは、解釈が正しいとは限りません。本文・表・図・補足の確認範囲と、不足の記録も見ます。</p></li><li><h3>必要な訂正を保存する</h3><p>「この数値を訂正」や「定義・群・時点などを訂正」で、確認者と理由を記録します。元の値・引用と訂正履歴は残ります。人数（割合）などの表記だけを補う場合は「原表記を訂正」で原文と根拠を保存します。数値は変えず、初回の表記と履歴も残します。原著の矛盾や分母不明は説明を添えて保持します。PDF上の範囲を自分で指定して記録することもできます。</p></li><li><h3>確認した行を承認する</h3><p>必要な項目と注意事項を確認して承認します。閲覧・検索・ハイライト候補の選択だけでは承認されません。取得できない値をゼロや「未報告」に置き換えないでください。</p></li></ol>
 <div class="guide-legend"><h3>ハイライトの見方</h3><ul><li><span class="guide-swatch literal"></span><strong>黄色</strong>：引用と一致する文字ブロック。内容の正しさは人が確認します。</li><li><span class="guide-swatch candidate"></span><strong>紫の破線</strong>：表示候補。表記差や「符号未確認」の場合があり、原著画像で確かめます。</li><li><span class="guide-swatch human"></span><strong>青枠</strong>：確認者が指定した範囲です。</li></ul><p class="hint">枠は文字ブロック単位なので隣の数値を含むことがあります。複数一致は前後の原文から選択します。文字層や位置情報がないページでは、枠が出ないこともあります。</p></div>
 </section>
 <section id="guide-proposals" class="guide-section"><p class="guide-kicker">このアプリの特徴</p><h2>AIが「どの解析から考えるか」を提案する</h2><p>比較できる複数の独立研究がある場合、AIは定義・比較・実時点・解析集団・数値形式を整理し、最初に検討する少数の表と必要な代替案を推薦します。統合してよいかは利用者が判断します。</p><p>「AI推薦」で理由・違い・不足を読み、「解析表の提案」でアウトカムを選びます。各研究の候補を「この表へ入れる」で選択します。推薦されなかった候補も「論文別の抽出」に残ります。</p>
@@ -836,15 +836,15 @@ function reportedCountPercent(input) {
   if(typeof input!=='string')return null;
   // A table footnote asterisk belongs to the printed cell spelling. Keep it
   // in reported_lexical, but never treat it as part of the numeric count.
-  const match=/^(\d{1,3}(?:,\d{3})*|\d+)(?:\/(\d{1,3}(?:,\d{3})*|\d+))?\s*\((\d+(?:[.·]\d+)?)%?\)\*?$/u.exec(input.normalize('NFKC').trim());
+  const match=/^(\d{1,3}(?:,\d{3})*|\d+)(?:(?:\s*\/\s*|\s+of\s+)(\d{1,3}(?:,\d{3})*|\d+))?\s*(?:\(\s*(\d+(?:[.·]\d+)?)\s*%?\s*\)|\[\s*(\d+(?:[.·]\d+)?)\s*%?\s*\])\*?$/iu.exec(input.normalize('NFKC').trim());
   if(!match)return null;
   const count=Number(match[1].replaceAll(',','')),
     denominator=match[2]===undefined?undefined:Number(match[2].replaceAll(',','')),
-    percent=Number(match[3].replace('·','.'));
+    percentLexical=match[3]??match[4],percent=Number(percentLexical.replace('·','.'));
   return Number.isSafeInteger(count)&&count>=0&&
     (denominator===undefined||Number.isSafeInteger(denominator)&&denominator>0&&count<=denominator)&&
     Number.isFinite(percent)&&percent>=0&&percent<=100
-    ? {count,percent,decimalPlaces:(match[3].split(/[.·]/u)[1]||'').length,...(denominator===undefined?{}:{denominator})}:null;
+    ? {count,percent,decimalPlaces:(percentLexical.split(/[.·]/u)[1]||'').length,...(denominator===undefined?{}:{denominator})}:null;
 }
 function parseReportedNumber(input,{allowPercent=false,allowLabeledCount=false,allowCountPercent=false}={}) {
   if (input === null || input === undefined || input === '') return null;
@@ -1037,7 +1037,10 @@ function containsExactLexical(quote,lexical) {
   let at=quote.indexOf(lexical);
   while(at>=0){
     const before=at?quote[at-1]:'',after=quote[at+lexical.length]||'';
-    if(!/[\p{L}\p{N}_.·]/u.test(before)&&!/[\p{L}\p{N}_.·*†‡]/u.test(after))return true;
+    // A separated sign is still part of a source number; do not accept the
+    // positive suffix of a negative cell as its complete original spelling.
+    const separatedSign=/[+\-−﹣–—]\s*$/u.test(quote.slice(0,at));
+    if(!separatedSign&&!/[\p{L}\p{N}_.,·+\-−﹣–—]/u.test(before)&&!/[\p{L}\p{N}_.·*†‡]/u.test(after))return true;
     at=quote.indexOf(lexical,at+1);
   }
   return false;
@@ -1075,7 +1078,64 @@ async function digest(value) {
   const bytes = new TextEncoder().encode(canonical(value));
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
-const content = row => Object.fromEntries(Object.entries(row).filter(([key])=>!['history','approval','import_note'].includes(key)));
+const content = row => {
+  const fields=Object.fromEntries(Object.entries(row).filter(([key])=>!['history','approval','import_note'].includes(key)));
+  const lexical=row.history.filter(e=>e.type==='reported_lexical_correction');
+  // Older approvals retain the same digest. New source-spelling corrections
+  // bind their complete audit record to approval without hashing approval events.
+  return lexical.length?{...fields,reported_lexical_history:lexical}:fields;
+};
+const lexicalIssues = {
+  missing_original_denominator:'原著値として保存した群別分母が未確認。割合から分母を逆算していません',
+  printed_denominator_mismatch:'印字された分母と保存済みの原著分母が不一致。双方を変更せず保持しています',
+  source_percent_mismatch:'印字された割合と原著の人数・分母が不一致。原著表記を再計算せず保持しています',
+  unverified_text:'追加した引用はPDFテキスト層で未照合です'
+};
+function initialReportedLexical(row,key) {
+  validateLexicalHistory(row);
+  return row.history.find(e=>e.type==='reported_lexical_correction'&&e.key===key)?.before??row.values[key]?.reported_lexical;
+}
+function lexicalSourceIssues(row,key,lexical,evidence) {
+  const issues=[],paired=row.kind==='binary'&&key.startsWith('events_')?reportedCountPercent(lexical):null;
+  if(paired) {
+    const denominator=row.values['total_'+key.slice('events_'.length)].original;
+    if(denominator===null)issues.push('missing_original_denominator');
+    if(paired.denominator!==undefined&&denominator!==null&&paired.denominator!==denominator)issues.push('printed_denominator_mismatch');
+    const rounding=0.5*10**-paired.decimalPlaces+1e-9;
+    if([denominator,paired.denominator].some(n=>n!=null&&Math.abs(100*paired.count/n-paired.percent)>rounding))issues.push('source_percent_mismatch');
+  }
+  if(evidence.some(e=>e.source_kind==='text'&&e.source_check!=='verbatim_text'))issues.push('unverified_text');
+  return issues;
+}
+function validateLexicalHistory(row) {
+  const previous=new Map();
+  for(const e of row.history.filter(e=>e.type==='reported_lexical_correction')) {
+    const v=row.values[e.key];
+    requireValue(keysFor(row).includes(e.key)&&v?.origin==='reported'&&v.original!==null&&
+      typeof e.before==='string'&&typeof e.after==='string'&&e.before!==e.after&&
+      e.original_value===v.original&&(e.current_value===null||Number.isFinite(e.current_value))&&
+      ['reason','reviewer','at'].every(k=>typeof e[k]==='string'&&e[k].trim())&&Number.isFinite(Date.parse(e.at)),
+      '原著表記の訂正履歴が不正です。');
+    requireValue([e.before,e.after].every(text=>parseReportedNumber(text,{allowPercent:true,allowLabeledCount:true,allowCountPercent:true})===v.original),
+      '原著表記の訂正履歴と原著値が一致しません。');
+    requireValue(!previous.has(e.key)||previous.get(e.key)===e.before,'原著表記の訂正履歴が途切れています。');
+    requireValue(Array.isArray(e.source_issues)&&new Set(e.source_issues).size===e.source_issues.length&&
+      e.source_issues.every(code=>Object.hasOwn(lexicalIssues,code))&&typeof e.source_issue_note==='string'&&
+      (!e.source_issues.length||e.source_issue_note.trim()),'原著表記の未解決事項と記録が不正です。');
+    requireValue(Array.isArray(e.evidence)&&e.evidence.length>0&&
+      e.evidence.every(source=>['verbatim_text','unverified_page'].includes(source.source_check)&&
+        source.location&&['quote','page'].includes(source.location.specificity)&&Array.isArray(source.location.rects)&&
+        (source.source_kind!=='visual'||source.source_check==='unverified_page')&&
+        (source.source_check!=='unverified_page'||source.location.specificity==='page'&&!source.location.rects.length)&&
+        v.evidence.some(saved=>canonical(saved)===canonical(source)))&&
+      e.evidence.some(source=>containsExactLexical(source.quote,e.after)),
+      '原著表記の訂正履歴に対応する根拠がありません。');
+    requireValue(canonical(e.source_issues)===canonical(lexicalSourceIssues(row,e.key,e.after,e.evidence)),
+      '原著表記の未解決事項を削除・変更できません。');
+    previous.set(e.key,e.after);
+  }
+  for(const [key,after] of previous)requireValue(row.values[key].reported_lexical===after,'原著表記と最後の訂正履歴が一致しません。');
+}
 function validateRow(row) {
   requireValue((row.schema===RESULT_SCHEMA && row.kind==='binary') || (row.schema===STRUCTURED_SCHEMA && ['binary','continuous','comparative_effect'].includes(row.kind)) || (row.schema===REPORTED_SCHEMA && row.kind==='reported_only'),'結果形式または統計型が不正です。');
   for(const k of ['id','study_id','study','outcome','outcome_reported','definition','timepoint','population','treatment','control','mapping_reason'])
@@ -1163,6 +1223,7 @@ function validateRow(row) {
       requireMedianConfidenceCitation(row,{allowExternal:true});
     }
   }
+  validateLexicalHistory(row);
   return row;
 }
 function warnings(row,{legacySourceLabels=false}={}) {
@@ -1170,7 +1231,10 @@ function warnings(row,{legacySourceLabels=false}={}) {
   const reportOnly=row.kind==='reported_only'?['原著報告のみ：解析数値欄はなく、同じメタ分析には投入できません。',...row.report_evidence.filter(e=>e.source_check==='unverified_page').map(e=>e.source_kind==='visual'?'画像からの転記は未照合。原著で確認してください':'PDFテキスト層で未照合。原著で確認してください')]:[];
   const unclearMean=row.kind==='continuous'&&row.spread_type!=='SE'&&row.adjustment==='unclear'?
     ['平均の調整有無が不明でSDも未取得です。未調整の群平均・SDとして解析せず、原著の解析方法を確認してください。']:[];
-  return external.concat(row.extraction_limitation?['抽出範囲・未取得項目の注意あり：内容を確認してください']:[],reportOnly,unclearMean,keysFor(row).flatMap(k=> {
+  const lexical=row.history.filter(e=>e.type==='reported_lexical_correction').flatMap(e=>e.source_issues.length?
+    e.source_issues.map(code=>`${e.key}: 原著表記の未解決事項：${lexicalIssues[code]}。記録：${e.source_issue_note}`):
+    e.source_issue_note.trim()?[`${e.key}: 原著表記の未解決事項：${e.source_issue_note}`]:[]);
+  return external.concat(row.extraction_limitation?['抽出範囲・未取得項目の注意あり：内容を確認してください']:[],reportOnly,unclearMean,[...new Set(lexical)],keysFor(row).flatMap(k=> {
     const v=row.values[k], last=v.corrections.at(-1);
     const total=row.kind==='binary'&&k.startsWith('events_')?row.values['total_'+k.slice('events_'.length)]:null;
     const unresolvedPercent=!!(total&&reportedCountPercent(v.reported_lexical)&&(total.original===null||total.current===null));
@@ -1181,7 +1245,8 @@ function warnings(row,{legacySourceLabels=false}={}) {
       : hasVisual?`${k}: 画像からの転記は未照合。原著で確認してください`
       : hasUnverified?`${k}: PDFテキスト層で未照合。原著で確認してください`:null;
     return [v.origin==='derived'?(v.derivation.method==='EXPLICIT_ZERO'?`${k}: 原文の明示ゼロを展開。全群・実時点・患者単位への適用はAI申告です。原著で確認してください`:`${k}: 計算値。入力と適用条件を確認してください`):null,v.origin==='external_csv'?`${k}: 外部CSV由来・原著との対応は未確認`:null,v.current===null?`${k}: 数値不足`:null,unresolvedPercent?`${k}: 原著の割合に対応する群別分母が未確認。割合から人数を逆算しないでください`:null,sourceWarning,!v.evidence.some(e=>e.location?.specificity==='quote')?`${k}: 根拠はページのみ`:null,
-      last && !last.evidence_confirmed?`${k}: 訂正値の根拠未確認`:null].filter(Boolean);
+      last && !last.evidence_confirmed?`${k}: 訂正値の根拠未確認`:null,
+      v.original!==v.current&&row.history.some(e=>e.type==='reported_lexical_correction'&&e.key===k)?`${k}: 原著表記は原著値に対応します。別途訂正された現在値は変更していません`:null].filter(Boolean);
   }));
 }
 async function correct(row,key,lexical,reason,reviewer) {
@@ -1193,6 +1258,57 @@ async function correct(row,key,lexical,reason,reviewer) {
   next.values[key].current=value; next.values[key].corrections.push(event); next.history.push(event); next.revision++;
   if(next.approval) next.history.push({type:'approval_invalidated',approval:next.approval});
   next.approval=null; validateRow(next); return next;
+}
+// Restore a literal source spelling on an existing accepted value. Numeric
+// corrections have a separate history; this operation never changes either
+// original or current numbers, including a missing denominator.
+async function correctReportedLexical(row,key,{reported_lexical,evidence,reason,reviewer,source_issue_note=''},locate) {
+  validateRow(row);
+  const value=row.values[key];
+  requireValue(keysFor(row).includes(key)&&value?.origin==='reported'&&value.original!==null,
+    '原著値として保存済みの数値だけ原著表記を訂正できます。');
+  const context=numberContext(row,key,{source:true});
+  requireValue(typeof reported_lexical==='string'&&reported_lexical.trim()&&reported_lexical.length<=20000&&
+    parseReportedNumber(reported_lexical,context)===value.original,'新しい原著表記と保存済みの原著値が一致しません。');
+  requireValue(reported_lexical!==value.reported_lexical,'原著表記の変更がありません。');
+  requireValue([reason,reviewer].every(s=>typeof s==='string'&&s.trim())&&typeof source_issue_note==='string',
+    '訂正理由・確認者と未解決事項の記録が必要です。');
+  requireValue(Array.isArray(evidence)&&evidence.length>0&&evidence.length<=100,'原著表記ごとの根拠が必要です。');
+  const added=[];
+  for(const e of evidence) {
+    requireValue(e&&Object.keys(e).every(k=>['document_sha256','pdf_page','quote','source_kind','table','row','column'].includes(k)),
+      '根拠の照合結果・座標を自分で指定できません。');
+    const document=[row.document,...(row.documents||[])].find(d=>d.sha256===e.document_sha256);
+    requireValue(document&&Number.isInteger(e.pdf_page)&&e.pdf_page>=1&&e.pdf_page<=document.page_count,'別PDFまたは範囲外の根拠です。');
+    requireValue(typeof e.quote==='string'&&e.quote.trim()&&e.quote.length<=100000&&['text','visual'].includes(e.source_kind)&&
+      ['table','row','column'].every(k=>e[k]===undefined||typeof e[k]==='string'),'原著表記の引用断片が不正です。');
+    requireValue(e.source_kind==='visual'||typeof locate==='function','PDFテキスト層の照合処理が必要です。');
+    added.push({...clone(e),...await locateEvidence(e,locate)});
+  }
+  const cells=added.filter(e=>containsExactLexical(e.quote,reported_lexical));
+  requireValue(cells.length>0,'追加する引用断片に原著表記の全体が必要です。末尾0も原文どおりに記入してください。');
+  const issues=lexicalSourceIssues(row,key,reported_lexical,added),paired=context.allowCountPercent?reportedCountPercent(reported_lexical):null;
+  if(paired) {
+    const denominator=row.values['total_'+key.slice('events_'.length)].original;
+    requireValue(!cells.some(cell=>explicitEpisodeQuantity([cell.quote,cell.row,cell.column,cell.table].filter(Boolean).join(' '))&&
+      !patientWithCountedEvent(cell.quote,reported_lexical)),
+      '事象・エピソードの総件数を患者・参加者の二値人数へ変えないでください。');
+    if(denominator===null||compoundPersonUnit(row.unit)) {
+      const backed=[...value.evidence,...added].filter(e=>e.source_check==='verbatim_text'||e.source_kind==='visual');
+      const sameSource=(a,b)=>a.document_sha256===b.document_sha256&&a.pdf_page===b.pdf_page&&(!a.table||!b.table||a.table===b.table);
+      requireValue(cells.some(cell=>(cell.source_check==='verbatim_text'||cell.source_kind==='visual')&&
+        backed.some(e=>sameSource(cell,e)&&explicitPatientCount(e.quote,reported_lexical))&&
+        (!episodeCountNear(cell.quote,reported_lexical)||patientWithCountedEvent(cell.quote,reported_lexical))),
+        '同じPDF・ページ・表で患者・参加者数を示す照合済み引用または画像転記が必要です。');
+    }
+  }
+  requireValue(!issues.length||source_issue_note.trim(),'分母不明・原著内の不一致・未照合の引用は、未解決事項を明記してください。数値は変更しません。');
+  const next=clone(row),event={type:'reported_lexical_correction',key,before:value.reported_lexical,after:reported_lexical,
+    original_value:value.original,current_value:value.current,evidence:added,reason,reviewer,source_issue_note,source_issues:issues,at:new Date().toISOString()};
+  next.values[key].reported_lexical=reported_lexical;next.values[key].evidence.push(...added);
+  next.history.push(event);next.revision++;
+  if(next.approval)next.history.push({type:'approval_invalidated',approval:next.approval});
+  next.approval=null;validateRow(next);return next;
 }
 async function approve(row,{reviewer,method,test_only,acknowledge_warnings=false,note=''}) {
   validateRow(row); requireValue(reviewer.trim(),'確認者を入力してください。');
@@ -1252,7 +1368,9 @@ function sourceSummary(row,{legacyEvidenceLabels=false,legacySourceLabels=false}
   const values=keysFor(row).map(k=>{
     const v=row.values[k];
     const origin=v.origin==='derived'?(v.derivation.method==='EXPLICIT_ZERO'?'原文の明示ゼロの展開 EXPLICIT_ZERO; 全群・実時点・患者単位はAI申告; '+v.derivation.reason+'; ':'計算 '+v.derivation.method+'; 入力 '+Object.entries(v.derivation.inputs).sort(([a],[b])=>a.localeCompare(b)).map(([n,input])=>n+'='+input.reported_lexical).join(', ')+'; '+v.derivation.reason+'; '):v.origin==='external_csv'?'外部CSV由来（原著未照合）; ':'';
-    const lexical=row.schema===STRUCTURED_SCHEMA&&v.evidence.some(e=>typeof e.source_check==='string')?'原表記 '+v.reported_lexical+'; ':'';
+    const changedLexical=row.history.some(e=>e.type==='reported_lexical_correction'&&e.key===k);
+    const lexical=changedLexical||row.schema===STRUCTURED_SCHEMA&&v.evidence.some(e=>typeof e.source_check==='string')?
+      '原表記 '+v.reported_lexical+'; '+(changedLexical?'初回表記 '+initialReportedLexical(row,k)+'; ':''):'';
     const evidence=v.evidence.map(e=>`PDF ${e.pdf_page}; ${evidenceLabel(e.table)}; ${evidenceLabel(e.row)}; ${evidenceLabel(e.column)}; ${sourceLabel(e,legacySourceLabels)}${e.quote}${row.schema===STRUCTURED_SCHEMA?'; SHA-256 '+e.document_sha256:''}`).join(' | ');
     return `${k}: ${origin}${lexical}${evidence}`;
   });
@@ -1268,7 +1386,10 @@ function visible(row,{legacyEvidenceLabels=false,legacySourceLabels=false}={}) {
     source_summary:sourceSummary(row,{legacyEvidenceLabels,legacySourceLabels}),
     confidence_level:row.kind==='comparative_effect'&&!(row.statistic_type==='MEDIAN_DIFFERENCE'&&(row.values.ci_low.current===null||row.values.ci_high.current===null))?String(row.confidence_level??0.95):'',
     spread_type:row.kind==='continuous'?(row.spread_type||'SD'):'',extraction_limitation:row.extraction_limitation||'',
-    correction_history:row.history.filter(e=>e.type==='correction'||e.type==='metadata_correction').map(e=>e.type==='correction'?`${e.key}: ${e.before} -> ${e.after}; ${e.reason}; ${e.reviewer}; ${e.at}`:`metadata: ${JSON.stringify(e.previous)} -> ${JSON.stringify(e.changes)}; ${e.reason}; ${e.reviewer}; ${e.at}`).join('\n'),
+    correction_history:row.history.filter(e=>['correction','metadata_correction','reported_lexical_correction'].includes(e.type)).map(e=>
+      e.type==='correction'?`${e.key}: ${e.before} -> ${e.after}; ${e.reason}; ${e.reviewer}; ${e.at}`:
+      e.type==='reported_lexical_correction'?`reported_lexical ${e.key}: ${e.before} -> ${e.after}; ${e.reason}; ${e.reviewer}; ${e.at}; 未解決事項: ${e.source_issue_note}; ${e.source_issues.join(', ')}`:
+      `metadata: ${JSON.stringify(e.previous)} -> ${JSON.stringify(e.changes)}; ${e.reason}; ${e.reviewer}; ${e.at}`).join('\n'),
     reviewer:row.approval?.reviewer||'',reviewed_at:row.approval?.at||'',review_method:row.approval?.method||'',review_note:row.approval?.note||'',test_only:String(row.approval?.test_only??true),warnings:warnings(row,{legacySourceLabels}).join('\n'),pdf_sha256:row.document.sha256};
 }
 const quote = v => '"'+String(v).replaceAll('"','""')+'"';
@@ -1509,7 +1630,7 @@ function normalizeLocation(location) {
     specificity:ambiguous||location.specificity==='quote'&&!rects.length?'page':location.specificity};
 }
 
-Object.assign(exports,{RESULT_SCHEMA,VALUE_KEYS,STRUCTURED_SCHEMA,REPORTED_SCHEMA,CONTINUOUS_KEYS,SE_KEYS,EFFECT_KEYS,ALL_VALUE_KEYS,keysFor,clone,digest,validateRow,warnings,correct,approve,isApproved,organize,COLUMNS,exportCsv,parseCsv,importCsv,duplicateKey,analysisKey,correctMetadata,structuredRows,normalizeLocation});
+Object.assign(exports,{RESULT_SCHEMA,VALUE_KEYS,STRUCTURED_SCHEMA,REPORTED_SCHEMA,CONTINUOUS_KEYS,SE_KEYS,EFFECT_KEYS,ALL_VALUE_KEYS,keysFor,clone,digest,initialReportedLexical,validateRow,warnings,correct,correctReportedLexical,approve,isApproved,organize,COLUMNS,exportCsv,parseCsv,importCsv,duplicateKey,analysisKey,correctMetadata,structuredRows,normalizeLocation});
 },
 "src/derivations.mjs":function(exports,require){
 const {ContractError,seToSd,parseReportedNumber}=require("src/numeric.mjs");
@@ -1625,7 +1746,7 @@ Object.assign(exports,{BATCH_PROMPT_VERSION,BATCH_PROMPT});
 "src/candidate-recovery.mjs":function(exports,require){
 const {CandidateBatchSession,inspectCandidates,receiptOutcomes,rejectionEntries,receivedDocuments,checkSubmission,resolveStudySources}=require("src/candidate-review.mjs");
 const {canonical}=require("src/probe-session.mjs");
-const {digest,validateRow,keysFor,correctMetadata,duplicateKey}=require("src/results.mjs");
+const {digest,validateRow,keysFor,correctMetadata,duplicateKey,initialReportedLexical}=require("src/results.mjs");
 const {validateRecommendationJob,recommendationDocumentAccounted}=require("src/ai-recommendation.mjs");
 
 const RECOVERY_SCHEMA='dataex-next/candidate-recovery-1';
@@ -1722,7 +1843,7 @@ function assertRecoveryState(state){
     check(row.kind===candidate.kind&&(row.spread_type||'SD')===(candidate.spread_type||'SD'),
       '訂正後の統計型が変わっています。');
     for(const key of keysFor(row))check(row.values[key]?.original===candidate.values[key]?.value&&
-      row.values[key]?.reported_lexical===candidate.values[key]?.reported_lexical,
+      initialReportedLexical(row,key)===candidate.values[key]?.reported_lexical,
       '訂正後に保存した原著値・原表記が書き換わっています。');
     validateRow(row);linked.add(row.id);
   }
@@ -3389,7 +3510,7 @@ function mountWorkspaceBridge(runtime,{register=true}={}){
   const submissionNext=job=>submissionScope(job).initial_submission_allowed.length
     ? 'Only PDFs in submission_scope.initial_submission_allowed may receive their first submission in this request. Gather each PDF response before submitting; do not append to or resubmit an already-received PDF with changed rows or IDs.'
     : 'No PDF currently permits a first candidate submission in this request. Read and audit saved_rows against the originals. Do not call submit_study to update accepted rows or add a second response for a received PDF; report unsupported candidate changes in the workflow review.';
-  const candidateUpdateProtocol='保存済み候補の監査・訂正: Site toolsには受理済み候補を訂正する専用ツールがありません。原著の再読取りと、最新ID・版による既存の解析表・確認範囲の更新は続けられます。原著画面の数値訂正は現在値と訂正履歴を更新し、元の値・reported_lexical・根拠を保持します。定義・時点・集団などは画面の対応する訂正項目で扱い、原表記だけの変更や統計型の変換は対応済みとみなしません。未受理候補の訂正も画面の専用編集から再検査する操作であり、Site toolsの再提出ではありません。利用可能な画面操作がない場合や対応しない項目は、候補ID・項目・原著ページ・必要な変更を提案のmissing_informationや確認範囲のnoteへ記録し、未修正と報告してください。保存済み候補を新しいIDで重複提出したり、内部状態を書き換えたり、人の承認を実行したりしません。';
+  const candidateUpdateProtocol='保存済み候補の監査・訂正: Site toolsには受理済み候補を訂正する専用ツールがありません。原著の再読取りと、最新ID・版による既存の解析表・確認範囲の更新は続けられます。原著画面の数値訂正は現在値と訂正履歴を更新し、元の値・reported_lexical・根拠を保持します。原表記だけを補完する場合は、原著画面の「原表記を訂正」で対象の群・項目を確認し、原文文字列・根拠PDFページ・引用・訂正理由・実行者を記録します。原著の人数（割合）、桁数、先頭の0、丸括弧・角括弧を保持し、人数・分母・元の値・現在値を変更しません。原著内の不一致や対応分母不明は説明を付けて未解決のまま残し、割合の再計算や逆算で補いません。AIが画面から訂正する場合は実行者をAIと明示し、人の確認・承認と扱いません。保存後は旧表記と根拠の履歴を確認し、workflow_briefで最新候補版を取り直して同じ提案IDで再検討・更新します。定義・時点・集団などは画面の対応する訂正項目で扱い、統計型の変換は対応済みとみなしません。未受理候補の訂正も画面の専用編集から再検査する操作であり、Site toolsの再提出ではありません。利用可能な画面操作がない場合や対応しない項目は、候補ID・項目・原著ページ・必要な変更を提案のmissing_informationや確認範囲のnoteへ記録し、未修正と報告してください。保存済み候補を新しいIDで重複提出したり、内部状態を書き換えたり、人の承認を実行したりしません。';
   const protocolFor=job=>[isRecommendationJob(job)?recommendationProtocol(state(),job):'',extractionProtocol(requestModes(state(),job)),candidateUpdateProtocol].filter(Boolean).join('\n');
   const recommendationNext=job=>`Read every original in documents_to_review and audit saved_rows and existing_results. ${submissionNext(job)} Use finish_batch only while the request is running or recovered and newly saved rows still require organization. Then call dataex_workflow_brief and dataex_save_workflow with request_id=${job.id}; save source coverage for every selected original, and explicitly select recommended_plan_ids (1–3 primary tables plus at most 3 alternatives). Refresh other existing plans separately within plans. No human approval or pooling.`;
   const tools=[
@@ -4148,8 +4269,10 @@ function createSourceRoom(d){
   function applyZoom(){$('page-frame').style.width=$('room-zoom').value+'%';}
   function evidenceChoices(row,key){
     evidenceBox.replaceChildren();const list=reviewEvidence(row,key);
+    const latest=row.history?.findLast(h=>h.type==='reported_lexical_correction'&&h.key===key);
+    const isLatest=e=>latest?.evidence?.some(x=>x.document_sha256===e.document_sha256&&x.pdf_page===e.pdf_page&&x.quote===e.quote&&x.source_kind===e.source_kind);
     if(!list.length)evidenceBox.append(el('p','この項目には数値別の出典がありません。ページを探して原著を確認できます。','warning'));
-    list.forEach((e,i)=>{const n=el('section',null,'room-evidence');const b=btn(`根拠 ${i+1} · PDF ${e.pdf_page}`,()=>{active.evidenceIndex=i;return loadPage(e.document_sha256,e.pdf_page,{quote:e.quote||'',kind:e.source_check==='unverified_page'?'unverified':'quote',evidence:e});});
+    list.map((e,i)=>({e,i})).sort((a,b)=>Number(!!isLatest(b.e))-Number(!!isLatest(a.e))).forEach(({e,i})=>{const n=el('section',null,'room-evidence');const b=btn(`${isLatest(e)?'最新の原表記の根拠':'根拠'} ${i+1} · PDF ${e.pdf_page}`,()=>{active.evidenceIndex=i;return loadPage(e.document_sha256,e.pdf_page,{quote:e.quote||'',kind:e.source_check==='unverified_page'?'unverified':'quote',evidence:e});});
       n.append(b,el('small',d.evidenceLabel(e)),el('blockquote',e.quote||'引用なし'));const names=[['表',e.table],['行',e.row],['列',e.column]].filter(x=>x[1]).map(x=>x.join('：'));if(names.length)n.append(el('small',names.join(' / ')+'（保存された指定）'));evidenceBox.append(n);});
     const marks=(Array.isArray(row.review_marks)?row.review_marks:[]).filter(m=>m.key===key&&m.source==='human_selected');
     for(const m of marks){try{checkedMark(row,m.mark,d.state().documents);}catch{continue;}
@@ -4164,11 +4287,14 @@ function createSourceRoom(d){
     const value=row.values?.[active.key];
     contextBox.append(el('p',fieldMeaning(row,active.key),'room-kicker'));
     if(value){contextBox.append(el('div',`${d.label(row,active.key)}：${value.current??'値未取得'}`,'room-value'));
-      contextBox.append(el('p',`元の表記：${value.reported_lexical||'記録なし'} / 元の値：${value.original??'なし'}`,'room-raw'));
+      contextBox.append(el('p',`現在の原表記：${value.reported_lexical||'記録なし'} / 元の値：${value.original??'なし'}`,'room-raw'));
+      const first=row.history?.find(h=>h.type==='reported_lexical_correction'&&h.key===active.key);
+      if(first)contextBox.append(el('p',`初回の原表記：${first.before}`,'room-raw'));
       if(value.origin==='derived')contextBox.append(el('p',value.derivation?.method==='EXPLICIT_ZERO'?'原文の明示ゼロを人数0へ展開。全群・実時点・患者単位への適用はAI申告です。下の原文で確認してください。':`計算値：${value.derivation?.method||''}。原著に直接記載された値ではありません。`,'warning'));
       if(value.origin==='external_csv')contextBox.append(el('p','外部CSV由来。PDFとの対応は未確認です。','warning'));
     }
-    if(value)contextBox.append(btn('この数値を訂正',()=>editValue(),'primary'));siblingFields(row,contextBox);
+    if(value)contextBox.append(btn('この数値を訂正',()=>editValue(),'primary'));
+    if(canEditReportedLexical(row,active.key))contextBox.append(btn('原表記を訂正',()=>editReportedLexical()));siblingFields(row,contextBox);
     const nav=el('div',null,'room-row-nav'),rows=d.scopedRows(),index=rows.findIndex(r=>r.id===row.id);
     const prev=btn('前の結果',()=>showValue(rows[index-1],active.key)),next=btn('次の結果',()=>showValue(rows[index+1],active.key));prev.disabled=index<=0;next.disabled=index<0||index===rows.length-1;nav.append(prev,next);contextBox.append(nav);
     contextBox.append(el('p',`${row.timepoint} / ${row.population}`,'room-raw'),el('p',`${row.treatment} 対 ${row.control}`,'room-raw'));definitionList(row,meaningBox);
@@ -4177,7 +4303,10 @@ function createSourceRoom(d){
     
     editorBox.append(btn('定義・群・時点などを訂正',()=>editMeaning()));
     const notices=d.warnings(row);if(notices.length){const n=details(`この行の注意 ${notices.length}件`,editorBox);for(const text of notices)n.append(el('p',text));}
-    if(row.history?.length){const history=details('原著値・訂正・承認の履歴',editorBox);for(const h of row.history){const name={correction:'数値訂正',metadata_correction:'定義などの訂正',source_mark:'原著位置の指定',approval:'承認',approval_invalidated:'承認の失効',candidate_correction:'拒否候補の訂正'}[h.type]||h.type;history.append(el('p',`${name} / ${h.reviewer||h.approval?.reviewer||''} / ${h.reason||h.note||''}`));if(h.type==='correction')history.append(el('small',`${d.label(row,h.key)}: ${h.before??'空欄'} → ${h.after??'空欄'}`));}}
+    if(row.history?.length){const history=details('原著値・訂正・承認の履歴',editorBox);for(const h of row.history){const name={correction:'数値訂正',reported_lexical_correction:'原表記の訂正',metadata_correction:'定義などの訂正',source_mark:'原著位置の指定',approval:'承認',approval_invalidated:'承認の失効',candidate_correction:'拒否候補の訂正'}[h.type]||h.type;history.append(el('p',`${name} / ${h.reviewer||h.approval?.reviewer||''} / ${h.reason||h.note||''}`));if(['correction','reported_lexical_correction'].includes(h.type))history.append(el('small',`${d.label(row,h.key)}: ${h.before??'空欄'} → ${h.after??'空欄'}`));if(h.type==='reported_lexical_correction'){
+      if(h.source_issue_note)history.append(el('p',`原著の不一致・未確認事項：${h.source_issue_note}`,'warning'));
+      for(const e of h.evidence||[])history.append(btn(`訂正時の根拠 · PDF ${e.pdf_page}`,()=>loadPage(e.document_sha256,e.pdf_page,{quote:e.quote,kind:e.source_check==='unverified_page'?'unverified':'quote',evidence:e})),el('small',d.evidenceLabel(e)),el('blockquote',e.quote));
+    }}}
     const okay=await d.isApproved(row);if(token!==navEpoch||current()?.id!==row.id)return;
     const who=field('確認者',d.reviewer.value||d.state().reviewer||'',foot);who.autocomplete='name';who.oninput=()=>d.reviewer.value=who.value;
     let ack=null;if(notices.length){const l=el('label',null,'room-ack');ack=el('input');ack.type='checkbox';l.append(ack,dom.createTextNode('この行の注意を確認した'));foot.append(l);}
@@ -4197,7 +4326,34 @@ function createSourceRoom(d){
     setStatus('左で数値の意味と根拠、右で原著を確認します。見るだけでは値・承認を変更しません。');if(edit)editValue();
     try{return await load;}catch(e){if(active!==target)return {cancelled:true};return {error:e.message};}
   }
-  function openForm(title){editorBox.replaceChildren(el('h3',title));draft=true;const form=el('form');editorBox.append(form);const who=field('確認者',d.reviewer.value||d.state().reviewer||'',form);who.oninput=()=>d.reviewer.value=who.value;return {form,who};}
+  function openForm(title){if(busy||draft)throw Error('入力中の訂正を保存またはキャンセルしてください。');editorBox.replaceChildren(el('h3',title));draft=true;const form=el('form');editorBox.append(form);const who=field('確認者',d.reviewer.value||d.state().reviewer||'',form);who.oninput=()=>d.reviewer.value=who.value;return {form,who};}
+  function canEditReportedLexical(row,key){const value=row?.values?.[key];return typeof d.correctReportedLexical==='function'&&d.keysFor(row).includes(key)&&value?.origin==='reported'&&Number.isFinite(value.original);}
+  function editReportedLexical(){
+    const row=current(),key=active?.key;if(!canEditReportedLexical(row,key))throw Error('この項目の原表記は訂正できません。');
+    const expected=row.revision,value=row.values[key],latest=row.history?.findLast(h=>h.type==='reported_lexical_correction'&&h.key===key),existing=latest?.evidence?.[0]||reviewEvidence(row,key)[active.evidenceIndex||0];
+    const sources=[row.document,...(row.documents||[])].filter((doc,i,all)=>doc&&all.findIndex(x=>x?.sha256===doc.sha256)===i);
+    const {form,who}=openForm(`原表記を訂正：${d.label(row,key)}（${fieldMeaning(row,key)}）`),raw=field('原著どおりの表記',value.reported_lexical,form);
+    form.append(el('p',`元の数値：${value.original} / 現在の数値：${value.current??'値未取得'}。この操作では数値を変更しません。`,'room-raw'),el('small','末尾の0、符号、人数（割合）などを原著どおりに記録します。初回の表記・根拠は履歴に残り、この行は未承認に戻ります。'));
+    const select=(label,options,selected)=>{const l=el('label',label),input=el('select');input.setAttribute('aria-label',label);for(const [v,name] of options){const o=el('option',name);o.value=v;input.append(o);}input.value=selected;l.append(input);form.append(l);return input;};
+    const source=select('根拠のPDF',sources.map(doc=>[doc.sha256,doc.filename]),existing?.document_sha256||row.document.sha256);
+    const page=field('根拠のPDFページ',existing?.pdf_page||1,form);page.type='number';page.min='1';page.step='1';
+    const kind=select('根拠の確認方法',[['text','PDFの文字層'],['visual','原著画像']],existing?.source_kind||'visual');
+    const quote=field('原表記を含む一続きの原文',existing?.quote||'',form,{area:true});
+    const header=field('人数を示す見出しの原文（別の引用・必要時）','',form,{area:true});
+    form.append(el('small','人数を示す見出しが数値セルと離れている場合は、同じPDF・ページ・表の原文を別の引用として記録します。離れた文言を一続きの引用にしないでください。'));
+    const note=field('原著の不一致・未確認事項（該当時）','',form,{area:true});
+    form.append(el('small','割合と人数・分母が一致しない、分母が未取得、引用を文字層で照合できない場合は、その状況を記録します。原著を修正したり、人数・分母を逆算したりしません。'));
+    const why=field('訂正理由','',form,{area:true});
+    const evidence=()=>({document_sha256:source.value,pdf_page:Number(page.value),quote:quote.value,source_kind:kind.value});
+    form.append(btn('入力した根拠ページを表示',()=>{const e=evidence();return loadPage(e.document_sha256,e.pdf_page,{quote:e.quote,kind:'unverified',evidence:e});}));
+    const submit=btn('原表記の訂正を保存',()=>{});submit.type='submit';submit.onclick=null;
+    form.append(submit,btn('キャンセル',()=>{if(busy)return;draft=false;renderContext();}));
+    form.onsubmit=run(async e=>{e.preventDefault();if(busy)return;const cell=evidence(),change={reported_lexical:raw.value,evidence:[cell,...(header.value.trim()?[{...cell,quote:header.value}]:[])],reason:why.value,reviewer:who.value,source_issue_note:note.value};busy=true;
+      const controls=['input','select','textarea','button'].flatMap(tag=>[...form.querySelectorAll(tag)]).map(control=>({control,disabled:!!control.disabled}));for(const {control} of controls)control.disabled=true;
+      try{await d.save(async s=>{const i=s.rows.findIndex(r=>r.id===row.id);if(s.rows[i]?.revision!==expected)throw Error('原表記の訂正対象の版が変わりました。入力は保存していません。');s.rows[i]=await d.correctReportedLexical(s.rows[i],key,change,ev=>d.pdf.locate(ev.document_sha256,ev.pdf_page,ev.quote));s.reviewer=change.reviewer;});draft=false;await renderContext();setStatus('原表記と根拠を保存しました。数値は変更していません。この行は未承認です。');}
+      finally{busy=false;for(const {control,disabled} of controls)control.disabled=disabled;}
+    });raw.focus({preventScroll:true});
+  }
   function editValue(){
     const row=current(),key=active?.key;if(!row?.values?.[key])throw Error('数値の項目を選択してください。');
     const {form,who}=openForm('原著を見ながら数値を訂正'),input=field('訂正する数値（未取得の値は空欄）',row.values[key].current,form),why=field('訂正理由','',form,{area:true});
@@ -4714,7 +4870,7 @@ Object.assign(exports,{editedCandidate,candidateEditor});
 const {MemoryStore,makeBackup,makeRequestTransfer,readBackup,restoreBackup,restoreTransferredBackup,listWorkspaceArchives,readWorkspaceArchive,clearBrowserWorkspace}=require("src/browser-store.mjs");
 const {literalMatches}=require("src/browser-pdf.mjs");
 const {CandidateRecoverySession,pendingRejections}=require("src/candidate-recovery.mjs");
-const {keysFor,correct,correctMetadata,approve,isApproved,warnings,importCsv,duplicateKey,validateRow,structuredRows}=require("src/results.mjs");
+const {keysFor,correct,correctMetadata,correctReportedLexical,approve,isApproved,warnings,importCsv,duplicateKey,validateRow,structuredRows}=require("src/results.mjs");
 const {saveConfirmedCsv}=require("src/output-snapshot.mjs");
 const {SelectionSaveQueue}=require("src/selection-save-queue.mjs");
 const {buildSelectionGrids,serializeSelectionGrid}=require("src/selection-grid.mjs");
@@ -5425,7 +5581,7 @@ async function init(){
   mountSelectionResize({handle:$('selection-resize-handle'),target:$('selection-table-preview'),minHeight:140,maxHeight:1000});
   $('outcome-focus').onchange=action(e=>changeOutcomeFocus(e.target.value));
   $('selection-copy-tsv').onclick=action(()=>copySelectionTable('\t'));$('selection-copy-csv').onclick=action(()=>copySelectionTable(','));$('table-copy-close').onclick=()=>$('table-copy-dialog').close();
-  sourceRoom=createSourceRoom({state:()=>session.state,save,api:backend.api,pdf:backend.pdf,scopedRows:()=>session.state.rows,keysFor,label:labelFor,correct,correctMetadata,approve,isApproved,warnings,validateRow,duplicateKey,evidenceLabel:sourceEvidenceLabel,literalMatches,candidateEditor,rejections:()=>pendingRejections(session.state),resolveRejected:async a=>{const r=await session.resolveRejected(a,e=>backend.pdf.locate(e.document_sha256,e.pdf_page,e.quote));await render();return r;},reviewer:$('reviewer'),testOnly:()=>$('test-only').checked,approvalNote:()=>$('approval-note').value,message,view});
+  sourceRoom=createSourceRoom({state:()=>session.state,save,api:backend.api,pdf:backend.pdf,scopedRows:()=>session.state.rows,keysFor,label:labelFor,correct,correctMetadata,correctReportedLexical,approve,isApproved,warnings,validateRow,duplicateKey,evidenceLabel:sourceEvidenceLabel,literalMatches,candidateEditor,rejections:()=>pendingRejections(session.state),resolveRejected:async a=>{const r=await session.resolveRejected(a,e=>backend.pdf.locate(e.document_sha256,e.pdf_page,e.quote));await render();return r;},reviewer:$('reviewer'),testOnly:()=>$('test-only').checked,approvalNote:()=>$('approval-note').value,message,view});
   bridge=await mountWorkspaceBridge({session,backend,render,openPage:(...a)=>sourceRoom.openPage(...a),showValue:(...a)=>sourceRoom.showValue(...a),message,selectedDocuments,modes,pico:()=>$('pico').value.trim(),isBusy:()=>loading||switching||!!pendingTransfer||!!draftSaves?.pending||!!draftSaves?.failed,synchronize:synchronizeWorkspace,onWorkflowSaved:showSavedWorkflow,onConnection:s=>{connectionState=s;renderRequestConnection();renderRecommendation().catch(error=>message('AI推薦の表示更新に失敗しました：'+error.message,true));}});
   document.addEventListener('input',e=>{const editor=e.target.closest?.('.plan-editor,.coverage-editor');if(editor)editor.dataset.dirty='true';});
   $('build-plan').onclick=action(startSelectionTable);$('selection-new').onclick=action(startSelectionTable);$('selection-save').onclick=action(saveSelectionTable);$('selection-finalize').onclick=action(openPlanBuilder);$('selection-file-save').onclick=action(saveBackup);$('draft-cancel-pending').onclick=action(async()=>{draftPendingLabels.length=0;draftSaves.cancelPending();await render();message('未保存の操作を取り消しました。最後に保存できた表は残っています。');});$('draft-retry').onclick=action(async()=>{await draftSaves.retry();await render();message('保留していた選択を保存しました。');});$('selection-table-select').onchange=action(e=>{const id=e.target.value;return queueDraftChange((w,rows)=>activateSelectionDraft(w,id,rows));});$('plan-draft-close').onclick=closePlanBuilder;$('plan-draft-dialog').addEventListener('cancel',closePlanBuilder);
